@@ -1,0 +1,12 @@
+.env
+.deploy/
+.DS_Store
+logs/
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
