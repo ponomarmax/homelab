@@ -159,8 +159,9 @@ Provide:
 - Not done:
 
 ### Commit plan
-- commit 1:
-- commit 2:
+- use conventional commit format
+- avoid sensitive info to be in commits
+
 
 ### Progress log draft
 Date:

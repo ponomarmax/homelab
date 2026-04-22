@@ -96,4 +96,9 @@ All host-level changes should be:
 - documented
 - ideally reflected in repository scripts
 
+
 Avoid manual one-off changes without documentation.
+
+All remote server changes must be either:
+- executed through repo scripts
+- logged in 10_server_change_log.md
