@@ -14,6 +14,21 @@ LinkedIn post idea:
 Date: 2026-04-23
 
 What was done:
+- Added Prometheus as the first stateful observability storage service.
+- Configured Prometheus to scrape itself and the existing Node Exporter target.
+- Added explicit Prometheus retention of 15 days.
+- Added a named Docker volume for Prometheus TSDB data.
+- Added reusable validation for Prometheus health, Node Exporter scrape state, query results, LAN access, and persistence after recreate.
+
+Key insight:
+Prometheus should be treated as stateful from the first checkpoint; validating scrape results and TSDB persistence is more useful than only checking that the container is running.
+
+LinkedIn post idea:
+Two possible angles: why retention belongs in the first Prometheus commit, and how to validate observability storage before adding dashboards.
+
+Date: 2026-04-23
+
+What was done:
 - Added Node Exporter as the first real observability service.
 - Deployed it through the existing Docker Compose-based repository workflow.
 - Added reusable validation for the deployed host-local metrics endpoint, the host LAN interface, and workstation-to-LAN access.

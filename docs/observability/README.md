@@ -19,7 +19,7 @@ It is introduced early to:
 ## Stack (planned)
 
 * Node Exporter — host metrics (DONE)
-* Prometheus — metrics storage and scraping
+* Prometheus — metrics storage and scraping (DONE)
 * cAdvisor — container metrics
 * Grafana — visualization
 * Alerting — Telegram integration
@@ -83,8 +83,6 @@ data / observability
 
 ## Next Steps
 
-* Add Prometheus
-* Connect Node Exporter as first scrape target
-* Introduce retention strategy
 * Add Grafana and dashboards
+* Add cAdvisor
 * Introduce alerting

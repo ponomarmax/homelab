@@ -25,3 +25,25 @@ A host metrics exporter inside Docker can accidentally monitor the container mor
 
 Use later when:
 The observability stack includes Prometheus and the host metrics path can be shown end to end.
+
+## OBS-003 — Retention Belongs In The First Prometheus Commit
+
+Idea:
+Prometheus is easy to start, but on a small single-node host it should be bounded from day one. Retention is part of the architecture, not a cleanup task for later.
+
+Hook:
+The first Prometheus decision I made was not a dashboard. It was retention.
+
+Use later when:
+Grafana is available and the post can show the full path from scrape target to stored metric to dashboard.
+
+## OBS-004 — Validate The Time-Series Store Before The Dashboard
+
+Idea:
+Before adding Grafana, validate that Prometheus is actually scraping Node Exporter, answering `up` queries, writing TSDB data, and surviving a recreate.
+
+Hook:
+A monitoring UI is only useful if the time-series store underneath is already trustworthy.
+
+Use later when:
+Prometheus is paired with the first Grafana dashboard and the end-to-end validation story is visible.

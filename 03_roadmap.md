@@ -13,7 +13,7 @@ Status: done
 ## Stage 2 — Monitoring and Observability
 
 * deploy Node Exporter (done)
-* deploy Prometheus
+* deploy Prometheus (done)
 * deploy cAdvisor
 * deploy Grafana
 * prepare basic dashboards
