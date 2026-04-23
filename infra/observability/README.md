@@ -9,6 +9,11 @@ Current service:
 - cAdvisor - container metrics endpoint scraped by Prometheus.
 - Grafana - observability UI with provisioned Prometheus datasource.
 
+Current dashboards:
+
+- Host / Linux Server - host CPU, memory, disk, load, and network metrics.
+- Docker / Containers - container CPU, memory, network, and filesystem I/O metrics.
+
 ## Layout
 
 ```text

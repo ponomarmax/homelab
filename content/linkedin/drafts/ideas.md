@@ -91,3 +91,25 @@ I did not validate Grafana by opening the login page. I made it query Prometheus
 
 Use later when:
 Showing the full path from exporter to Prometheus to Grafana.
+
+## OBS-009 — Dashboards As Code Beat ClickOps
+
+Idea:
+A dashboard is infrastructure when it is stored as JSON, provisioned by Grafana, and recreated without manual UI work.
+
+Hook:
+The first useful Grafana dashboards in my homelab were not clicked together. They were committed.
+
+Use later when:
+Showing host and container dashboards side by side.
+
+## OBS-010 — Validate Dashboards By Their Queries
+
+Idea:
+Dashboard validation should check that provisioned panels can query real Prometheus data, not just that the dashboard title appears in Grafana.
+
+Hook:
+I did not stop when the dashboard appeared. I validated the PromQL behind it.
+
+Use later when:
+Explaining how the observability stack became trustworthy end to end.

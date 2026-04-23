@@ -22,6 +22,7 @@ It is introduced early to:
 * Prometheus — metrics storage and scraping (DONE)
 * cAdvisor — container metrics (DONE)
 * Grafana — visualization (DONE)
+* Baseline Grafana dashboards — host and container metrics (DONE)
 * Alerting — Telegram integration
 
 ---
@@ -83,5 +84,4 @@ data / observability
 
 ## Next Steps
 
-* Prepare basic Grafana dashboards
 * Introduce alerting

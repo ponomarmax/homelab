@@ -16,7 +16,7 @@ Status: done
 * deploy Prometheus (done)
 * deploy cAdvisor (done)
 * deploy Grafana (done)
-* prepare basic dashboards
+* prepare basic dashboards (done)
 * validate alerting (Telegram)
 
 Status: in progress
@@ -93,3 +93,51 @@ Status: future
 * anomaly detection or prediction experiments
 
 Status: future
+
+## Future Work — Health & Availability Layer (Planned)
+
+Status: planned, non-blocking
+
+Goal:
+Add service-level health monitoring on top of existing resource monitoring.
+
+Current limitation:
+The system currently provides:
+- host metrics (Node Exporter)
+- container resource metrics (cAdvisor)
+- storage & visualization (Prometheus + Grafana)
+
+However, it lacks:
+- explicit service availability checks
+- restart/failure detection signals
+- endpoint-level validation (is service actually responding?)
+
+Planned additions:
+
+1. Blackbox Exporter
+   - HTTP/TCP probes for critical services
+   - validate real availability, not just container presence
+
+2. Health Dashboard
+   - separate from resource dashboards
+   - show:
+     - service availability
+     - probe success/failure
+     - target status
+     - basic system health overview
+
+3. Basic Alerting Signals (future extension)
+   - service down
+   - probe failure
+   - repeated failures / flapping
+   - critical container instability
+
+Design principles:
+- keep separate from resource dashboards
+- minimal but meaningful signals
+- repository-controlled configuration
+- reproducible via Docker Compose
+
+This work is intentionally deferred until:
+- baseline observability stack is stable
+- dashboards are validated

@@ -14,6 +14,20 @@ LinkedIn post idea:
 Date: 2026-04-23
 
 What was done:
+- Added repository-controlled baseline Grafana dashboards for host and container metrics.
+- Added dashboard provisioning that loads JSON dashboards from the Grafana dashboards directory.
+- Organized dashboards into host and containers folders for future extension.
+- Extended Grafana validation to confirm provisioned dashboards and real host/container Prometheus query results through Grafana.
+
+Key insight:
+Dashboards become operational infrastructure when they are provisioned from versioned JSON and validated through the real Grafana-to-Prometheus data path.
+
+LinkedIn post idea:
+Two possible angles: turning Grafana dashboards into reproducible infrastructure, and validating dashboards by querying the same metrics their panels use.
+
+Date: 2026-04-23
+
+What was done:
 - Added Grafana as the observability UI layer.
 - Added a Docker named volume for Grafana state.
 - Provisioned Prometheus as the default Grafana datasource from repository-controlled config.
