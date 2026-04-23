@@ -7,6 +7,7 @@ Current service:
 - Node Exporter - host metrics endpoint for future Prometheus scraping.
 - Prometheus - metrics storage and scraping for observability targets.
 - cAdvisor - container metrics endpoint scraped by Prometheus.
+- Grafana - observability UI with provisioned Prometheus datasource.
 
 ## Layout
 
@@ -89,6 +90,7 @@ Current validation entry point:
 tools/scripts/check-node-exporter.sh
 tools/scripts/check-prometheus.sh
 tools/scripts/check-cadvisor.sh
+tools/scripts/check-grafana.sh
 ```
 
 ## Resource Notes

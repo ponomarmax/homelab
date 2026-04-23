@@ -1,6 +1,27 @@
 name: homelab
 
 services:
+  grafana:
+    image: grafana/grafana:13.0.1
+    restart: unless-stopped
+    user: "472:472"
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_SECURITY_COOKIE_SECURE: "false"
+    volumes:
+      - "grafana_data:/var/lib/grafana"
+      - "${PROJECT_ROOT}/observability/config/grafana/provisioning:/etc/grafana/provisioning:ro"
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+
   cadvisor:
     image: ghcr.io/google/cadvisor:0.56.2
     command:
@@ -52,3 +73,5 @@ services:
 volumes:
   prometheus_data:
     name: homelab_prometheus_data
+  grafana_data:
+    name: homelab_grafana_data
