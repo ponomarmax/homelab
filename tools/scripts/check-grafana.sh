@@ -37,13 +37,15 @@ check_grafana_api() {
   local base_url="$1"
   local label="$2"
   local datasource_file
+  local dashboard_file
   local query_file
 
   curl --fail --silent --show-error "${base_url}/api/health" >/dev/null
 
   datasource_file="$(mktemp)"
+  dashboard_file="$(mktemp)"
   query_file="$(mktemp)"
-  trap 'rm -f "${datasource_file}" "${query_file}"' RETURN
+  trap 'rm -f "${datasource_file}" "${dashboard_file}" "${query_file}"' RETURN
 
   curl --fail --silent --show-error \
     --user "${GRAFANA_ADMIN_USER}:${GRAFANA_ADMIN_PASSWORD}" \
@@ -63,7 +65,42 @@ check_grafana_api() {
     return 1
   fi
 
-  echo "Grafana ${label} endpoint is healthy, has the Prometheus datasource, and can query metrics: ${base_url}"
+  for dashboard_uid in homelab-host-linux homelab-docker-containers; do
+    curl --fail --silent --show-error \
+      --user "${GRAFANA_ADMIN_USER}:${GRAFANA_ADMIN_PASSWORD}" \
+      "${base_url}/api/dashboards/uid/${dashboard_uid}" >"${dashboard_file}"
+
+    if ! grep -q "\"uid\":\"${dashboard_uid}\"" "${dashboard_file}" || ! grep -q '"datasource":{"type":"prometheus","uid":"prometheus"}' "${dashboard_file}"; then
+      echo "Grafana ${label} endpoint does not expose expected provisioned dashboard: ${dashboard_uid}"
+      return 1
+    fi
+  done
+
+  local dashboard_queries=(
+    'node_load1{job="node-exporter"}'
+    'node_memory_MemAvailable_bytes{job="node-exporter"}'
+    'node_filesystem_size_bytes{job="node-exporter",mountpoint="/"}'
+    'node_network_receive_bytes_total{job="node-exporter",device!="lo"}'
+    'container_cpu_usage_seconds_total{job="cadvisor",name!="",image!=""}'
+    'container_memory_working_set_bytes{job="cadvisor",name!="",image!=""}'
+    'container_network_receive_bytes_total{job="cadvisor",name!="",image!=""}'
+    'container_fs_reads_bytes_total{job="cadvisor",name!="",image!=""}'
+  )
+
+  local query
+  for query in "${dashboard_queries[@]}"; do
+    curl --fail --silent --show-error --get \
+      --user "${GRAFANA_ADMIN_USER}:${GRAFANA_ADMIN_PASSWORD}" \
+      --data-urlencode "query=${query}" \
+      "${base_url}/api/datasources/proxy/uid/prometheus/api/v1/query" >"${query_file}"
+
+    if ! grep -q '"status":"success"' "${query_file}" || ! grep -Fq '"result":[{' "${query_file}"; then
+      echo "Grafana ${label} endpoint returned no data for dashboard query: ${query}"
+      return 1
+    fi
+  done
+
+  echo "Grafana ${label} endpoint is healthy, has the Prometheus datasource, provisioned dashboards, and queryable dashboard metrics: ${base_url}"
   return 0
 }
 
@@ -102,13 +139,15 @@ check_grafana_api() {
   local base_url="$1"
   local label="$2"
   local datasource_file
+  local dashboard_file
   local query_file
 
   curl --fail --silent --show-error "${base_url}/api/health" >/dev/null
 
   datasource_file="$(mktemp)"
+  dashboard_file="$(mktemp)"
   query_file="$(mktemp)"
-  trap 'rm -f "${datasource_file}" "${query_file}"' RETURN
+  trap 'rm -f "${datasource_file}" "${dashboard_file}" "${query_file}"' RETURN
 
   curl --fail --silent --show-error \
     --user "${GRAFANA_ADMIN_USER}:${GRAFANA_ADMIN_PASSWORD}" \
@@ -128,7 +167,42 @@ check_grafana_api() {
     return 1
   fi
 
-  echo "Grafana ${label} endpoint is healthy, has the Prometheus datasource, and can query metrics: ${base_url}"
+  for dashboard_uid in homelab-host-linux homelab-docker-containers; do
+    curl --fail --silent --show-error \
+      --user "${GRAFANA_ADMIN_USER}:${GRAFANA_ADMIN_PASSWORD}" \
+      "${base_url}/api/dashboards/uid/${dashboard_uid}" >"${dashboard_file}"
+
+    if ! grep -q "\"uid\":\"${dashboard_uid}\"" "${dashboard_file}" || ! grep -q '"datasource":{"type":"prometheus","uid":"prometheus"}' "${dashboard_file}"; then
+      echo "Grafana ${label} endpoint does not expose expected provisioned dashboard: ${dashboard_uid}"
+      return 1
+    fi
+  done
+
+  local dashboard_queries=(
+    'node_load1{job="node-exporter"}'
+    'node_memory_MemAvailable_bytes{job="node-exporter"}'
+    'node_filesystem_size_bytes{job="node-exporter",mountpoint="/"}'
+    'node_network_receive_bytes_total{job="node-exporter",device!="lo"}'
+    'container_cpu_usage_seconds_total{job="cadvisor",name!="",image!=""}'
+    'container_memory_working_set_bytes{job="cadvisor",name!="",image!=""}'
+    'container_network_receive_bytes_total{job="cadvisor",name!="",image!=""}'
+    'container_fs_reads_bytes_total{job="cadvisor",name!="",image!=""}'
+  )
+
+  local query
+  for query in "${dashboard_queries[@]}"; do
+    curl --fail --silent --show-error --get \
+      --user "${GRAFANA_ADMIN_USER}:${GRAFANA_ADMIN_PASSWORD}" \
+      --data-urlencode "query=${query}" \
+      "${base_url}/api/datasources/proxy/uid/prometheus/api/v1/query" >"${query_file}"
+
+    if ! grep -q '"status":"success"' "${query_file}" || ! grep -Fq '"result":[{' "${query_file}"; then
+      echo "Grafana ${label} endpoint returned no data for dashboard query: ${query}"
+      return 1
+    fi
+  done
+
+  echo "Grafana ${label} endpoint is healthy, has the Prometheus datasource, provisioned dashboards, and queryable dashboard metrics: ${base_url}"
   return 0
 }
 
@@ -219,7 +293,7 @@ if [[ -n "${lan_ip}" ]]; then
   echo "Grafana host LAN interface is reachable and queryable."
 fi
 
-echo "Grafana is running, provisioned with Prometheus, queryable, and using persistent volume ${GRAFANA_VOLUME}."
+echo "Grafana is running, provisioned with Prometheus dashboards, queryable, and using persistent volume ${GRAFANA_VOLUME}."
 REMOTE_CHECK
 
   exit 0

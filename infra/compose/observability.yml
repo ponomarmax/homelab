@@ -17,6 +17,7 @@ services:
     volumes:
       - "grafana_data:/var/lib/grafana"
       - "${PROJECT_ROOT}/observability/config/grafana/provisioning:/etc/grafana/provisioning:ro"
+      - "${PROJECT_ROOT}/observability/config/grafana/dashboards:/etc/grafana/dashboards:ro"
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     depends_on:
