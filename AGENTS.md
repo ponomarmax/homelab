@@ -8,8 +8,9 @@ This repository contains a local single-node platform that evolves through sever
 2. monitoring and observability
 3. Home Assistant and smart-home automation
 4. environmental data collection
-5. future personal data integrations
-6. future analytics and ML experiments
+5. wearable physiological data collection
+6. backend ingestion and visualization
+7. future analytics and ML experiments
 
 This is a production-like portfolio project, not a throwaway hobby setup.
 
@@ -22,7 +23,7 @@ Use Ukrainian for communication with the user.
 Use English for:
 - commit messages
 - README content
-- changelog/progress entries intended for repo
+- changelog / progress entries intended for repo
 - LinkedIn post drafts
 - public-facing text
 - architecture notes that are meant to be published
@@ -64,12 +65,16 @@ Before major changes, read and follow these files if they exist:
 - 06_linkedin_strategy.md
 - 07_progress_log.md
 - 08_data_strategy.md
+- docs/wearable/canonical_contracts.md
+- docs/wearable/checkpoints.md
+- docs/repo_structure.md
 
 If there is a conflict:
 1. 04_constraints.md
 2. 02_architecture.md
 3. 03_roadmap.md
-4. everything else
+4. docs/wearable/canonical_contracts.md
+5. everything else
 
 ---
 
@@ -99,12 +104,33 @@ Prefer:
 - persistent volumes for stateful services
 - simple reverse proxy setup
 - monitoring from early stages
+- one repository for shared docs, shared contracts, collector app, and backend services
+- one collector application with multiple sensor adapters
+- stable outer transport contracts with flexible sensor-specific payloads
+- raw-first ingestion
 
 Avoid:
 - overengineering
 - unnecessary abstractions
 - premature microservice decomposition
 - adding tools without a clear operational need
+- mixing sensor-specific parsing directly into ingestion when not necessary
+
+---
+
+## Wearable direction
+
+Current baseline:
+- Polar Verity Sense
+
+Planned extension:
+- Muse Athena
+
+Collector direction:
+- one iOS collector app
+- multiple adapters
+- shared transport contracts
+- parsing and normalization after ingestion
 
 ---
 
@@ -161,7 +187,6 @@ Provide:
 ### Commit plan
 - use conventional commit format
 - avoid sensitive info to be in commits
-
 
 ### Progress log draft
 Date:

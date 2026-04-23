@@ -6,7 +6,8 @@ Planned sources:
 - Home Assistant sensors
 - Garmin data if accessible
 - sleep-related external app data if accessible
-- future Polar-based collection if implemented
+- Polar Verity Sense wearable collection
+- future Muse Athena wearable collection
 
 ---
 
@@ -24,6 +25,9 @@ Sleep / physiology:
 - sleep stages
 - heart rate
 - HRV
+- PPI / RR-like intervals where available
+- accelerometer-based movement
+- future EEG / PPG exploration
 - related derived metrics
 
 ---
@@ -62,6 +66,8 @@ Potential future tasks:
 - avoid overengineering
 - keep data pipelines understandable
 - prefer reliable small datasets over noisy large ones
+- retain raw wearable uploads before parsing or normalization
+- keep ingestion separate from sensor-specific parsing
 
 ---
 

@@ -9,6 +9,8 @@ Host machine:
 - 8GB RAM
 - 512GB SSD
 
+The system combines infrastructure services, environmental data, and wearable sensor data into one repository and one evolving architecture.
+
 ---
 
 ## High-Level Architecture
@@ -19,8 +21,9 @@ Reverse Proxy
 ↓
 Services Layer
   - Home Assistant
-  - Monitoring stack
-  - Future data services
+  - Observability stack
+  - Wearable data services
+  - Future supporting services
 ↓
 Docker Engine
 ↓
@@ -31,47 +34,146 @@ Linux host
 ## Service Groups
 
 ### 1. Infrastructure Layer
+- Linux host
 - Docker Engine
 - Docker Compose
 - Reverse Proxy
 
-### 2. Smart Home Layer
-- Home Assistant
-- Sensors / device integrations
-
-### 3. Observability Layer
+### 2. Observability Layer
 - Prometheus
 - Node Exporter
 - cAdvisor
 - Grafana
 
-### 4. Data Layer (future)
-- ingestion services
-- time-series or structured storage
-- export/import utilities
+### 3. Smart Home Layer
+- Home Assistant
+- sensors / device integrations
+- automations
 
-### 5. Analytics / ML Layer (future)
+### 4. Wearable Data Layer
+- ingestion API
+- raw landing storage
+- normalization / parsing services
+- session debug views
+- future replay / import tools
+
+### 5. Collector Layer
+- iOS collector app
+- future sensor adapters
+- local buffering
+- upload client
+- debug screens
+
+### 6. Analytics / ML Layer
 - feature extraction
 - notebooks or scripts
 - lightweight experiments
 
 ---
 
+## Wearable Architecture Direction
+
+The wearable path is based on one collector app with multiple sensor adapters.
+
+Initial:
+- Polar Verity Sense adapter
+
+Planned:
+- Muse Athena adapter
+
+The backend should not depend on one sensor-specific payload shape.
+Instead, the system should rely on:
+- stable transport metadata
+- flexible sensor-specific payloads
+- later normalization into analytical forms
+
+---
+
+## Canonical Flow
+
+Device
+→ Collector App
+→ Shared Upload Envelope
+→ Ingestion API
+→ Raw Storage
+→ Parser / Normalizer
+→ Visualization / Analysis
+
+---
+
+## Separation of Concerns
+
+### Collector App
+Responsible for:
+- connecting to sensors
+- reading live data
+- grouping data into upload units
+- attaching shared metadata
+- uploading batches
+- showing debug state
+
+### Ingestion API
+Responsible for:
+- accepting upload requests
+- validating the outer envelope
+- storing raw payloads durably
+- acknowledging receipt
+- exposing basic debug visibility
+
+### Parsing / Normalization
+Responsible for:
+- sensor-specific parsing
+- canonical analytical transformation
+- preparing data for visualization and later feature extraction
+
+### Analysis Layer
+Responsible for:
+- quality checks
+- derived metrics
+- epoching
+- correlations
+- future ML experiments
+
+---
+
+## Storage Layers
+
+### Raw Layer
+- immutable raw payloads
+- transport metadata
+- session grouping
+- stream grouping
+
+### Normalized Layer
+- canonical analytical records
+- sensor-specific data mapped into queryable structures
+
+### Derived Layer
+- features
+- quality flags
+- correlations
+- future model-ready datasets
+
+---
+
 ## Design Principles
 
 - service isolation via Docker
+- Docker Compose as the default deployment model
 - minimal external exposure
 - modular structure
 - low resource footprint
 - monitoring added early
 - reusable repo structure for future services
+- raw-first ingestion for wearable data
+- ingestion is separate from parsing and analysis
 
 ---
 
 ## Networking (conceptual)
 
 - edge network -> reverse proxy
-- internal network -> application services
+- internal network -> ingestion / visualization / support services
 - monitoring network -> metrics collection
 
 ---
@@ -82,6 +184,9 @@ Persistent storage is required for:
 - Home Assistant
 - Prometheus
 - Grafana
-- future collected data
+- raw wearable uploads
+- normalized signal data
+- future exported sessions
 
-Docker volumes should be used by default.
+Docker volumes should be used by default for stateful services.
+Large experimental datasets should not be committed to git.

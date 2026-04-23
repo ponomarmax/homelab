@@ -5,7 +5,9 @@
 This project is a real-world engineering system that combines:
 - local infrastructure
 - smart home automation
-- personal data collection
+- environmental data collection
+- wearable physiological data collection
+- future neural / multimodal sensor collection
 - data analysis
 - future ML experimentation
 
@@ -23,9 +25,12 @@ Strategy:
 - use real-world personal and environmental data
 - demonstrate end-to-end ownership:
   - infrastructure
-  - automation
   - monitoring
   - data collection
+  - mobile collector development
+  - backend ingestion
+  - storage
+  - visualization
   - analytics
   - future ML experiments
 
@@ -33,15 +38,36 @@ Strategy:
 
 ## System Vision
 
-This project evolves through layers:
+This project evolves through several connected layers:
 
 1. Infrastructure platform
 2. Monitoring and observability
 3. Home Assistant and automations
-4. Sensor-based environmental data collection
-5. External data integrations (Garmin / sleep-related sources if accessible)
-6. Correlation analysis
-7. Future ML experimentation
+4. Environmental data collection
+5. Wearable collector platform
+6. Backend ingestion and storage
+7. Visualization and validation
+8. Correlation analysis
+9. Future ML experimentation
+
+---
+
+## Wearable Vision
+
+A single collector application should receive data from supported wearable sensors, map them into shared transport contracts, and upload them to backend services.
+
+Initial baseline:
+- Polar Verity Sense for cardio and motion data
+
+Planned extension:
+- Muse Athena for neural and experimental multimodal data
+
+The system should support:
+- online live collection
+- future offline import paths
+- raw data retention
+- normalized analytical layers
+- future feature extraction and ML experimentation
 
 ---
 
@@ -49,8 +75,9 @@ This project evolves through layers:
 
 A fully integrated system that:
 - collects environmental and physiological data
-- correlates sleep quality with room conditions
-- enables future experimentation with ML models on real data
+- supports multiple wearable sensors through one collector architecture
+- correlates sleep and physiological patterns with room conditions
+- enables future experimentation with ML models on real personal data
 
 ---
 
@@ -60,4 +87,6 @@ A fully integrated system that:
 - simplicity over complexity
 - iterative development
 - visible progress and measurable checkpoints
+- raw data is always retained
+- ingestion is separate from parsing and analysis
 - portfolio-first mindset
