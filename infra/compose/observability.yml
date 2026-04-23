@@ -1,5 +1,14 @@
 name: homelab
 
-# Checkpoint 0 scaffold only.
-# Future observability services should be added here in small checkpoints.
-services: {}
+services:
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.11.1
+    command:
+      - "--path.rootfs=/host"
+      - "--web.listen-address=:${NODE_EXPORTER_PORT:-9100}"
+    network_mode: host
+    pid: host
+    restart: unless-stopped
+    read_only: true
+    volumes:
+      - "/:/host:ro,rslave"

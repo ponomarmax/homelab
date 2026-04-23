@@ -1,7 +1,10 @@
 # Observability Scaffold
 
-Checkpoint 0 prepares the repository layout for a future lightweight observability stack.
-It does not run Prometheus, Grafana, cAdvisor, or Node Exporter yet.
+This directory contains the lightweight observability stack as it is added checkpoint by checkpoint.
+
+Current service:
+
+- Node Exporter - host metrics endpoint for future Prometheus scraping.
 
 ## Layout
 
@@ -21,7 +24,7 @@ infra/observability/
 
 ## Compose
 
-Future observability services should be added to:
+Observability services are added to:
 
 ```sh
 infra/compose/observability.yml
@@ -33,7 +36,7 @@ The base platform compose file stays in:
 infra/compose/docker-compose.yml
 ```
 
-When a future checkpoint adds real observability containers, validate both files together:
+Validate the base and observability compose files together:
 
 ```sh
 docker compose \
@@ -77,6 +80,12 @@ If bind-mounted local state is needed for development or migration, use `data/ob
 5. Validate compose syntax before deployment.
 6. After deployment, verify restart behavior and inspect logs.
 7. Record the handoff in `07_progress_log.md` or a progress draft.
+
+Current validation entry point:
+
+```sh
+tools/scripts/check-node-exporter.sh
+```
 
 ## Resource Notes
 

@@ -8,6 +8,15 @@ Current generic validation entry point:
 tools/scripts/check-observability.sh
 ```
 
+Current service validation:
+
+```sh
+tools/scripts/check-node-exporter.sh --remote
+tools/scripts/check-node-exporter.sh --lan
+```
+
+For LAN validation, set `NODE_EXPORTER_LAN_HOST` in `.env` when it differs from the SSH `SERVER_IP`.
+
 Future service checkpoints should add validation steps for:
 
 - compose syntax

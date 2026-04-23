@@ -20,6 +20,7 @@ required_paths=(
   "infra/observability/config/node-exporter/README.md"
   "infra/observability/scripts/README.md"
   "infra/observability/validation/README.md"
+  "tools/scripts/check-node-exporter.sh"
   "data/observability/README.md"
   "data/observability/prometheus"
   "data/observability/grafana"
