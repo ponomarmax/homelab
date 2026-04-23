@@ -3,8 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOCAL_PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-COMPOSE_FILE="${LOCAL_PROJECT_ROOT}/compose/docker-compose.yml"
+LOCAL_PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+COMPOSE_FILE="${LOCAL_PROJECT_ROOT}/infra/compose/docker-compose.yml"
 ENV_FILE="${LOCAL_PROJECT_ROOT}/.env"
 EXAMPLE_ENV_FILE="${LOCAL_PROJECT_ROOT}/.env.example"
 SSH_SCRIPT="${SCRIPT_DIR}/ssh.sh"
@@ -41,7 +41,7 @@ if [[ "${CONFIRM_DEPLOY}" != "true" ]]; then
   echo "When deployment is approved, run:"
   echo "mkdir -p ${LOCAL_PROJECT_ROOT}/.deploy/compose"
   echo "cp ${ENV_FILE} ${LOCAL_PROJECT_ROOT}/.deploy/.env"
-  echo "cp -R ${LOCAL_PROJECT_ROOT}/compose/* ${LOCAL_PROJECT_ROOT}/.deploy/compose/"
+  echo "cp -R ${LOCAL_PROJECT_ROOT}/infra/compose/* ${LOCAL_PROJECT_ROOT}/.deploy/compose/"
   echo "${SSH_SCRIPT} mkdir -p ${REMOTE_PROJECT_ROOT}"
   echo "scp -r ${LOCAL_PROJECT_ROOT}/.deploy/compose ${LOCAL_PROJECT_ROOT}/.deploy/.env ${SERVER_USER}@${SERVER_IP}:${REMOTE_PROJECT_ROOT}/"
   echo "${SSH_SCRIPT} docker compose --env-file ${REMOTE_PROJECT_ROOT}/.env -f ${REMOTE_PROJECT_ROOT}/compose/docker-compose.yml up -d ${SERVICES[*]}"
@@ -50,7 +50,7 @@ fi
 
 mkdir -p "${LOCAL_PROJECT_ROOT}/.deploy/compose"
 cp "${ENV_FILE}" "${LOCAL_PROJECT_ROOT}/.deploy/.env"
-cp -R "${LOCAL_PROJECT_ROOT}/compose/." "${LOCAL_PROJECT_ROOT}/.deploy/compose/"
+cp -R "${LOCAL_PROJECT_ROOT}/infra/compose/." "${LOCAL_PROJECT_ROOT}/.deploy/compose/"
 
 "${SSH_SCRIPT}" "mkdir -p '${REMOTE_PROJECT_ROOT}'"
 scp -r "${LOCAL_PROJECT_ROOT}/.deploy/compose" "${LOCAL_PROJECT_ROOT}/.deploy/.env" \

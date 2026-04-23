@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOCAL_PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+LOCAL_PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 ENV_FILE="${LOCAL_PROJECT_ROOT}/.env"
 EXAMPLE_ENV_FILE="${LOCAL_PROJECT_ROOT}/.env.example"
 SSH_SCRIPT="${SCRIPT_DIR}/ssh.sh"

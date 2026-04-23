@@ -8,5 +8,11 @@ logs/
 *.swp
 *.swo
 *~
+data/raw/*
+data/normalized/*
+data/derived/*
+!data/raw/.gitkeep
+!data/normalized/.gitkeep
+!data/derived/.gitkeep
 .idea/
 .vscode/
