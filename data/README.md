@@ -7,5 +7,6 @@ Expected layers:
 - `raw/` - immutable uploaded chunks and raw source files
 - `normalized/` - parsed analytical records
 - `derived/` - features, quality flags, and experiment-ready outputs
+- `observability/` - documented fallback location for future observability runtime data if bind mounts are explicitly chosen
 
 Large datasets and sensitive personal data should not be committed to Git.

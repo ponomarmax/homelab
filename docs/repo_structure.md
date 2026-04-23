@@ -54,6 +54,7 @@ Docker-first infrastructure and environment documentation.
 Current areas:
 - `infra/compose/`
 - `infra/env/`
+- `infra/observability/`
 
 ### data/
 Local data landing zones.
@@ -62,6 +63,7 @@ Expected layers:
 - `data/raw/`
 - `data/normalized/`
 - `data/derived/`
+- `data/observability/`
 
 Large datasets and sensitive personal data should not be committed.
 

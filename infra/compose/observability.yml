@@ -1,0 +1,5 @@
+name: homelab
+
+# Checkpoint 0 scaffold only.
+# Future observability services should be added here in small checkpoints.
+services: {}

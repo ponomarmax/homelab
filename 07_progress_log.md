@@ -11,6 +11,20 @@ LinkedIn post idea:
 
 ## Entries
 
+Date: 2026-04-23
+
+What was done:
+- Added a lightweight observability scaffold for future Prometheus, Grafana, cAdvisor, and Node Exporter checkpoints.
+- Added a compose overlay placeholder for observability services.
+- Documented config, validation, script, and persistence locations.
+- Added a reusable observability scaffold validation script.
+
+Key insight:
+A small service-oriented scaffold makes future monitoring checkpoints easier to add without committing to runtime services before the host resource budget is understood.
+
+LinkedIn post idea:
+Not yet. This checkpoint is useful engineering groundwork, but it is probably too internal to be a standalone post.
+
 Date: 2026-04-22
 What was done: Added a lightweight HTTP smoke-test service to Docker Compose, validated it locally, and verified basic network reachability after deployment.
 Key insight: A tiny static HTTP endpoint is enough to validate the end-to-end deployment and LAN accessibility path before adding real infrastructure services.
