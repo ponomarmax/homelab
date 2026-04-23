@@ -68,6 +68,7 @@ Before major changes, read and follow these files if they exist:
 - docs/wearable/canonical_contracts.md
 - docs/wearable/checkpoints.md
 - docs/repo_structure.md
+- docs/observability/README.md
 
 If there is a conflict:
 1. 04_constraints.md
@@ -116,6 +117,16 @@ Avoid:
 - adding tools without a clear operational need
 - mixing sensor-specific parsing directly into ingestion when not necessary
 
+---
+
+## Observability working rule
+
+For monitoring and observability tasks:
+- read docs/observability/README.md first if it exists
+- reuse the established observability scaffolding
+- add services incrementally by checkpoint
+- validate beyond container startup
+- for stateful services, verify persistence after recreate
 ---
 
 ## Wearable direction
