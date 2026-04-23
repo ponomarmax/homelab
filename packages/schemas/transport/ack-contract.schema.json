@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homelab.local/schemas/transport/ack-contract.schema.json",
+  "title": "AckContract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "accepted",
+    "status",
+    "chunk_id",
+    "session_id",
+    "stream_id",
+    "received_at_server",
+    "storage"
+  ],
+  "properties": {
+    "accepted": {
+      "const": true
+    },
+    "status": {
+      "enum": [
+        "accepted",
+        "duplicate",
+        "rejected"
+      ]
+    },
+    "chunk_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stream_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "received_at_server": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_persisted"
+      ],
+      "properties": {
+        "raw_persisted": {
+          "type": "boolean"
+        },
+        "storage_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "message": {
+      "type": "string"
+    }
+  }
+}

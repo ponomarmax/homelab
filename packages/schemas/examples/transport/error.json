@@ -1,0 +1,12 @@
+{
+  "accepted": false,
+  "status": "rejected",
+  "error_code": "validation_error",
+  "message": "Upload chunk failed contract validation.",
+  "details": [
+    {
+      "field": "transport.payload_schema",
+      "issue": "Unsupported payload schema."
+    }
+  ]
+}

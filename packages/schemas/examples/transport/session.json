@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "session_id": "session-2026-04-23T09-30-00Z-polar-001",
+  "device_session_id": "polar-local-session-001",
+  "session_mode": "online_live",
+  "collector": {
+    "collector_id": "ios-collector-maksym-phone",
+    "runtime_type": "ios",
+    "app_version": "0.1.0",
+    "build_version": "1"
+  },
+  "device": {
+    "vendor": "polar",
+    "model": "Polar Verity Sense",
+    "device_id": "polar-verity-sense-demo"
+  },
+  "time": {
+    "started_at_source": "2026-04-23T09:30:00Z",
+    "started_at_server": "2026-04-23T09:30:02Z"
+  },
+  "metadata": {
+    "notes": "Manual contract example for CP0 validation.",
+    "tags": [
+      "cp0",
+      "polar"
+    ]
+  }
+}

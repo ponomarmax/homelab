@@ -1,0 +1,12 @@
+{
+  "samples": [
+    {
+      "offset_ns": 0,
+      "ppi_ms": 840
+    },
+    {
+      "offset_ns": 840000000,
+      "ppi_ms": 812
+    }
+  ]
+}

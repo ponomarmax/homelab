@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homelab.local/schemas/transport/error-contract.schema.json",
+  "title": "ErrorContract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "accepted",
+    "status",
+    "error_code",
+    "message"
+  ],
+  "properties": {
+    "accepted": {
+      "const": false
+    },
+    "status": {
+      "const": "rejected"
+    },
+    "error_code": {
+      "enum": [
+        "validation_error",
+        "unsupported_schema",
+        "persistence_error",
+        "malformed_request"
+      ]
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1
+    },
+    "details": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "field",
+          "issue"
+        ],
+        "properties": {
+          "field": {
+            "type": "string",
+            "minLength": 1
+          },
+          "issue": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "stream_id": "stream-hr-001",
+  "session_id": "session-2026-04-23T09-30-00Z-polar-001",
+  "stream_family": "cardio",
+  "stream_type": "hr",
+  "origin": "vendor_processed",
+  "mode": "online_live",
+  "payload_schema": "polar.hr",
+  "payload_version": "1.0",
+  "metadata": {
+    "sample_rate_hz": 1,
+    "units": "bpm",
+    "channels": [
+      "hr"
+    ],
+    "notes": "Heart rate stream from Polar Verity Sense."
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "chunk_id": "chunk-hr-000001",
+  "session_id": "session-2026-04-23T09-30-00Z-polar-001",
+  "stream_id": "stream-hr-001",
+  "sequence": 1,
+  "time": {
+    "device_time_reference": "polar-device-tick-000001",
+    "received_at_collector": "2026-04-23T09:30:01Z",
+    "uploaded_at_collector": "2026-04-23T09:30:02Z",
+    "received_at_server": "2026-04-23T09:30:03Z"
+  },
+  "transport": {
+    "encoding": "json",
+    "compression": "none",
+    "payload_schema": "polar.hr",
+    "payload_version": "1.0"
+  },
+  "payload": {
+    "samples": [
+      {
+        "offset_ns": 0,
+        "hr": 72
+      }
+    ]
+  }
+}

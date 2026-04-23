@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homelab.local/schemas/transport/upload-chunk-contract.schema.json",
+  "title": "UploadChunkContract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "chunk_id",
+    "session_id",
+    "stream_id",
+    "sequence",
+    "time",
+    "transport",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "chunk_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stream_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "time": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "received_at_collector",
+        "uploaded_at_collector"
+      ],
+      "properties": {
+        "device_time_reference": {
+          "type": "string",
+          "minLength": 1
+        },
+        "received_at_collector": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "uploaded_at_collector": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "received_at_server": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "encoding",
+        "payload_schema",
+        "payload_version"
+      ],
+      "properties": {
+        "encoding": {
+          "const": "json"
+        },
+        "compression": {
+          "enum": [
+            "none",
+            "gzip"
+          ]
+        },
+        "payload_schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "payload_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

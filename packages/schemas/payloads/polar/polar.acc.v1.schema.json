@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homelab.local/schemas/payloads/polar/polar.acc.v1.schema.json",
+  "title": "polar.acc v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "samples"
+  ],
+  "properties": {
+    "sample_rate_hz": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "samples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "offset_ns",
+          "x",
+          "y",
+          "z"
+        ],
+        "properties": {
+          "offset_ns": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "z": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  }
+}

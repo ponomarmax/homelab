@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homelab.local/schemas/transport/stream-descriptor-contract.schema.json",
+  "title": "StreamDescriptorContract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "stream_id",
+    "session_id",
+    "stream_family",
+    "stream_type",
+    "origin",
+    "mode",
+    "payload_schema",
+    "payload_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "stream_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stream_family": {
+      "enum": [
+        "cardio",
+        "motion",
+        "neural",
+        "optical",
+        "derived",
+        "quality",
+        "marker",
+        "unknown"
+      ]
+    },
+    "stream_type": {
+      "enum": [
+        "hr",
+        "ppi",
+        "ppg",
+        "acc",
+        "gyro",
+        "mag",
+        "eeg",
+        "optics",
+        "fnirs",
+        "marker",
+        "unknown"
+      ]
+    },
+    "origin": {
+      "enum": [
+        "raw",
+        "vendor_processed",
+        "server_derived"
+      ]
+    },
+    "mode": {
+      "enum": [
+        "online_live",
+        "offline_recording",
+        "file_import",
+        "playback"
+      ]
+    },
+    "payload_schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payload_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sample_rate_hz": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "units": {
+          "type": "string",
+          "minLength": 1
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

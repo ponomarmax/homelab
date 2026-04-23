@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homelab.local/schemas/transport/session-contract.schema.json",
+  "title": "SessionContract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "session_id",
+    "session_mode",
+    "collector",
+    "device",
+    "time"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "device_session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_mode": {
+      "enum": [
+        "online_live",
+        "offline_recording",
+        "file_import",
+        "playback"
+      ]
+    },
+    "collector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "collector_id",
+        "runtime_type",
+        "app_version"
+      ],
+      "properties": {
+        "collector_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtime_type": {
+          "enum": [
+            "ios",
+            "android",
+            "desktop",
+            "server_import"
+          ]
+        },
+        "app_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "build_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "vendor",
+        "model",
+        "device_id"
+      ],
+      "properties": {
+        "vendor": {
+          "enum": [
+            "polar",
+            "muse",
+            "other"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "device_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "time": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "started_at_source"
+      ],
+      "properties": {
+        "started_at_source": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "started_at_server": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "notes": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "channels": [
+    "ppg_1",
+    "ppg_2",
+    "ppg_3"
+  ],
+  "samples": [
+    {
+      "offset_ns": 0,
+      "values": [
+        101,
+        97,
+        110
+      ]
+    }
+  ]
+}
