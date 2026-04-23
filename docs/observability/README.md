@@ -21,7 +21,7 @@ It is introduced early to:
 * Node Exporter — host metrics (DONE)
 * Prometheus — metrics storage and scraping (DONE)
 * cAdvisor — container metrics (DONE)
-* Grafana — visualization
+* Grafana — visualization (DONE)
 * Alerting — Telegram integration
 
 ---
@@ -83,5 +83,5 @@ data / observability
 
 ## Next Steps
 
-* Add Grafana and dashboards
+* Prepare basic Grafana dashboards
 * Introduce alerting

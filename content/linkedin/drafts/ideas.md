@@ -69,3 +69,25 @@ I added container monitoring without a dashboard first, on purpose.
 
 Use later when:
 The first Grafana dashboard completes the observability pipeline visually.
+
+## OBS-007 — Provisioning Turns Grafana Into Infrastructure
+
+Idea:
+Grafana becomes reproducible when datasources are provisioned from repository config instead of being clicked into place manually.
+
+Hook:
+The first Grafana milestone was not a dashboard. It was a provisioned datasource.
+
+Use later when:
+The first dashboards rely on the provisioned Prometheus datasource.
+
+## OBS-008 — Validate The UI Through The Data Path
+
+Idea:
+A Grafana login page is not enough validation. The stronger check is whether Grafana can query existing Prometheus data through its provisioned datasource.
+
+Hook:
+I did not validate Grafana by opening the login page. I made it query Prometheus.
+
+Use later when:
+Showing the full path from exporter to Prometheus to Grafana.

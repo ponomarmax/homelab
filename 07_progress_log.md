@@ -14,6 +14,20 @@ LinkedIn post idea:
 Date: 2026-04-23
 
 What was done:
+- Added Grafana as the observability UI layer.
+- Added a Docker named volume for Grafana state.
+- Provisioned Prometheus as the default Grafana datasource from repository-controlled config.
+- Added reusable validation for Grafana health, datasource provisioning, Prometheus query through Grafana, LAN access, and persistence after recreate.
+
+Key insight:
+Grafana becomes reproducible when the datasource and state strategy are defined in the repository instead of relying on manual UI setup.
+
+LinkedIn post idea:
+Two possible angles: why dashboards should come after validated metrics storage, and how provisioning turns Grafana from a manual UI into reproducible infrastructure.
+
+Date: 2026-04-23
+
+What was done:
 - Added cAdvisor as the container metrics source for the observability layer.
 - Integrated cAdvisor with the existing Prometheus scrape configuration.
 - Moved the temporary smoke-test endpoint off the default cAdvisor port so cAdvisor can use the expected LAN port.
