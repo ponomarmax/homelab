@@ -14,7 +14,7 @@ Status: done
 
 * deploy Node Exporter (done)
 * deploy Prometheus (done)
-* deploy cAdvisor
+* deploy cAdvisor (done)
 * deploy Grafana
 * prepare basic dashboards
 * validate alerting (Telegram)

@@ -47,3 +47,25 @@ A monitoring UI is only useful if the time-series store underneath is already tr
 
 Use later when:
 Prometheus is paired with the first Grafana dashboard and the end-to-end validation story is visible.
+
+## OBS-005 — Container Metrics Need Deliberate Host Access
+
+Idea:
+cAdvisor is simple to run, but meaningful container metrics require explicit access to Docker runtime paths and host system views. That access should be documented and validated, not hidden in a compose file.
+
+Hook:
+Container metrics are not magic. They come from very specific host access.
+
+Use later when:
+Grafana dashboards can show container CPU, memory, filesystem, and network metrics collected through Prometheus.
+
+## OBS-006 — Validate The Pipeline Before The Dashboard
+
+Idea:
+Before adding Grafana, validate that cAdvisor serves metrics, Prometheus scrapes it, and container metrics are queryable through the Prometheus API.
+
+Hook:
+I added container monitoring without a dashboard first, on purpose.
+
+Use later when:
+The first Grafana dashboard completes the observability pipeline visually.

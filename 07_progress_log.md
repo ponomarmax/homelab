@@ -14,6 +14,21 @@ LinkedIn post idea:
 Date: 2026-04-23
 
 What was done:
+- Added cAdvisor as the container metrics source for the observability layer.
+- Integrated cAdvisor with the existing Prometheus scrape configuration.
+- Moved the temporary smoke-test endpoint off the default cAdvisor port so cAdvisor can use the expected LAN port.
+- Added reusable validation for cAdvisor `/metrics`, Prometheus target state, and a container metric query.
+- Kept cAdvisor stateless and documented the host/Docker runtime mounts it needs.
+
+Key insight:
+Container observability needs explicit Docker runtime access; validating cAdvisor directly and through Prometheus confirms the path from container runtime to time-series storage before adding dashboards.
+
+LinkedIn post idea:
+Two possible angles: why container metrics need careful host mounts, and how to validate the metrics pipeline before building Grafana dashboards.
+
+Date: 2026-04-23
+
+What was done:
 - Added Prometheus as the first stateful observability storage service.
 - Configured Prometheus to scrape itself and the existing Node Exporter target.
 - Added explicit Prometheus retention of 15 days.
