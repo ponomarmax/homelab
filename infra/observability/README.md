@@ -5,6 +5,7 @@ This directory contains the lightweight observability stack as it is added check
 Current service:
 
 - Node Exporter - host metrics endpoint for future Prometheus scraping.
+- Prometheus - metrics storage and scraping for observability targets.
 
 ## Layout
 
@@ -85,6 +86,7 @@ Current validation entry point:
 
 ```sh
 tools/scripts/check-node-exporter.sh
+tools/scripts/check-prometheus.sh
 ```
 
 ## Resource Notes

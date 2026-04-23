@@ -1,6 +1,24 @@
 name: homelab
 
 services:
+  prometheus:
+    image: prom/prometheus:v3.11.2
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}"
+      - "--web.listen-address=:9090"
+    restart: unless-stopped
+    read_only: true
+    user: "65534:65534"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - "${PROJECT_ROOT}/observability/config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - "prometheus_data:/prometheus"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+
   node-exporter:
     image: quay.io/prometheus/node-exporter:v1.11.1
     command:
@@ -12,3 +30,7 @@ services:
     read_only: true
     volumes:
       - "/:/host:ro,rslave"
+
+volumes:
+  prometheus_data:
+    name: homelab_prometheus_data

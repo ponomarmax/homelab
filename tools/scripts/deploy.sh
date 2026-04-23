@@ -48,20 +48,24 @@ if [[ "${CONFIRM_DEPLOY}" != "true" ]]; then
   echo "Dry run only. No containers were started."
   echo "When deployment is approved, run:"
   echo "mkdir -p ${LOCAL_PROJECT_ROOT}/.deploy/compose"
+  echo "mkdir -p ${LOCAL_PROJECT_ROOT}/.deploy/observability"
   echo "cp ${ENV_FILE} ${LOCAL_PROJECT_ROOT}/.deploy/.env"
   echo "cp -R ${LOCAL_PROJECT_ROOT}/infra/compose/* ${LOCAL_PROJECT_ROOT}/.deploy/compose/"
+  echo "cp -R ${LOCAL_PROJECT_ROOT}/infra/observability/* ${LOCAL_PROJECT_ROOT}/.deploy/observability/"
   echo "${SSH_SCRIPT} mkdir -p ${REMOTE_PROJECT_ROOT}"
-  echo "scp -r ${LOCAL_PROJECT_ROOT}/.deploy/compose ${LOCAL_PROJECT_ROOT}/.deploy/.env ${SERVER_USER}@${SERVER_IP}:${REMOTE_PROJECT_ROOT}/"
+  echo "scp -r ${LOCAL_PROJECT_ROOT}/.deploy/compose ${LOCAL_PROJECT_ROOT}/.deploy/observability ${LOCAL_PROJECT_ROOT}/.deploy/.env ${SERVER_USER}@${SERVER_IP}:${REMOTE_PROJECT_ROOT}/"
   echo "${SSH_SCRIPT} docker compose --env-file ${REMOTE_PROJECT_ROOT}/.env ${REMOTE_COMPOSE_FILES} up -d ${SERVICES[*]}"
   exit 0
 fi
 
 mkdir -p "${LOCAL_PROJECT_ROOT}/.deploy/compose"
+mkdir -p "${LOCAL_PROJECT_ROOT}/.deploy/observability"
 cp "${ENV_FILE}" "${LOCAL_PROJECT_ROOT}/.deploy/.env"
 cp -R "${LOCAL_PROJECT_ROOT}/infra/compose/." "${LOCAL_PROJECT_ROOT}/.deploy/compose/"
+cp -R "${LOCAL_PROJECT_ROOT}/infra/observability/." "${LOCAL_PROJECT_ROOT}/.deploy/observability/"
 
 "${SSH_SCRIPT}" "mkdir -p '${REMOTE_PROJECT_ROOT}'"
-scp -r "${LOCAL_PROJECT_ROOT}/.deploy/compose" "${LOCAL_PROJECT_ROOT}/.deploy/.env" \
+scp -r "${LOCAL_PROJECT_ROOT}/.deploy/compose" "${LOCAL_PROJECT_ROOT}/.deploy/observability" "${LOCAL_PROJECT_ROOT}/.deploy/.env" \
   "${SERVER_USER}@${SERVER_IP}:${REMOTE_PROJECT_ROOT}/"
 
 "${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} up -d ${SERVICES[*]}"
