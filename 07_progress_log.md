@@ -14,6 +14,20 @@ LinkedIn post idea:
 Date: 2026-04-23
 
 What was done:
+- Added Node Exporter as the first real observability service.
+- Deployed it through the existing Docker Compose-based repository workflow.
+- Added reusable validation for the deployed host-local metrics endpoint, the host LAN interface, and workstation-to-LAN access.
+- Verified that `/metrics` returns Node Exporter host-style metrics for CPU, memory, filesystem, and exporter build info.
+
+Key insight:
+Containerized host monitoring needs explicit host namespace and root filesystem access; otherwise the exporter can accidentally describe the container more than the host.
+
+LinkedIn post idea:
+Two possible angles: validating monitoring from the user's real LAN path, and why containerized host metrics need explicit host access instead of default container isolation.
+
+Date: 2026-04-23
+
+What was done:
 - Added a lightweight observability scaffold for future Prometheus, Grafana, cAdvisor, and Node Exporter checkpoints.
 - Added a compose overlay placeholder for observability services.
 - Documented config, validation, script, and persistence locations.
