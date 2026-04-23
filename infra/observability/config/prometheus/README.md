@@ -21,6 +21,7 @@ Current scrape targets:
 
 - `prometheus` - Prometheus self-scrape.
 - `node-exporter` - host metrics exposed by Node Exporter through Docker host gateway.
+- `cadvisor` - container metrics exposed inside the Compose network.
 
 ## Persistence
 
@@ -58,5 +59,4 @@ The LAN validation checks the Prometheus API from the workstation side using `PR
 
 ## Future Integration
 
-Future cAdvisor scrape targets should be added to `prometheus.yml`.
 Future Grafana data source provisioning should point at Prometheus on the Compose network or host-local endpoint documented by that checkpoint.

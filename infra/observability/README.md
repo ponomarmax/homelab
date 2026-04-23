@@ -6,6 +6,7 @@ Current service:
 
 - Node Exporter - host metrics endpoint for future Prometheus scraping.
 - Prometheus - metrics storage and scraping for observability targets.
+- cAdvisor - container metrics endpoint scraped by Prometheus.
 
 ## Layout
 
@@ -87,6 +88,7 @@ Current validation entry point:
 ```sh
 tools/scripts/check-node-exporter.sh
 tools/scripts/check-prometheus.sh
+tools/scripts/check-cadvisor.sh
 ```
 
 ## Resource Notes
