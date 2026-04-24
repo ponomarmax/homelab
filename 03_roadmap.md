@@ -115,7 +115,7 @@ Deliver a strict HR-only end-to-end pipeline with raw-first storage and determin
 Planned sequence:
 - CP0: document HR MVP architecture, testing strategy, and time alignment
 - CP1: add iOS collector skeleton (done)
-- CP2: validate mock HR flow
+- CP2: add mock HR session metadata and upload chunk preparation (done)
 - CP3: validate real HR collection
 - CP4: add ingestion API
 - CP5: add upload flow

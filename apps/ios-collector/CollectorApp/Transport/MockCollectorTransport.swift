@@ -1,30 +1,32 @@
 import Foundation
 
 struct MockCollectorTransport: CollectorTransporting {
-    func prepareSessionBoundary(
-        session: CollectionSession,
-        streamTypes: [CollectorStream]
-    ) -> PreparedSessionBoundary {
-        PreparedSessionBoundary(
-            sessionID: session.id,
-            collectionModeTransportValue: session.metadata.mode.transportValue,
-            startedAt: session.metadata.startedAt,
-            streamTypes: streamTypes
+    private let chunkBuilder = HeartRateChunkBuilder()
+
+    func makeStreamDescriptor(
+        for stream: CollectorStream,
+        source: String = "mock"
+    ) -> StreamDescriptor {
+        StreamDescriptor(
+            streamName: stream.displayName,
+            streamType: stream.transportType,
+            unit: stream.unit,
+            source: source,
+            sampleKind: "scalar"
         )
     }
 
-    func prepareChunkBoundary(
+    func prepareUploadChunk(
         session: CollectionSession,
-        stream: CollectorStream,
-        sequenceNumber: Int,
-        sampleCount: Int
-    ) -> PreparedChunkBoundary {
-        PreparedChunkBoundary(
-            sessionID: session.id,
-            stream: stream,
-            sequenceNumber: sequenceNumber,
-            sampleCount: sampleCount,
-            preparedAt: Date()
+        streamDescriptor: StreamDescriptor,
+        chunkSequenceNumber: Int,
+        samples: [HeartRateSample]
+    ) -> UploadChunk? {
+        chunkBuilder.buildChunk(
+            session: session,
+            streamDescriptor: streamDescriptor,
+            chunkSequenceNumber: chunkSequenceNumber,
+            samples: samples
         )
     }
 }

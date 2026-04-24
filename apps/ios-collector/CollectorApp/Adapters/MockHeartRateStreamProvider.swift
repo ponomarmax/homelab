@@ -26,9 +26,9 @@ final class MockHeartRateStreamProvider: HeartRateStreamProviding {
             var sequenceNumber = 0
             while !Task.isCancelled {
                 let sample = HeartRateSample(
-                    value: values[index % values.count],
+                    hrBPM: values[index % values.count],
                     collectorReceivedAtUTC: timestampProvider(),
-                    rawDeviceTimestamp: nil,
+                    deviceTimestampRaw: nil,
                     sourceTimestampKind: .collectorObserved,
                     sampleSequenceNumber: sequenceNumber
                 )

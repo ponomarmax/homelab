@@ -7,10 +7,10 @@ enum SourceTimestampKind: String, Codable, Sendable {
     case unknown
 }
 
-struct HeartRateSample: Equatable, Sendable {
-    let value: Int
+struct HeartRateSample: Equatable, Codable, Sendable {
+    let hrBPM: Int
     let collectorReceivedAtUTC: Date
-    let rawDeviceTimestamp: Date?
+    let deviceTimestampRaw: Date?
     let sourceTimestampKind: SourceTimestampKind?
-    let sampleSequenceNumber: Int?
+    let sampleSequenceNumber: Int
 }

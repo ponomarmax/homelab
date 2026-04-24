@@ -5,16 +5,18 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var status: CollectorStatus = .disconnected
     @Published private(set) var selectedDevice: CollectorDevice?
     @Published private(set) var activeSession: CollectionSession?
+    @Published private(set) var streamDescriptor: StreamDescriptor?
     @Published private(set) var latestHeartRateSample: HeartRateSample?
     @Published private(set) var totalSamplesReceived: Int = 0
-    @Published private(set) var lastPreparedChunkBoundary: PreparedChunkBoundary?
+    @Published private(set) var bufferedSamplesCount: Int = 0
+    @Published private(set) var lastPreparedChunk: UploadChunk?
 
     let defaultCollectionMode: CollectionMode = .live
 
     private let adapter: CollectorDeviceAdapter
     private let transport: CollectorTransporting
-
-    private(set) var preparedSessionBoundary: PreparedSessionBoundary?
+    private var bufferedSamples: [HeartRateSample] = []
+    private var nextChunkSequenceNumber: Int = 1
 
     init(
         adapter: CollectorDeviceAdapter,
@@ -37,7 +39,11 @@ final class CollectorCore: ObservableObject {
         guard let provider = adapter.heartRateStreamProvider() else { return }
 
         totalSamplesReceived = 0
+        bufferedSamples = []
+        bufferedSamplesCount = 0
+        nextChunkSequenceNumber = 1
         latestHeartRateSample = nil
+        lastPreparedChunk = nil
 
         do {
             try await adapter.connect()
@@ -48,24 +54,18 @@ final class CollectorCore: ObservableObject {
 
         let session = CollectionSession(
             device: adapter.deviceIdentity,
-            metadata: .init(
-                mode: defaultCollectionMode,
-                startedAt: Date(),
-                collectorID: "ios-collector"
-            )
+            collectionMode: defaultCollectionMode,
+            startedAtUTC: Date(),
+            supportedStreams: adapter.availableStreams
         )
 
         activeSession = session
-        preparedSessionBoundary = transport.prepareSessionBoundary(
-            session: session,
-            streamTypes: adapter.availableStreams
-        )
+        streamDescriptor = transport.makeStreamDescriptor(for: provider.streamType, source: "mock")
 
-        let streamType = provider.streamType
         provider.start { [weak self] sample in
             guard let self else { return }
             Task { @MainActor in
-                self.handle(sample: sample, stream: streamType)
+                self.handle(sample: sample)
             }
         }
 
@@ -75,21 +75,43 @@ final class CollectorCore: ObservableObject {
     func stopCollection() {
         adapter.heartRateStreamProvider()?.stop()
         adapter.disconnect()
-        activeSession = nil
+        if activeSession != nil {
+            activeSession?.markStopped(at: Date())
+        }
         status = selectedDevice == nil ? .disconnected : .stopped
     }
 
-    private func handle(sample: HeartRateSample, stream: CollectorStream) {
+    @discardableResult
+    func prepareUploadChunk() -> UploadChunk? {
+        guard
+            let session = activeSession,
+            let streamDescriptor,
+            !bufferedSamples.isEmpty
+        else {
+            return nil
+        }
+
+        let chunk = transport.prepareUploadChunk(
+            session: session,
+            streamDescriptor: streamDescriptor,
+            chunkSequenceNumber: nextChunkSequenceNumber,
+            samples: bufferedSamples
+        )
+
+        if let chunk {
+            lastPreparedChunk = chunk
+            nextChunkSequenceNumber += 1
+            bufferedSamples.removeAll()
+            bufferedSamplesCount = 0
+        }
+
+        return chunk
+    }
+
+    private func handle(sample: HeartRateSample) {
         latestHeartRateSample = sample
         totalSamplesReceived += 1
-
-        if let session = activeSession {
-            lastPreparedChunkBoundary = transport.prepareChunkBoundary(
-                session: session,
-                stream: stream,
-                sequenceNumber: totalSamplesReceived,
-                sampleCount: totalSamplesReceived
-            )
-        }
+        bufferedSamples.append(sample)
+        bufferedSamplesCount = bufferedSamples.count
     }
 }

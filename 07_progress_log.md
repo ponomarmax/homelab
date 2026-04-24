@@ -14,6 +14,20 @@ LinkedIn post idea:
 Date: 2026-04-24
 
 What was done:
+- Extended the iOS collector mock HR flow so a running mock session now produces explicit session metadata, stream descriptors, and transport-ready upload chunk payloads.
+- Added chunk preparation inside the collector core while keeping the flow mock-only and simulator-runnable.
+- Expanded the collector UI diagnostics to show buffered samples and prepared chunk status without adding backend calls or complex UI.
+- Added tests for session creation, sample sequencing, buffered sample counting, chunk contents, timestamp preservation, and session stop timestamps.
+
+Key insight:
+Preparing structured chunks before real backend integration makes the collector boundary concrete early, while keeping timestamp ownership and canonical alignment in the later normalizer.
+
+LinkedIn post idea:
+Two possible angles: using a mock wearable stream to lock down a transport-ready session/chunk model before backend work, and why traceable timestamp fields matter even before real device integration.
+
+Date: 2026-04-24
+
+What was done:
 - Added the initial iOS collector Xcode project with a runnable SwiftUI app target and unit test target.
 - Implemented the first collector skeleton layers: UI, collector core, device adapter abstraction, stream provider abstraction, and transport placeholder.
 - Added a mock device adapter and mock HR stream so the app can run in simulator without Polar SDK, BLE, or backend integration.

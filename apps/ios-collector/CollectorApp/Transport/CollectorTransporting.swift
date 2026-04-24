@@ -1,15 +1,15 @@
 import Foundation
 
 protocol CollectorTransporting {
-    func prepareSessionBoundary(
-        session: CollectionSession,
-        streamTypes: [CollectorStream]
-    ) -> PreparedSessionBoundary
+    func makeStreamDescriptor(
+        for stream: CollectorStream,
+        source: String
+    ) -> StreamDescriptor
 
-    func prepareChunkBoundary(
+    func prepareUploadChunk(
         session: CollectionSession,
-        stream: CollectorStream,
-        sequenceNumber: Int,
-        sampleCount: Int
-    ) -> PreparedChunkBoundary
+        streamDescriptor: StreamDescriptor,
+        chunkSequenceNumber: Int,
+        samples: [HeartRateSample]
+    ) -> UploadChunk?
 }

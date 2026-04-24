@@ -197,6 +197,13 @@ CP1 baseline:
 - collector domain model tests
 - `xcodebuild build-for-testing` should compile the iOS app and unit tests without a real device
 
+CP2 extension:
+- session metadata creation tests
+- sample sequence and buffered sample count tests
+- upload chunk model tests
+- timestamp preservation checks on prepared chunks
+- session stop timestamp tests
+
 ### CP4 to CP7
 - add raw storage readability checks
 - add normalization and artifact validation

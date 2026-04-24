@@ -14,6 +14,7 @@ struct CollectorView: View {
 
             statusCard
             metricsCard
+            diagnosticsCard
             actionRow
 
             Spacer()
@@ -30,7 +31,7 @@ struct CollectorView: View {
             statusRow(title: "Mode", value: collectorCore.defaultCollectionMode.rawValue)
             statusRow(
                 title: "Session",
-                value: collectorCore.activeSession?.id.uuidString ?? "Not started"
+                value: collectorCore.activeSession?.sessionID.uuidString ?? "Not started"
             )
         }
         .padding()
@@ -47,7 +48,7 @@ struct CollectorView: View {
             HStack(spacing: 16) {
                 metricTile(
                     title: "Latest HR",
-                    value: collectorCore.latestHeartRateSample.map { "\($0.value) bpm" } ?? "--"
+                    value: collectorCore.latestHeartRateSample.map { "\($0.hrBPM) bpm" } ?? "--"
                 )
                 metricTile(
                     title: "Samples",
@@ -56,10 +57,33 @@ struct CollectorView: View {
             }
 
             if let sample = collectorCore.latestHeartRateSample {
-                Text("Received at \(sample.collectorReceivedAtUTC.formatted(date: .omitted, time: .standard)) UTC metadata placeholder")
+                Text("Received at \(sample.collectorReceivedAtUTC.formatted(date: .omitted, time: .standard))")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var diagnosticsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Diagnostics")
+                .font(.headline)
+
+            statusRow(title: "Buffered Samples", value: "\(collectorCore.bufferedSamplesCount)")
+            statusRow(
+                title: "Stream",
+                value: collectorCore.streamDescriptor?.streamName ?? "Not prepared"
+            )
+            statusRow(
+                title: "Last Chunk",
+                value: collectorCore.lastPreparedChunk.map {
+                    "#\($0.chunkSequenceNumber) (\($0.samples.count) samples)"
+                } ?? "Not prepared"
+            )
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -88,6 +112,12 @@ struct CollectorView: View {
             }
             .buttonStyle(.bordered)
             .disabled(collectorCore.status != .collecting)
+
+            Button("Prepare Chunk") {
+                collectorCore.prepareUploadChunk()
+            }
+            .buttonStyle(.bordered)
+            .disabled(collectorCore.bufferedSamplesCount == 0)
         }
     }
 
