@@ -67,6 +67,9 @@ Before major changes, read and follow these files if they exist:
 - 08_data_strategy.md
 - docs/wearable/canonical_contracts.md
 - docs/wearable/checkpoints.md
+- docs/wearable/hr_mvp_pipeline.md
+- docs/wearable/testing_strategy.md
+- docs/wearable/time_alignment.md
 - docs/repo_structure.md
 - docs/observability/README.md
 
@@ -75,7 +78,8 @@ If there is a conflict:
 2. 02_architecture.md
 3. 03_roadmap.md
 4. docs/wearable/canonical_contracts.md
-5. everything else
+5. docs/wearable/hr_mvp_pipeline.md
+6. everything else
 
 ---
 
@@ -142,6 +146,17 @@ Collector direction:
 - multiple adapters
 - shared transport contracts
 - parsing and normalization after ingestion
+
+Before wearable work:
+- read the wearable docs first
+- keep terminology aligned with the documented pipeline phases
+
+Wearable implementation rules:
+- no new services without explicit request
+- no agent frameworks
+- raw-first principle is mandatory
+- each step must be independently verifiable
+- do not hardcode HR-only assumptions into long-term architecture
 
 ---
 

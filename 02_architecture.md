@@ -222,6 +222,169 @@ Likely future extensions include:
 - backup-aware persistence policy
 - observability hardening and resource tuning
 
+---
+
+## NEW — Wearable HR MVP target architecture
+
+The repository now also defines the target documentation architecture for the wearable HR MVP pipeline.
+
+This section describes the agreed design before runtime implementation starts.
+
+### Scope
+
+Strict MVP path:
+
+`Polar Verity Sense HR -> iOS Collector -> wearable-ingestion-api -> raw JSONL -> nightly-orchestrator-job -> normalize -> clean Parquet -> window features -> nightly summary -> LLM interpretation -> Telegram`
+
+Current non-goals:
+- sleep stages
+- ML models
+- multi-service orchestration
+- advanced UI
+- environment ingestion for MVP
+
+### Wearable service topology
+
+#### iOS Collector
+Responsibilities:
+- manage wearable session lifecycle
+- collect stream payloads through pluggable device adapters
+- upload transport-shaped chunks
+
+Required architecture:
+
+`UI -> Collector Core -> Device Adapter -> Transport`
+
+Key rules:
+- adding a new device must not rewrite collector core logic
+- collection mode must be part of session metadata
+- the collector must support mock data providers for testing
+
+#### `wearable-ingestion-api`
+Responsibilities:
+- receive upload chunks
+- validate contracts
+- write raw JSONL
+- return ACK
+
+Must not:
+- normalize timestamps
+- compute features
+- call LLM
+- send Telegram
+
+Operational role:
+- lightweight
+- always-on
+
+#### `nightly-orchestrator-job`
+Responsibilities:
+- run deterministic pipeline steps
+- track run status
+- produce artifacts for downstream delivery
+
+Initial planned steps:
+- `normalize_hr`
+- `build_window_features`
+- `build_nightly_summary`
+- `generate_llm_report`
+- `send_telegram`
+
+Important rule:
+This is deterministic workflow orchestration, not an AI agent framework.
+
+### Wearable data layers
+
+1. Raw (`JSONL`)
+   - append-only
+   - preserves all timestamps
+   - source-of-truth layer
+
+2. Clean time series (`Parquet`)
+   - canonical `ts_utc`
+   - sample-level rows
+   - no aggregation
+
+3. Window features (`Parquet`)
+   - first aggregation layer
+   - intended windows include `30s`, `1m`, and `5m`
+
+4. Nightly summary (`JSON`)
+   - deterministic
+   - computed without LLM
+
+5. Report (`Markdown`)
+   - interpretation layer only
+
+6. Telegram output
+   - final delivery layer
+
+### Wearable storage layout
+
+Target paths:
+- `/data/wearable/raw/`
+- `/data/wearable/processed/clean_timeseries/`
+- `/data/wearable/processed/window_features/`
+- `/data/wearable/summaries/`
+- `/data/wearable/reports/`
+- `/data/wearable/pipeline_runs/`
+
+### Wearable extensibility model
+
+The pipeline separates step orchestration from stream-specific handlers.
+
+Definition:
+- Step = pipeline phase
+- Handler = stream-specific logic within a phase
+
+Examples:
+- normalization handlers such as `PolarHrNormalizer`, `PolarPpiNormalizer`, `PolarAccNormalizer`
+- feature handlers such as `HrFeatureBuilder`, `HrvFeatureBuilder`, `MovementFeatureBuilder`
+
+Rule:
+Adding a stream should extend handlers inside existing steps, not force a rewrite of the pipeline structure.
+
+### Time alignment architecture
+
+Rules:
+- raw timestamps are preserved
+- `ts_utc` is the canonical timestamp for downstream analytical layers
+- alignment happens only in the normalizer
+- batch payloads are expanded into sample-level rows
+- the normalizer does not aggregate
+
+Required alignment artifact:
+- `time_alignment_report.json`
+
+Supported collection patterns:
+- live mode
+- offline mode
+- batch expansion
+
+### Environment compatibility
+
+The architecture must stay compatible with future continuous environment data.
+
+Expected future flow:
+
+`Airlytix ES1 -> ESPHome -> Home Assistant -> environment ingestion -> raw environment data -> clean time series -> window features -> join with sleep session -> nightly summary`
+
+Rules:
+- environment data is continuous rather than session-based
+- raw environment data is time-partitioned
+- wearable or sleep sessions define later join windows
+- environment data must not be bound to sessions at ingestion time
+
+### Future display layer
+
+Future but not MVP:
+- Grafana dashboards
+- tablet kiosk display
+- real-time environment metrics
+- alert-oriented screens such as CO2 or air-quality warnings
+
+This layer is intentionally deferred and not part of current runtime scope.
+
 ## Architecture summary
 The current homelab architecture is:
 - single-node
@@ -229,5 +392,7 @@ The current homelab architecture is:
 - repository-controlled
 - persistence-aware
 - observability-enabled
+- raw-first for wearable ingestion
+- designed for deterministic post-ingestion wearable processing
 
 The observability baseline is now a first-class architectural layer rather than a future placeholder.

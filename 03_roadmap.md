@@ -1,5 +1,26 @@
 # Roadmap
 
+## Wearable HR MVP checkpoint order
+
+0. docs
+1. iOS skeleton
+2. mock HR
+3. real HR
+4. ingestion API
+5. upload flow
+6. raw storage
+7. normalize
+8. features
+9. summary
+10. orchestrator
+11. LLM
+12. Telegram
+13. full smoke
+
+Status: documentation checkpoint defined
+
+---
+
 ## Stage 1 — Repository and Infrastructure Initialization
 
 * create repository structure
@@ -86,7 +107,36 @@ Status: planned
 
 ---
 
-## Stage 8 — Correlation Analysis
+## Stage 8 — Wearable HR MVP Pipeline
+
+Goal:
+Deliver a strict HR-only end-to-end pipeline with raw-first storage and deterministic nightly processing.
+
+Planned sequence:
+- CP0: document HR MVP architecture, testing strategy, and time alignment
+- CP1: add iOS collector skeleton
+- CP2: validate mock HR flow
+- CP3: validate real HR collection
+- CP4: add ingestion API
+- CP5: add upload flow
+- CP6: persist raw JSONL
+- CP7: normalize to clean Parquet
+- CP8: build window features
+- CP9: build nightly deterministic summary
+- CP10: add single-container orchestrator
+- CP11: add LLM interpretation layer
+- CP12: add Telegram delivery
+- CP13: run full smoke validation
+
+Rules:
+- no agent frameworks
+- no multi-service orchestration for MVP
+- each step must be independently verifiable
+- adding future streams should extend handlers, not rewrite the pipeline
+
+---
+
+## Stage 9 — Correlation Analysis
 
 * correlate sleep-related metrics with:
 
@@ -100,7 +150,7 @@ Status: future
 
 ---
 
-## Stage 9 — ML Experiments
+## Stage 10 — ML Experiments
 
 * feature engineering
 * simple baseline models

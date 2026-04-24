@@ -64,10 +64,17 @@ Planned extension:
 
 The system should support:
 - online live collection
-- future offline import paths
+- future offline recording
+- future imported data flows
 - raw data retention
 - normalized analytical layers
 - future feature extraction and ML experimentation
+
+Near-term MVP architecture:
+- Polar Verity Sense HR only
+- iOS Collector -> ingestion API -> raw JSONL -> nightly orchestrator
+- deterministic normalization, feature building, and nightly summary
+- LLM interpretation only after deterministic summary artifacts exist
 
 ---
 
@@ -76,6 +83,8 @@ The system should support:
 A fully integrated system that:
 - collects environmental and physiological data
 - supports multiple wearable sensors through one collector architecture
+- keeps raw ingestion separate from normalization, features, and reporting
+- supports session-based wearable data and future continuous environment data
 - correlates sleep and physiological patterns with room conditions
 - enables future experimentation with ML models on real personal data
 
@@ -89,4 +98,5 @@ A fully integrated system that:
 - visible progress and measurable checkpoints
 - raw data is always retained
 - ingestion is separate from parsing and analysis
+- pipeline steps should remain independently verifiable
 - portfolio-first mindset

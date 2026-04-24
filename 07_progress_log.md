@@ -11,6 +11,20 @@ LinkedIn post idea:
 
 ## Entries
 
+Date: 2026-04-24
+
+What was done:
+- Added the HR MVP wearable pipeline architecture document as the pre-implementation source of truth.
+- Added dedicated documentation for wearable time alignment and testing strategy.
+- Updated vision, architecture, roadmap, data strategy, and agent instructions to align on the same HR MVP terminology and artifact boundaries.
+- Documented the target service topology, storage layout, extensibility model, and future environment-data compatibility without changing runtime behavior.
+
+Key insight:
+Locking down artifact boundaries, timestamp rules, and deterministic pipeline responsibilities before implementation reduces future rework and keeps the ingestion boundary clean.
+
+LinkedIn post idea:
+Two possible angles: documenting a wearable pipeline as architecture before writing code, and why raw-first plus deterministic nightly artifacts make later AI layers easier to trust.
+
 Date: 2026-04-23
 
 What was done:

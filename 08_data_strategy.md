@@ -30,6 +30,12 @@ Sleep / physiology:
 - future EEG / PPG exploration
 - related derived metrics
 
+Current strict wearable MVP:
+- HR only
+- Polar Verity Sense
+- session-based collection
+- raw JSONL first, then normalized and aggregated layers
+
 ---
 
 ## Main Goals
@@ -37,6 +43,7 @@ Sleep / physiology:
 - collect data over time
 - build structured historical datasets
 - analyze relationships between sleep and environment
+- keep deterministic artifacts before any interpretive layer
 
 ---
 
@@ -68,6 +75,8 @@ Potential future tasks:
 - prefer reliable small datasets over noisy large ones
 - retain raw wearable uploads before parsing or normalization
 - keep ingestion separate from sensor-specific parsing
+- keep canonical analytical time assignment in normalization, not ingestion
+- keep pipeline steps independently verifiable
 
 ---
 
@@ -77,6 +86,65 @@ Potential future tasks:
 - missing data
 - noisy data
 - inconsistent timestamps across sources
+
+---
+
+## Wearable Data Layers
+
+The wearable pipeline should follow these layers:
+
+1. Raw (`JSONL`)
+   - append-only
+   - preserves all timestamps
+   - full truth
+
+2. Clean time series (`Parquet`)
+   - sample-level rows
+   - canonical `ts_utc`
+   - no aggregation
+
+3. Window features (`Parquet`)
+   - first aggregation layer
+   - target windows include `30s`, `1m`, and `5m`
+
+4. Nightly summary (`JSON`)
+   - deterministic
+   - non-LLM
+
+5. Report (`Markdown`)
+   - interpretation layer only
+
+6. Telegram output
+   - final delivery layer
+
+---
+
+## Time Alignment Strategy
+
+Rules:
+- preserve all raw timing fields
+- do not assume collector receipt time equals sample time
+- assign canonical `ts_utc` only in normalization
+- expand batched inputs into sample-level rows
+- emit `time_alignment_report.json` for inspection
+
+Confidence levels:
+- high
+- medium
+- low
+
+---
+
+## Environment Compatibility
+
+Environment data should remain compatible with the same high-level raw-to-clean-to-features model.
+
+Key differences:
+- environment data is continuous
+- environment data is time-partitioned, not session-based
+- wearable or sleep sessions define later join windows
+
+Do not bind environment data to sessions during ingestion.
 
 ---
 
