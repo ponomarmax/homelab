@@ -191,6 +191,12 @@ Checkpoint direction:
 - add transport contract tests
 - add fake and real HR upload checks
 
+CP1 baseline:
+- mock HR provider tests
+- collector lifecycle tests
+- collector domain model tests
+- `xcodebuild build-for-testing` should compile the iOS app and unit tests without a real device
+
 ### CP4 to CP7
 - add raw storage readability checks
 - add normalization and artifact validation

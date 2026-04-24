@@ -14,6 +14,21 @@ LinkedIn post idea:
 Date: 2026-04-24
 
 What was done:
+- Added the initial iOS collector Xcode project with a runnable SwiftUI app target and unit test target.
+- Implemented the first collector skeleton layers: UI, collector core, device adapter abstraction, stream provider abstraction, and transport placeholder.
+- Added a mock device adapter and mock HR stream so the app can run in simulator without Polar SDK, BLE, or backend integration.
+- Added collector tests covering mock sample emission, session start/stop, latest HR updates, sample counting, default live mode, and timestamp metadata representation.
+- Prepared LinkedIn-ready content for the checkpoint, including a post draft and an image-generation prompt to pair with the simulator demo recording.
+
+Key insight:
+Getting a simulator-runnable mock stream into the collector first makes the session lifecycle and UI testable before the BLE and backend edges introduce harder debugging paths.
+
+LinkedIn post idea:
+Two possible angles: building an iOS wearable collector from the inside out with mock streams first, and why simulator-first validation reduces risk before BLE integration.
+
+Date: 2026-04-24
+
+What was done:
 - Added the HR MVP wearable pipeline architecture document as the pre-implementation source of truth.
 - Added dedicated documentation for wearable time alignment and testing strategy.
 - Updated vision, architecture, roadmap, data strategy, and agent instructions to align on the same HR MVP terminology and artifact boundaries.

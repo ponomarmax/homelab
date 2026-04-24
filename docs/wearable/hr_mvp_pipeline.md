@@ -164,6 +164,13 @@ Required MVP interactions:
 - explicit stop session
 - latest HR visible on screen
 
+Checkpoint 1 implementation baseline:
+- runnable in iOS Simulator
+- mock HR stream only
+- no Bluetooth
+- no real Polar SDK
+- no backend upload yet
+
 Future but not MVP:
 - device list
 - session history

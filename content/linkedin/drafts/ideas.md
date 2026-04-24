@@ -113,3 +113,14 @@ I did not stop when the dashboard appeared. I validated the PromQL behind it.
 
 Use later when:
 Explaining how the observability stack became trustworthy end to end.
+
+## WEAR-001 — Simulator First Before BLE
+
+Idea:
+Before integrating a real wearable SDK, make the collector architecture runnable in simulator with a mock stream so the app structure, state model, and tests are already stable.
+
+Hook:
+Before touching Bluetooth, I made the wearable collector run in simulator with a mock HR stream.
+
+Use later when:
+The first real Polar integration checkpoint is done and the contrast between mock-first and hardware-first development is easier to explain.
