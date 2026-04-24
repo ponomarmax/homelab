@@ -16,10 +16,24 @@ Status: done
 * deploy Prometheus (done)
 * deploy cAdvisor (done)
 * deploy Grafana (done)
-* prepare basic dashboards (done)
+* add dashboards as code (done)
 * validate alerting (Telegram)
 
 Status: in progress
+
+### Stage 2 Notes
+
+Observability baseline is now implemented and includes:
+- host metrics (Node Exporter)
+- container metrics (cAdvisor)
+- metrics storage (Prometheus)
+- visualization (Grafana)
+- dashboards as code (provisioned from repository)
+
+Remaining work in this stage focuses on:
+- alerting validation
+- notification path (Telegram)
+- observability hardening and cleanup
 
 ---
 
