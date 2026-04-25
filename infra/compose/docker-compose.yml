@@ -24,7 +24,37 @@ services:
     networks:
       - internal
 
+  wearable-ingestion-api:
+    build:
+      context: ${PROJECT_ROOT}/services/wearable-ingestion-api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      WEARABLE_INGESTION_API_HOST: ${WEARABLE_INGESTION_API_HOST:-0.0.0.0}
+      WEARABLE_INGESTION_API_PORT: ${WEARABLE_INGESTION_API_INTERNAL_PORT:-8090}
+      WEARABLE_INGESTION_RAW_DATA_PATH: ${WEARABLE_INGESTION_RAW_DATA_PATH:-/data/raw/wearable}
+    ports:
+      - "${WEARABLE_INGESTION_API_PORT:-18090}:${WEARABLE_INGESTION_API_INTERNAL_PORT:-8090}"
+    volumes:
+      - wearable_raw_data:${WEARABLE_INGESTION_RAW_DATA_PATH:-/data/raw/wearable}
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - import os,urllib.request; p=os.environ.get("WEARABLE_INGESTION_API_PORT","8090"); urllib.request.urlopen(f"http://127.0.0.1:{p}/healthz", timeout=2).read()
+      interval: 20s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - internal
+
 networks:
   internal:
     name: homelab_internal
     driver: bridge
+
+volumes:
+  wearable_raw_data:
+    name: homelab_wearable_raw_data

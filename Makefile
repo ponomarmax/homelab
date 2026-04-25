@@ -1,9 +1,9 @@
-.PHONY: test test-pipeline test-ios smoke-hr
+.PHONY: test test-pipeline test-ios smoke-hr deploy-wearable-ingestion-api validate-wearable-ingestion-api
 
 test: test-pipeline test-ios
 
 test-pipeline:
-	python3 -m unittest discover -s services/ingestion-api/tests -p 'test_*.py' -v
+	python3 -m unittest discover -s services/wearable-ingestion-api/tests -p 'test_*.py' -v
 
 test-ios:
 	@if command -v xcodebuild >/dev/null 2>&1; then \
@@ -18,4 +18,10 @@ test-ios:
 	fi
 
 smoke-hr:
-	python3 services/ingestion-api/scripts/smoke_hr.py
+	python3 services/wearable-ingestion-api/scripts/smoke_hr.py
+
+deploy-wearable-ingestion-api:
+	tools/scripts/deploy.sh --confirm wearable-ingestion-api
+
+validate-wearable-ingestion-api:
+	tools/scripts/validate-wearable-ingestion-api.sh

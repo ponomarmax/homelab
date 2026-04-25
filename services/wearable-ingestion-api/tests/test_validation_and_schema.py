@@ -6,11 +6,11 @@ import unittest
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-INGESTION_API_ROOT = Path(__file__).resolve().parents[1]
-if str(INGESTION_API_ROOT) not in sys.path:
-    sys.path.insert(0, str(INGESTION_API_ROOT))
+WEARABLE_INGESTION_API_ROOT = Path(__file__).resolve().parents[1]
+if str(WEARABLE_INGESTION_API_ROOT) not in sys.path:
+    sys.path.insert(0, str(WEARABLE_INGESTION_API_ROOT))
 
-from ingestion_api.validation import validate_upload_chunk_contract
+from wearable_ingestion_api.validation import validate_upload_chunk_contract
 
 
 class ValidationAndSchemaTests(unittest.TestCase):

@@ -1,4 +1,4 @@
-# Ingestion API
+# Wearable Ingestion API
 
 Lightweight CP3 backend for wearable HR uploads.
 
@@ -18,13 +18,15 @@ Out of scope:
 ## Run
 
 ```bash
-python3 services/ingestion-api/app.py --host 127.0.0.1 --port 8090
+python3 services/wearable-ingestion-api/app.py --host 127.0.0.1 --port 8090
 ```
 
 Optional env vars:
-- `INGESTION_API_HOST`
-- `INGESTION_API_PORT`
-- `WEARABLE_RAW_DATA_PATH`
+- `WEARABLE_INGESTION_API_HOST`
+- `WEARABLE_INGESTION_API_PORT`
+- `WEARABLE_INGESTION_RAW_DATA_PATH`
 
 Endpoint:
+- `GET /healthz`
 - `POST /upload-chunk`
+- `GET /docs` (Swagger UI)

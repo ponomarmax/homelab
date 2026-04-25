@@ -35,7 +35,7 @@ The collector direction is one app with multiple sensor adapters.
 Backend services.
 
 Current planned services:
-- `services/ingestion-api/`
+- `services/wearable-ingestion-api/`
 - `services/visualization/`
 
 Ingestion and visualization are separated so raw acceptance does not depend on parsing, charts, or analytics.

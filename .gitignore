@@ -1,6 +1,17 @@
 .env
+.env.*
+!.env.example
 .deploy/
 .DS_Store
+.idea/
+.vscode/
+
+# Secrets
+secrets/
+*.secret
+*.secrets
+
+# Logs and temporary artifacts
 logs/
 *.log
 *.tmp
@@ -8,16 +19,37 @@ logs/
 *.swp
 *.swo
 *~
-data/raw/*
-data/normalized/*
-data/derived/*
+tmp/
+temp/
+smoke-*.json
+smoke-*.jsonl
+hr-samples-*.jsonl
+
+# Generated data
+data/raw/**
+data/normalized/**
+data/derived/**
 !data/raw/.gitkeep
 !data/normalized/.gitkeep
 !data/derived/.gitkeep
-.idea/
-.vscode/
+!data/raw/**/README.md
+!data/normalized/**/README.md
+!data/derived/**/README.md
 
-# Xcode / iOS user-specific files
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+
+# Xcode / iOS
 DerivedData/
 *.xcuserstate
 *.pbxuser
@@ -29,19 +61,5 @@ DerivedData/
 *.perspectivev3
 !default.perspectivev3
 **/xcuserdata/
-build/
 *.xcuserdatad/
-
-# CocoaPods
 Pods/
-
-# Xcode
-
-# macOS
-.DS_Store
-
-# Pyhton
-__pycache__/
-*.pyc
-*.pyo
-*.pyd

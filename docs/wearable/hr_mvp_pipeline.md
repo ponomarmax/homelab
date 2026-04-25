@@ -42,7 +42,7 @@ Primary flow:
 
 `iOS Collector -> wearable-ingestion-api -> raw JSONL`
 
-`nightly-orchestrator-job -> normalize -> clean Parquet -> window features -> summary JSON -> report MD -> Telegram`
+`nightly-orchestrator-job -> normalize -> clean Parquet -> window features -> summary JSON -> (Here a place for LLM communication but let mock it for a while) report MD -> Telegram`
 
 The ingestion API is always-on.
 The orchestrator is a single-container batch-style job.
@@ -164,20 +164,6 @@ Required MVP interactions:
 - explicit stop session
 - latest HR visible on screen
 
-Checkpoint 1 implementation baseline:
-- runnable in iOS Simulator
-- mock HR stream only
-- no Bluetooth
-- no real Polar SDK
-- no backend upload yet
-
-Checkpoint 2 extension:
-- mock sessions now produce explicit session metadata
-- the collector tracks buffered HR samples during a session
-- the transport boundary includes a stream descriptor for HR
-- the collector can prepare upload chunk payloads from buffered mock samples
-- upload chunk preparation is local only and does not call the backend yet
-
 Future but not MVP:
 - device list
 - session history
@@ -204,11 +190,6 @@ Rules:
 - preserve all available timestamps
 - no normalization
 - no analytical assumptions
-
-Collector-side pre-ingestion note:
-- the iOS collector may prepare upload chunk payloads before sending them
-- those chunks are transport envelopes, not the raw storage layer itself
-- raw JSONL persistence still starts at `wearable-ingestion-api`
 
 ### 2. Clean Time Series
 
