@@ -1,19 +1,26 @@
 import Foundation
 
 struct MockCollectorTransport: CollectorTransporting {
+    typealias HTTPDataProvider = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+
     private let chunkBuilder = HeartRateChunkBuilder()
     private let uploadEndpoint: URL?
     private let shouldSucceedInMockMode: Bool
     private let nowProvider: @Sendable () -> Date
+    private let httpDataProvider: HTTPDataProvider
 
     init(
         uploadEndpoint: URL? = nil,
         shouldSucceedInMockMode: Bool = true,
-        nowProvider: @escaping @Sendable () -> Date = { Date() }
+        nowProvider: @escaping @Sendable () -> Date = { Date() },
+        httpDataProvider: @escaping HTTPDataProvider = { request in
+            try await URLSession.shared.data(for: request)
+        }
     ) {
         self.uploadEndpoint = uploadEndpoint
         self.shouldSucceedInMockMode = shouldSucceedInMockMode
         self.nowProvider = nowProvider
+        self.httpDataProvider = httpDataProvider
     }
 
     func makeStreamDescriptor(
@@ -87,7 +94,7 @@ struct MockCollectorTransport: CollectorTransporting {
         let encoder = JSONEncoder()
         request.httpBody = try encoder.encode(requestBody)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await httpDataProvider(request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw CollectorUploadError.invalidResponse
         }

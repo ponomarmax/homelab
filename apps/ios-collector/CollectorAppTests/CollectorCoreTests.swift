@@ -3,45 +3,20 @@ import XCTest
 
 @MainActor
 final class CollectorCoreTests: XCTestCase {
-    final class ImmediateHeartRateProvider: HeartRateStreamProviding {
-        let streamType: CollectorStream = .heartRate
-
-        private let samples: [HeartRateSample]
-        private var isStopped = false
-
-        init(samples: [HeartRateSample]) {
-            self.samples = samples
-        }
-
-        func start(onSample: @escaping @Sendable (HeartRateSample) -> Void) {
-            isStopped = false
-            for sample in samples where !isStopped {
-                onSample(sample)
-            }
-        }
-
-        func stop() {
-            isStopped = true
-        }
-    }
-
-    struct TestUploadError: LocalizedError {
-        var errorDescription: String? { "upload rejected" }
-    }
-
-    final class TestTransport: CollectorTransporting {
+    final class RecordingTransport: CollectorTransporting {
         private let chunkBuilder = HeartRateChunkBuilder()
         private let shouldFailUpload: Bool
+
+        private(set) var descriptorSourceInputs: [String] = []
+        private(set) var uploadedChunks: [UploadChunk] = []
 
         init(shouldFailUpload: Bool = false) {
             self.shouldFailUpload = shouldFailUpload
         }
 
-        func makeStreamDescriptor(
-            for stream: CollectorStream,
-            source: String
-        ) -> StreamDescriptor {
-            StreamDescriptor(
+        func makeStreamDescriptor(for stream: CollectorStream, source: String) -> StreamDescriptor {
+            descriptorSourceInputs.append(source)
+            return StreamDescriptor(
                 streamName: stream.displayName,
                 streamType: stream.transportType,
                 unit: stream.unit,
@@ -65,15 +40,13 @@ final class CollectorCoreTests: XCTestCase {
         }
 
         func upload(chunk: UploadChunk) async throws -> UploadAck {
+            uploadedChunks.append(chunk)
             if shouldFailUpload {
-                throw TestUploadError()
+                throw TestUploadError.rejected
             }
 
-            guard let canonical = chunk.makeCanonicalRequest(
-                uploadedAtUTC: Date(timeIntervalSince1970: 1_000)
-            ) else {
-                throw TestUploadError()
-            }
+            let uploadedAt = Date(timeIntervalSince1970: 1_000)
+            let canonical = try XCTUnwrap(chunk.makeCanonicalRequest(uploadedAtUTC: uploadedAt))
 
             return UploadAck(
                 accepted: true,
@@ -91,150 +64,107 @@ final class CollectorCoreTests: XCTestCase {
         }
     }
 
-    private func waitUntil(
-        timeoutNanoseconds: UInt64 = 1_000_000_000,
-        pollIntervalNanoseconds: UInt64 = 10_000_000,
-        _ condition: @escaping @MainActor () -> Bool
-    ) async -> Bool {
-        let started = DispatchTime.now().uptimeNanoseconds
-        while !condition() {
-            let elapsed = DispatchTime.now().uptimeNanoseconds - started
-            if elapsed >= timeoutNanoseconds {
-                return false
-            }
-            try? await Task.sleep(nanoseconds: pollIntervalNanoseconds)
-        }
-        return true
-    }
+    final class SourceTaggedAdapter: CollectorDeviceAdapter {
+        let deviceIdentity: CollectorDevice
+        let availableStreams: [CollectorStream] = [.heartRate]
+        let sourceIdentifier: String
+        let deviceSelectionActionTitle: String
+        private(set) var connectionState: ConnectionState = .disconnected
 
-    func testMockHeartRateProviderEmitsSamples() async {
-        let provider = MockHeartRateStreamProvider(
-            values: [61, 62],
-            intervalNanoseconds: 20_000_000
-        )
-        let expectation = expectation(description: "Provider emits samples")
-        expectation.expectedFulfillmentCount = 2
+        private let provider: HeartRateStreamProviding
 
-        provider.start { sample in
-            XCTAssertTrue([61, 62].contains(sample.hrBPM))
-            expectation.fulfill()
+        init(
+            sourceIdentifier: String,
+            deviceSelectionActionTitle: String = "Select",
+            provider: HeartRateStreamProviding
+        ) {
+            self.sourceIdentifier = sourceIdentifier
+            self.deviceSelectionActionTitle = deviceSelectionActionTitle
+            self.provider = provider
+            self.deviceIdentity = CollectorDevice(
+                id: "custom-device",
+                name: "Custom Device",
+                vendor: "CustomVendor",
+                model: "ModelX"
+            )
         }
 
-        await fulfillment(of: [expectation], timeout: 1.0)
-        provider.stop()
+        func scanDevices() async throws -> [CollectorDevice] { [deviceIdentity] }
+
+        func selectDevice(_ device: CollectorDevice) throws {
+            connectionState = .deviceSelected
+        }
+
+        func connect() async throws {
+            connectionState = .connected
+        }
+
+        func disconnect() {
+            provider.stop()
+            connectionState = .disconnected
+        }
+
+        func heartRateStreamProvider() -> HeartRateStreamProviding? {
+            provider
+        }
     }
 
-    func testSessionCreationUsesExpectedMetadata() async throws {
-        let sample = HeartRateSample(
-            hrBPM: 65,
-            collectorReceivedAtUTC: Date(),
-            deviceTimestampRaw: nil,
-            sourceTimestampKind: .collectorObserved,
-            sampleSequenceNumber: 0
-        )
-        let core = CollectorCore(
-            adapter: MockDeviceAdapter(
-                hrProvider: ImmediateHeartRateProvider(samples: [sample])
-            ),
-            transport: TestTransport()
-        )
-
-        core.selectDevice()
-        await core.startCollection()
-
-        let session = try XCTUnwrap(core.activeSession)
-        XCTAssertEqual(session.deviceID, "mock-polar-verity-sense")
-        XCTAssertEqual(session.deviceType, "Polar Verity Sense")
-        XCTAssertEqual(session.collectionMode, .live)
-        XCTAssertEqual(session.supportedStreams, [.heartRate])
-        XCTAssertNil(session.stoppedAtUTC)
-    }
-
-    func testCollectorCoreStartsAndStopsSession() async {
+    func testCoreStartsAndStopsSession() async {
         let core = CollectorCore(
             adapter: MockDeviceAdapter(
                 hrProvider: MockHeartRateStreamProvider(intervalNanoseconds: 10_000_000)
             ),
-            transport: TestTransport()
+            transport: RecordingTransport()
         )
 
         core.selectDevice()
-
         await core.startCollection()
         XCTAssertEqual(core.status, .collecting)
         XCTAssertNotNil(core.activeSession)
-        XCTAssertEqual(core.defaultCollectionMode, .live)
 
         core.stopCollection()
         XCTAssertEqual(core.status, .stopped)
         XCTAssertNotNil(core.activeSession?.stoppedAtUTC)
     }
 
-    func testSampleSequenceAndCountersIncrease() async throws {
-        let samples = [
-            HeartRateSample(
-                hrBPM: 70,
-                collectorReceivedAtUTC: Date(timeIntervalSince1970: 100),
-                deviceTimestampRaw: nil,
-                sourceTimestampKind: .collectorObserved,
-                sampleSequenceNumber: 0
-            ),
-            HeartRateSample(
-                hrBPM: 71,
-                collectorReceivedAtUTC: Date(timeIntervalSince1970: 101),
-                deviceTimestampRaw: nil,
-                sourceTimestampKind: .collectorObserved,
-                sampleSequenceNumber: 1
-            ),
-            HeartRateSample(
-                hrBPM: 72,
-                collectorReceivedAtUTC: Date(timeIntervalSince1970: 102),
-                deviceTimestampRaw: nil,
-                sourceTimestampKind: .collectorObserved,
-                sampleSequenceNumber: 2
-            )
-        ]
-
-        let core = CollectorCore(
-            adapter: MockDeviceAdapter(
-                hrProvider: ImmediateHeartRateProvider(samples: samples)
-            ),
-            transport: TestTransport()
+    func testCoreUsesAdapterSourceIdentifierForStreamDescriptor() async throws {
+        let sample = makeSample(
+            hr: 70,
+            receivedAt: Date(timeIntervalSince1970: 100),
+            sequence: 0
         )
+        let transport = RecordingTransport()
+        let adapter = SourceTaggedAdapter(
+            sourceIdentifier: "custom-sensor-source",
+            provider: ImmediateHeartRateProvider(samples: [sample])
+        )
+        let core = CollectorCore(adapter: adapter, transport: transport)
 
         core.selectDevice()
         await core.startCollection()
 
-        let receivedAllSamples = await waitUntil {
-            core.totalSamplesReceived >= 3 && core.latestHeartRateSample != nil
-        }
-        XCTAssertTrue(receivedAllSamples, "Timed out waiting for HR samples to be processed")
-
-        let latestSample = try XCTUnwrap(core.latestHeartRateSample)
-        XCTAssertEqual(core.totalSamplesReceived, 3)
-        XCTAssertEqual(core.bufferedSamplesCount, 3)
-        XCTAssertEqual(latestSample.sampleSequenceNumber, 2)
-        XCTAssertEqual(latestSample.hrBPM, 72)
-        XCTAssertEqual(core.streamDescriptor?.streamName, "HR")
+        XCTAssertEqual(core.deviceActionTitle, "Select")
+        XCTAssertEqual(transport.descriptorSourceInputs, ["custom-sensor-source"])
+        XCTAssertEqual(core.streamDescriptor?.source, "custom-sensor-source")
     }
 
-    func testUploadChunkContainsSessionAndBufferedSamples() async throws {
+    func testCoreBuffersSamplesAndPreparesChunk() async throws {
         let firstTimestamp = Date(timeIntervalSince1970: 200)
         let secondTimestamp = Date(timeIntervalSince1970: 201)
         let samples = [
-            HeartRateSample(
-                hrBPM: 80,
-                collectorReceivedAtUTC: firstTimestamp,
-                deviceTimestampRaw: firstTimestamp.addingTimeInterval(-0.5),
-                sourceTimestampKind: .deviceReported,
-                sampleSequenceNumber: 0
+            makeSample(
+                hr: 80,
+                receivedAt: firstTimestamp,
+                sequence: 0,
+                deviceTimestamp: firstTimestamp.addingTimeInterval(-0.5),
+                sourceTimestampKind: .deviceReported
             ),
-            HeartRateSample(
-                hrBPM: 81,
-                collectorReceivedAtUTC: secondTimestamp,
-                deviceTimestampRaw: secondTimestamp.addingTimeInterval(-0.5),
-                sourceTimestampKind: .deviceReported,
-                sampleSequenceNumber: 1
+            makeSample(
+                hr: 81,
+                receivedAt: secondTimestamp,
+                sequence: 1,
+                deviceTimestamp: secondTimestamp.addingTimeInterval(-0.5),
+                sourceTimestampKind: .deviceReported
             )
         ]
 
@@ -242,172 +172,66 @@ final class CollectorCoreTests: XCTestCase {
             adapter: MockDeviceAdapter(
                 hrProvider: ImmediateHeartRateProvider(samples: samples)
             ),
-            transport: TestTransport()
+            transport: RecordingTransport()
         )
 
         core.selectDevice()
         await core.startCollection()
 
-        let bufferedSamplesReady = await waitUntil {
-            core.bufferedSamplesCount >= 2
-        }
-        XCTAssertTrue(bufferedSamplesReady, "Timed out waiting for buffered HR samples")
+        let bufferedSamplesReady = await waitUntil { core.bufferedSamplesCount >= 2 }
+        XCTAssertTrue(bufferedSamplesReady)
 
-        let session = try XCTUnwrap(core.activeSession)
         let chunk = try XCTUnwrap(core.prepareUploadChunk())
+        let session = try XCTUnwrap(core.activeSession)
 
+        XCTAssertEqual(core.totalSamplesReceived, 2)
         XCTAssertEqual(chunk.sessionID, session.sessionID)
-        XCTAssertEqual(chunk.streamName, "HR")
         XCTAssertEqual(chunk.streamType, "hr")
         XCTAssertEqual(chunk.samples.count, 2)
         XCTAssertEqual(chunk.samples[0].collectorReceivedAtUTC, firstTimestamp)
         XCTAssertEqual(chunk.samples[1].collectorReceivedAtUTC, secondTimestamp)
-        XCTAssertEqual(chunk.samples[0].deviceTimestampRaw, firstTimestamp.addingTimeInterval(-0.5))
-        XCTAssertEqual(chunk.collectionMode, .live)
         XCTAssertEqual(core.bufferedSamplesCount, 0)
         XCTAssertEqual(core.lastPreparedChunk?.samples.count, 2)
     }
 
-    func testRealPolarFixtureMapsToCanonicalPayload() throws {
-        let sample = HeartRateSample(
-            hrBPM: 71,
-            collectorReceivedAtUTC: Date(timeIntervalSince1970: 1_000),
-            deviceTimestampRaw: nil,
-            sourceTimestampKind: .collectorObserved,
-            sampleSequenceNumber: 0,
-            streamData: PolarHrStreamData(
-                hr: 71,
-                ppgQuality: 0,
-                correctedHr: 0,
-                rrsMs: [],
-                rrAvailable: false,
-                contactStatus: false,
-                contactStatusSupported: false
-            )
-        )
-
-        let chunk = UploadChunk(
-            sessionID: UUID(uuidString: "2E923C96-FB44-4C3A-B948-14A0E6DB4D11")!,
-            streamName: "HR",
-            streamType: "hr",
-            chunkID: UUID(uuidString: "6D8B2D67-3C4E-4A12-9307-D7BF4AF80A4A")!,
-            chunkSequenceNumber: 1,
-            createdAtUTC: Date(timeIntervalSince1970: 1_001),
-            samples: [sample],
-            collectionMode: .live
-        )
-
-        let payload = try XCTUnwrap(chunk.makeCanonicalRequest(uploadedAtUTC: Date(timeIntervalSince1970: 1_002)))
-        let mapped = try XCTUnwrap(payload.payload.samples.first)
-
-        XCTAssertEqual(mapped.hr, 71)
-        XCTAssertEqual(mapped.ppgQuality, 0)
-        XCTAssertEqual(mapped.correctedHr, 0)
-        XCTAssertEqual(mapped.rrsMs, [])
-        XCTAssertFalse(mapped.rrAvailable)
-        XCTAssertFalse(mapped.contactStatus)
-        XCTAssertFalse(mapped.contactStatusSupported)
-        XCTAssertEqual(payload.transport.payloadSchema, "polar.hr")
-        XCTAssertEqual(payload.transport.payloadVersion, "1.0")
-    }
-
-    func testHeartRateSampleCarriesTimestampMetadata() {
-        let now = Date()
-        let sample = HeartRateSample(
-            hrBPM: 68,
-            collectorReceivedAtUTC: now,
-            deviceTimestampRaw: now.addingTimeInterval(-1),
-            sourceTimestampKind: .deviceReported,
-            sampleSequenceNumber: 42
-        )
-
-        XCTAssertEqual(sample.hrBPM, 68)
-        XCTAssertEqual(sample.collectorReceivedAtUTC, now)
-        XCTAssertEqual(sample.deviceTimestampRaw, now.addingTimeInterval(-1))
-        XCTAssertEqual(sample.sourceTimestampKind, .deviceReported)
-        XCTAssertEqual(sample.sampleSequenceNumber, 42)
-    }
-
-    func testSessionStopSetsStoppedAtUTC() async {
+    func testCoreForwardsPreparedChunkToTransportOnUpload() async {
+        let transport = RecordingTransport()
         let core = CollectorCore(
             adapter: MockDeviceAdapter(
                 hrProvider: ImmediateHeartRateProvider(
-                    samples: [
-                        HeartRateSample(
-                            hrBPM: 67,
-                            collectorReceivedAtUTC: Date(),
-                            deviceTimestampRaw: nil,
-                            sourceTimestampKind: .collectorObserved,
-                            sampleSequenceNumber: 0
-                        )
-                    ]
+                    samples: [makeSample(hr: 71, receivedAt: Date(), sequence: 0)]
                 )
             ),
-            transport: TestTransport()
+            transport: transport
         )
 
         core.selectDevice()
         await core.startCollection()
-        core.stopCollection()
+        let bufferedSamplesReady = await waitUntil { core.bufferedSamplesCount >= 1 }
+        XCTAssertTrue(bufferedSamplesReady)
 
-        XCTAssertNotNil(core.activeSession?.stoppedAtUTC)
-    }
-
-    func testUploadSuccessUpdatesState() async {
-        let core = CollectorCore(
-            adapter: MockDeviceAdapter(
-                hrProvider: ImmediateHeartRateProvider(
-                    samples: [
-                        HeartRateSample(
-                            hrBPM: 71,
-                            collectorReceivedAtUTC: Date(),
-                            deviceTimestampRaw: nil,
-                            sourceTimestampKind: .collectorObserved,
-                            sampleSequenceNumber: 0
-                        )
-                    ]
-                )
-            ),
-            transport: TestTransport(shouldFailUpload: false)
-        )
-
-        core.selectDevice()
-        await core.startCollection()
-        let bufferedSamplesReady = await waitUntil {
-            core.bufferedSamplesCount >= 1
-        }
-        XCTAssertTrue(bufferedSamplesReady, "Timed out waiting for buffered HR samples before upload")
         _ = core.prepareUploadChunk()
         await core.uploadLastPreparedChunk()
 
         XCTAssertEqual(core.uploadStatus, .success)
-        XCTAssertNil(core.lastErrorMessage)
+        XCTAssertEqual(transport.uploadedChunks.count, 1)
     }
 
-    func testUploadFailureUpdatesState() async {
+    func testCoreUploadFailureUpdatesState() async {
         let core = CollectorCore(
             adapter: MockDeviceAdapter(
                 hrProvider: ImmediateHeartRateProvider(
-                    samples: [
-                        HeartRateSample(
-                            hrBPM: 71,
-                            collectorReceivedAtUTC: Date(),
-                            deviceTimestampRaw: nil,
-                            sourceTimestampKind: .collectorObserved,
-                            sampleSequenceNumber: 0
-                        )
-                    ]
+                    samples: [makeSample(hr: 71, receivedAt: Date(), sequence: 0)]
                 )
             ),
-            transport: TestTransport(shouldFailUpload: true)
+            transport: RecordingTransport(shouldFailUpload: true)
         )
 
         core.selectDevice()
         await core.startCollection()
-        let bufferedSamplesReady = await waitUntil {
-            core.bufferedSamplesCount >= 1
-        }
-        XCTAssertTrue(bufferedSamplesReady, "Timed out waiting for buffered HR samples before upload")
+        let bufferedSamplesReady = await waitUntil { core.bufferedSamplesCount >= 1 }
+        XCTAssertTrue(bufferedSamplesReady)
+
         _ = core.prepareUploadChunk()
         await core.uploadLastPreparedChunk()
 

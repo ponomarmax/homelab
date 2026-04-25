@@ -39,7 +39,7 @@ final class CollectorCore: ObservableObject {
     }
 
     var deviceActionTitle: String {
-        adapter is PolarDeviceAdapter ? "Scan Polar Devices" : "Select Mock Device"
+        adapter.deviceSelectionActionTitle
     }
 
     func selectDevice() {
@@ -172,7 +172,7 @@ final class CollectorCore: ObservableObject {
         activeSession = session
         streamDescriptor = transport.makeStreamDescriptor(
             for: provider.streamType,
-            source: adapter is PolarDeviceAdapter ? "polar" : "mock"
+            source: adapter.sourceIdentifier
         )
         prepareDebugExport(for: session)
 

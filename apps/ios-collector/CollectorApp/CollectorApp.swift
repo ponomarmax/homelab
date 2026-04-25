@@ -6,14 +6,15 @@ struct WearableCollectorApp: App {
     private let collectorCore: CollectorCore
 
     init() {
-        let environment = ProcessInfo.processInfo.environment
-        let arguments = ProcessInfo.processInfo.arguments
-        let useMock = environment["COLLECTOR_USE_MOCK"] == "1" || arguments.contains("--mock")
+        let configuration = CollectorRuntimeConfiguration.from(
+            environment: ProcessInfo.processInfo.environment,
+            arguments: ProcessInfo.processInfo.arguments
+        )
+        let adapter: CollectorDeviceAdapter = configuration.useMockDevice
+            ? MockDeviceAdapter()
+            : PolarDeviceAdapter()
 
-        let adapter: CollectorDeviceAdapter = useMock ? MockDeviceAdapter() : PolarDeviceAdapter()
-
-        let uploadEndpoint = environment["COLLECTOR_UPLOAD_ENDPOINT"].flatMap { URL(string: $0) }
-        let transport = MockCollectorTransport(uploadEndpoint: uploadEndpoint)
+        let transport = MockCollectorTransport(uploadEndpoint: configuration.uploadEndpoint)
 
         collectorCore = CollectorCore(
             adapter: adapter,

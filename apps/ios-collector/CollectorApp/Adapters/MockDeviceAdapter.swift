@@ -5,6 +5,8 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
 
     let deviceIdentity: CollectorDevice
     let availableStreams: [CollectorStream]
+    let sourceIdentifier: String = "mock"
+    let deviceSelectionActionTitle: String = "Select Mock Device"
 
     private let hrProvider: HeartRateStreamProviding
 

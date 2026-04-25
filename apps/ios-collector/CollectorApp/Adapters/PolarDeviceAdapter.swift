@@ -14,6 +14,8 @@ enum PolarAdapterError: LocalizedError {
 
 final class PolarDeviceAdapter: CollectorDeviceAdapter {
     private(set) var connectionState: ConnectionState = .disconnected
+    let sourceIdentifier: String = "polar"
+    let deviceSelectionActionTitle: String = "Scan Polar Devices"
 
     let deviceIdentity: CollectorDevice = CollectorDevice(
         id: "polar-unavailable",
@@ -71,6 +73,8 @@ enum PolarAdapterError: LocalizedError {
 
 final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
     private(set) var connectionState: ConnectionState = .disconnected
+    let sourceIdentifier: String = "polar"
+    let deviceSelectionActionTitle: String = "Scan Polar Devices"
 
     var deviceIdentity: CollectorDevice {
         selectedDevice ?? CollectorDevice(
@@ -319,6 +323,8 @@ enum PolarAdapterError: LocalizedError {
 
 final class PolarDeviceAdapter: CollectorDeviceAdapter {
     private(set) var connectionState: ConnectionState = .disconnected
+    let sourceIdentifier: String = "polar"
+    let deviceSelectionActionTitle: String = "Scan Polar Devices"
 
     let deviceIdentity: CollectorDevice = CollectorDevice(
         id: "polar-unavailable",

@@ -31,6 +31,12 @@
 		A10000010000000000000016 /* PolarHrStreamProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000019 /* PolarHrStreamProvider.swift */; };
 		A10000010000000000000017 /* PolarDeviceAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001000000000000001A /* PolarDeviceAdapter.swift */; };
 		A10000010000000000000018 /* HrSampleDebugExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001000000000000001B /* HrSampleDebugExporter.swift */; };
+		A10000010000000000000019 /* CollectorRuntimeConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001000000000000001C /* CollectorRuntimeConfiguration.swift */; };
+		A1000001000000000000001A /* DeviceAdapterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001000000000000001D /* DeviceAdapterTests.swift */; };
+		A1000001000000000000001B /* TransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001000000000000001E /* TransportTests.swift */; };
+		A1000001000000000000001C /* ContractMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001000000000000001F /* ContractMappingTests.swift */; };
+		A1000001000000000000001D /* CollectorRuntimeConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000020 /* CollectorRuntimeConfigurationTests.swift */; };
+		A1000001000000000000001E /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000021 /* TestSupport.swift */; };
 		A73B1BAE82178FC109A9A2CD /* libPods-CollectorApp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 194AC702E05B377D67F9B776 /* libPods-CollectorApp.a */; };
 /* End PBXBuildFile section */
 
@@ -77,6 +83,12 @@
 		B10000010000000000000019 /* PolarHrStreamProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolarHrStreamProvider.swift; sourceTree = "<group>"; };
 		B1000001000000000000001A /* PolarDeviceAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolarDeviceAdapter.swift; sourceTree = "<group>"; };
 		B1000001000000000000001B /* HrSampleDebugExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HrSampleDebugExporter.swift; sourceTree = "<group>"; };
+		B1000001000000000000001C /* CollectorRuntimeConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectorRuntimeConfiguration.swift; sourceTree = "<group>"; };
+		B1000001000000000000001D /* DeviceAdapterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceAdapterTests.swift; sourceTree = "<group>"; };
+		B1000001000000000000001E /* TransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransportTests.swift; sourceTree = "<group>"; };
+		B1000001000000000000001F /* ContractMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractMappingTests.swift; sourceTree = "<group>"; };
+		B10000010000000000000020 /* CollectorRuntimeConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectorRuntimeConfigurationTests.swift; sourceTree = "<group>"; };
+		B10000010000000000000021 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -128,6 +140,11 @@
 			isa = PBXGroup;
 			children = (
 				B10000010000000000000012 /* CollectorCoreTests.swift */,
+				B1000001000000000000001D /* DeviceAdapterTests.swift */,
+				B1000001000000000000001E /* TransportTests.swift */,
+				B1000001000000000000001F /* ContractMappingTests.swift */,
+				B10000010000000000000020 /* CollectorRuntimeConfigurationTests.swift */,
+				B10000010000000000000021 /* TestSupport.swift */,
 			);
 			path = CollectorAppTests;
 			sourceTree = "<group>";
@@ -146,6 +163,7 @@
 			children = (
 				B10000010000000000000002 /* CollectorCore.swift */,
 				B1000001000000000000001B /* HrSampleDebugExporter.swift */,
+				B1000001000000000000001C /* CollectorRuntimeConfiguration.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -404,6 +422,7 @@
 				A10000010000000000000016 /* PolarHrStreamProvider.swift in Sources */,
 				A10000010000000000000017 /* PolarDeviceAdapter.swift in Sources */,
 				A10000010000000000000018 /* HrSampleDebugExporter.swift in Sources */,
+				A10000010000000000000019 /* CollectorRuntimeConfiguration.swift in Sources */,
 				A10000010000000000000011 /* CollectorView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -413,6 +432,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000010000000000000012 /* CollectorCoreTests.swift in Sources */,
+				A1000001000000000000001A /* DeviceAdapterTests.swift in Sources */,
+				A1000001000000000000001B /* TransportTests.swift in Sources */,
+				A1000001000000000000001C /* ContractMappingTests.swift in Sources */,
+				A1000001000000000000001D /* CollectorRuntimeConfigurationTests.swift in Sources */,
+				A1000001000000000000001E /* TestSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
