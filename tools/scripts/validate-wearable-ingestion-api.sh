@@ -96,18 +96,23 @@ if [[ "${docs_status}" != "200" ]]; then
 fi
 
 run_id="$(date +%s)"
-chunk_id="deploy-${run_id}-001"
 session_id="deploy-session-${run_id}"
-stream_id="stream-hr-deploy-${run_id}"
+stream_id="stream-generic-deploy-${run_id}"
+generic_chunk_id="deploy-${run_id}-generic-001"
+hr_chunk_id="deploy-${run_id}-hr-001"
+nosamples_chunk_id="deploy-${run_id}-nosamples-001"
+invalid_chunk_id="deploy-${run_id}-invalid-001"
 
-valid_payload="$(mktemp)"
-invalid_payload="$(mktemp)"
-trap 'rm -f "${valid_payload}" "${invalid_payload}"' EXIT
+generic_payload_file="$(mktemp)"
+hr_payload_file="$(mktemp)"
+no_samples_payload_file="$(mktemp)"
+invalid_payload_file="$(mktemp)"
+trap 'rm -f "${generic_payload_file}" "${hr_payload_file}" "${no_samples_payload_file}" "${invalid_payload_file}"' EXIT
 
-cat > "${valid_payload}" <<EOF
+cat > "${generic_payload_file}" <<EOF
 {
   "schema_version": "1.0",
-  "chunk_id": "${chunk_id}",
+  "chunk_id": "${generic_chunk_id}",
   "session_id": "${session_id}",
   "stream_id": "${stream_id}",
   "sequence": 1,
@@ -118,29 +123,22 @@ cat > "${valid_payload}" <<EOF
   "transport": {
     "encoding": "json",
     "compression": "none",
-    "payload_schema": "polar.hr",
-    "payload_version": "1.0"
+    "payload_schema": "custom.generic",
+    "payload_version": "0.1"
   },
   "payload": {
-    "samples": [
-      {
-        "hr": 71,
-        "ppgQuality": 0,
-        "correctedHr": 0,
-        "rrsMs": [],
-        "rrAvailable": false,
-        "contactStatus": false,
-        "contactStatusSupported": false
-      }
-    ]
+    "events": [
+      {"kind": "marker", "value": 1}
+    ],
+    "meta": {"source": "deploy-validation"}
   }
 }
 EOF
 
-cat > "${invalid_payload}" <<EOF
+cat > "${hr_payload_file}" <<EOF
 {
   "schema_version": "1.0",
-  "chunk_id": "invalid-${chunk_id}",
+  "chunk_id": "${hr_chunk_id}",
   "session_id": "${session_id}",
   "stream_id": "${stream_id}",
   "sequence": 2,
@@ -157,6 +155,8 @@ cat > "${invalid_payload}" <<EOF
   "payload": {
     "samples": [
       {
+        "received_at_collector": "2026-04-25T11:00:00.357Z",
+        "hr": 71,
         "ppgQuality": 0,
         "correctedHr": 0,
         "rrsMs": [],
@@ -169,43 +169,132 @@ cat > "${invalid_payload}" <<EOF
 }
 EOF
 
+cat > "${no_samples_payload_file}" <<EOF
+{
+  "schema_version": "1.0",
+  "chunk_id": "${nosamples_chunk_id}",
+  "session_id": "${session_id}",
+  "stream_id": "${stream_id}",
+  "sequence": 3,
+  "time": {
+    "received_at_collector": "2026-04-25T11:02:00Z",
+    "uploaded_at_collector": "2026-04-25T11:02:01Z"
+  },
+  "transport": {
+    "encoding": "json",
+    "compression": "none",
+    "payload_schema": "custom.nosamples",
+    "payload_version": "1.0"
+  },
+  "payload": {
+    "metadata": {
+      "session_type": "test"
+    },
+    "reading": 123.45
+  }
+}
+EOF
+
+cat > "${invalid_payload_file}" <<EOF
+{
+  "schema_version": "1.0",
+  "chunk_id": "${invalid_chunk_id}",
+  "session_id": "${session_id}",
+  "stream_id": "${stream_id}",
+  "sequence": 4,
+  "time": {
+    "received_at_collector": "2026-04-25T11:03:00Z",
+    "uploaded_at_collector": "2026-04-25T11:03:01Z"
+  },
+  "transport": {
+    "compression": "none",
+    "payload_schema": "polar.hr",
+    "payload_version": "1.0"
+  },
+  "payload": {
+    "samples": [
+      {
+        "received_at_collector": "2026-04-25T11:03:00.357Z",
+        "ppgQuality": 0,
+        "correctedHr": 0,
+        "rrsMs": [],
+        "rrAvailable": false,
+        "contactStatus": false,
+        "contactStatusSupported": false
+      }
+    ]
+  }
+}
+EOF
+
+post_chunk() {
+  local payload_file="$1"
+  curl -sS -X POST "${BASE_URL}/upload-chunk" -H "Content-Type: application/json" --data-binary "@${payload_file}" -w $'\n%{http_code}'
+}
+
+echo "Posting valid generic upload..."
+generic_response="$(post_chunk "${generic_payload_file}")"
+generic_status="${generic_response##*$'\n'}"
+generic_body="${generic_response%$'\n'*}"
+
+if [[ "${generic_status}" != "200" ]]; then
+  echo "Expected 200 for generic payload, got ${generic_status}"
+  echo "${generic_body}"
+  exit 1
+fi
+
+generic_storage_path="$(python3 -c 'import json,sys; payload=json.loads(sys.stdin.read()); assert payload["accepted"] is True; assert payload["status"]=="accepted"; print(payload["storage"]["storage_path"])' <<< "${generic_body}")"
+
+if [[ -z "${generic_storage_path}" ]]; then
+  echo "Failed to read storage path from generic ACK response"
+  exit 1
+fi
+
+echo "Validating generic raw JSONL preservation..."
+"${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'test -s ${generic_storage_path}'"
+"${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'grep -F \"${generic_chunk_id}\" ${generic_storage_path} >/dev/null'"
+"${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'tail -n 1 ${generic_storage_path}'" \
+  | python3 -c 'import json,sys; persisted=json.loads(sys.stdin.read()); sent=json.load(open(sys.argv[1], "r", encoding="utf-8")); assert persisted==sent; assert "received_at_server" not in persisted["time"]' "${generic_payload_file}"
+
 echo "Posting valid HR upload..."
-valid_response="$(curl -sS -X POST "${BASE_URL}/upload-chunk" -H "Content-Type: application/json" --data-binary "@${valid_payload}" -w $'\n%{http_code}')"
-valid_status="${valid_response##*$'\n'}"
-valid_body="${valid_response%$'\n'*}"
+hr_response="$(post_chunk "${hr_payload_file}")"
+hr_status="${hr_response##*$'\n'}"
+hr_body="${hr_response%$'\n'*}"
 
-if [[ "${valid_status}" != "200" ]]; then
-  echo "Expected 200 for valid payload, got ${valid_status}"
-  echo "${valid_body}"
+if [[ "${hr_status}" != "200" ]]; then
+  echo "Expected 200 for HR payload, got ${hr_status}"
+  echo "${hr_body}"
   exit 1
 fi
 
-storage_path="$(python3 -c 'import json,sys; payload=json.loads(sys.stdin.read()); assert payload["accepted"] is True; assert payload["status"]=="accepted"; print(payload["storage"]["storage_path"])' <<< "${valid_body}")"
-if [[ -z "${storage_path}" ]]; then
-  echo "Failed to read storage path from ACK response"
+hr_storage_path="$(python3 -c 'import json,sys; payload=json.loads(sys.stdin.read()); assert payload["accepted"] is True; assert payload["status"]=="accepted"; print(payload["storage"]["storage_path"])' <<< "${hr_body}")"
+"${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'grep -F \"${hr_chunk_id}\" ${hr_storage_path} >/dev/null'"
+"${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'tail -n 1 ${hr_storage_path}'" \
+  | python3 -c 'import json,sys; persisted=json.loads(sys.stdin.read()); sent=json.load(open(sys.argv[1], "r", encoding="utf-8")); assert persisted==sent; sample=sent["payload"]["samples"][0]; assert "received_at_collector" in sample' "${hr_payload_file}"
+
+echo "Posting valid payload without samples..."
+no_samples_response="$(post_chunk "${no_samples_payload_file}")"
+no_samples_status="${no_samples_response##*$'\n'}"
+no_samples_body="${no_samples_response%$'\n'*}"
+if [[ "${no_samples_status}" != "200" ]]; then
+  echo "Expected 200 for payload without samples, got ${no_samples_status}"
+  echo "${no_samples_body}"
   exit 1
 fi
+python3 -c 'import json,sys; payload=json.loads(sys.stdin.read()); assert payload["accepted"] is True; assert payload["status"]=="accepted"' <<< "${no_samples_body}"
 
-echo "Validating raw JSONL was written..."
-"${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'test -s ${storage_path}'"
-"${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'grep -F \"${chunk_id}\" ${storage_path} >/dev/null'"
-"${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'tail -n 1 ${storage_path}'" \
-  | python3 -c 'import json,sys; persisted=json.loads(sys.stdin.read()); sent=json.load(open(sys.argv[1], "r", encoding="utf-8")); assert persisted==sent; assert "received_at_server" not in persisted["time"]' "${valid_payload}"
-
-before_lines="$("${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'wc -l < ${storage_path}'" | tr -d '[:space:]')"
-
-echo "Posting invalid HR upload..."
-invalid_response="$(curl -sS -X POST "${BASE_URL}/upload-chunk" -H "Content-Type: application/json" --data-binary "@${invalid_payload}" -w $'\n%{http_code}')"
+echo "Posting malformed transport payload..."
+invalid_response="$(post_chunk "${invalid_payload_file}")"
 invalid_status="${invalid_response##*$'\n'}"
 invalid_body="${invalid_response%$'\n'*}"
-
 if [[ "${invalid_status}" != "400" ]]; then
-  echo "Expected 400 for invalid payload, got ${invalid_status}"
+  echo "Expected 400 for malformed transport, got ${invalid_status}"
   echo "${invalid_body}"
   exit 1
 fi
+python3 -c 'import json,sys; payload=json.loads(sys.stdin.read()); assert payload["accepted"] is False; assert payload["status"]=="rejected"; assert payload["error_code"]=="validation_error"; assert "details" in payload and payload["details"]; assert any(d["field"]=="transport.encoding" for d in payload["details"])' <<< "${invalid_body}"
 
-python3 -c 'import json,sys; payload=json.loads(sys.stdin.read()); assert payload["accepted"] is False; assert payload["status"]=="rejected"; assert payload["error_code"]=="validation_error"; assert "details" in payload and payload["details"]' <<< "${invalid_body}"
+before_lines="$("${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'wc -l < ${generic_storage_path}'" | tr -d '[:space:]')"
 
 echo "Recreating service to verify persistent raw volume..."
 "${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} up -d --force-recreate wearable-ingestion-api >/dev/null"
@@ -225,15 +314,15 @@ fi
 
 python3 -c 'import json,sys; payload=json.loads(sys.stdin.read()); assert payload["status"]=="ok"' <<< "${health_body_after}"
 
-"${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'test -s ${storage_path}'"
-after_lines="$("${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'wc -l < ${storage_path}'" | tr -d '[:space:]')"
+"${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'test -s ${generic_storage_path}'"
+after_lines="$("${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'wc -l < ${generic_storage_path}'" | tr -d '[:space:]')"
 
 if [[ "${after_lines}" -lt "${before_lines}" ]]; then
   echo "Raw JSONL line count decreased after recreate: before=${before_lines}, after=${after_lines}"
   exit 1
 fi
 
-"${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'grep -F \"${chunk_id}\" ${storage_path} >/dev/null'"
+"${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} exec -T wearable-ingestion-api sh -lc 'grep -F \"${generic_chunk_id}\" ${generic_storage_path} >/dev/null'"
 
 echo "Checking service logs for startup/runtime errors..."
 if "${SSH_SCRIPT}" "docker compose --env-file '${REMOTE_PROJECT_ROOT}/.env' ${REMOTE_COMPOSE_FILES} logs --tail 120 wearable-ingestion-api | grep -Eiq \"traceback|exception|error\""; then
@@ -244,7 +333,9 @@ fi
 echo "OK: container is running"
 echo "OK: health endpoint responds"
 echo "OK: OpenAPI is exposed (Swagger available at /docs)"
-echo "OK: valid HR upload returns ACK"
-echo "OK: raw JSONL is created/appended on server with exact payload preservation"
-echo "OK: invalid payload returns structured error"
+echo "OK: valid generic upload returns ACK"
+echo "OK: valid HR upload with sample-level received_at_collector returns ACK"
+echo "OK: payload without samples returns ACK"
+echo "OK: raw JSONL preserves payload exactly as received"
+echo "OK: malformed transport envelope returns structured validation error"
 echo "OK: raw JSONL persists after restart/recreate"

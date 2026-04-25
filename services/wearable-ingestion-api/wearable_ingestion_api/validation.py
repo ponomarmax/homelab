@@ -6,9 +6,6 @@ from pydantic import ValidationError
 
 from .models import UploadChunkRequest
 
-SUPPORTED_PAYLOAD_SCHEMA = "polar.hr"
-SUPPORTED_PAYLOAD_VERSION = "1.0"
-
 
 def _loc_to_field(loc: tuple[Any, ...]) -> str:
     parts: list[str] = []
@@ -42,16 +39,8 @@ def validate_upload_chunk_contract(chunk: Any) -> tuple[str | None, list[dict[st
         return "malformed_request", [{"field": "request", "issue": "must be a JSON object"}]
 
     try:
-        parsed = UploadChunkRequest.model_validate(chunk)
+        UploadChunkRequest.model_validate(chunk)
     except ValidationError as exc:
         return "validation_error", format_validation_issues(exc)
-
-    if (
-        parsed.transport.payload_schema != SUPPORTED_PAYLOAD_SCHEMA
-        or parsed.transport.payload_version != SUPPORTED_PAYLOAD_VERSION
-    ):
-        return "unsupported_schema", [
-            {"field": "transport", "issue": "only polar.hr@1.0 is supported in CP3"}
-        ]
 
     return None, []

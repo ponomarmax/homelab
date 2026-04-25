@@ -33,8 +33,9 @@ tree -L 3 -I ".git|node_modules|venv|.venv|__pycache__|.pytest_cache|data|dist|b
 │   ├── adr
 │   │   └── ADR-001-monorepo-and-collector.md
 │   ├── context
-│   │   ├── codex_rules.md
-│   │   └── prompt_templates.md
+│   │   ├── my_codex_rules.md
+│   │   ├── prompt_templates.md
+│   │   └── repo_tree.md
 │   ├── infra
 │   │   └── README.md
 │   ├── observability
@@ -55,6 +56,7 @@ tree -L 3 -I ".git|node_modules|venv|.venv|__pycache__|.pytest_cache|data|dist|b
 ├── infra
 │   ├── README.md
 │   ├── compose
+│   │   ├── data-browser
 │   │   ├── docker-compose.yml
 │   │   ├── observability.yml
 │   │   └── smoke

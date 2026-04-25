@@ -85,6 +85,7 @@ final class ContractMappingTests: XCTestCase {
         let mapped = try XCTUnwrap(payload.payload.samples.first)
 
         XCTAssertEqual(mapped.hr, 68)
+        XCTAssertFalse(mapped.receivedAtCollector.isEmpty)
         XCTAssertEqual(mapped.ppgQuality, 0)
         XCTAssertEqual(mapped.correctedHr, 0)
         XCTAssertEqual(mapped.rrsMs, [])
@@ -122,6 +123,7 @@ final class ContractMappingTests: XCTestCase {
         let mapped = try XCTUnwrap(payload.payload.samples.first)
 
         XCTAssertEqual(mapped.hr, 71)
+        XCTAssertEqual(mapped.receivedAtCollector, "1970-01-01T00:16:40.000Z")
         XCTAssertEqual(mapped.ppgQuality, 1)
         XCTAssertEqual(mapped.correctedHr, 70)
         XCTAssertEqual(mapped.rrsMs, [820, 810])

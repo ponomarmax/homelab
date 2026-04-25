@@ -14,7 +14,8 @@ Shared JSON Schema contracts for wearable transport and payload data.
 Transport schemas define the upload envelope and backend response shapes.
 Payload schemas define sensor-specific data inside `UploadChunkContract.payload`.
 
-Ingestion validates and stores raw chunks first. Parsing and normalization happen later.
+Ingestion validates only the transport envelope and stores raw chunks first.
+Parsing and normalization happen later.
 
 ## Validation
 

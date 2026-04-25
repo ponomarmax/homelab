@@ -296,6 +296,7 @@ version 1.0
 {
   "samples": [
     {
+      "received_at_collector": "2026-04-25T11:56:27.357Z",
       "hr": 71,
       "ppgQuality": 0,
       "correctedHr": 0,
@@ -311,6 +312,7 @@ Rules:
 
 samples must be an array
 each sample must contain:
+received_at_collector
 hr
 ppgQuality
 correctedHr
@@ -428,7 +430,6 @@ The transport contract must not assume perfect device clocks.
 The backend ingestion layer must:
 
 validate the outer envelope
-validate that referenced payload schema exists or is allowed
 store the raw payload durably before any deep parsing
 return AckContract or ErrorContract
 support duplicate-safe behavior using chunk identity
@@ -438,6 +439,8 @@ The backend ingestion layer does not have to:
 fully parse sensor-specific payloads immediately
 compute features
 normalize into analytical structures during initial acceptance
+
+In other words, ingestion validates transport contract only and treats payload as opaque stream-defined JSON.
 11. Raw vs Normalized vs Derived
 Raw
 exact uploaded chunk

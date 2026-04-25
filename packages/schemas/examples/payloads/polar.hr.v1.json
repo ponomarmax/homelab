@@ -1,6 +1,7 @@
 {
   "samples": [
     {
+      "received_at_collector": "2026-04-25T11:56:27.357Z",
       "hr": 71,
       "ppgQuality": 0,
       "correctedHr": 0,
@@ -10,6 +11,7 @@
       "contactStatusSupported": false
     },
     {
+      "received_at_collector": "2026-04-25T11:56:28.121Z",
       "hr": 72,
       "ppgQuality": 0,
       "correctedHr": 0,

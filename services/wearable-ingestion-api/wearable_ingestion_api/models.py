@@ -1,31 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class ContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
-
-class PolarHrSample(ContractModel):
-    hr: int = Field(..., ge=0, description="Heart rate value from collector payload.")
-    ppgQuality: int = Field(..., description="Collector-provided PPG quality indicator.")
-    correctedHr: int = Field(..., ge=0, description="Collector-provided corrected HR.")
-    rrsMs: list[Annotated[int, Field(ge=0)]] = Field(
-        ..., description="RR intervals in milliseconds."
-    )
-    rrAvailable: bool = Field(..., description="Whether RR data is available in this sample.")
-    contactStatus: bool = Field(..., description="Whether sensor contact is currently detected.")
-    contactStatusSupported: bool = Field(
-        ..., description="Whether the source device supports contact status."
-    )
-
-
-class PolarHrPayload(ContractModel):
-    samples: list[PolarHrSample] = Field(..., min_length=1, description="Raw HR samples.")
 
 
 class UploadChunkTime(ContractModel):
@@ -57,7 +39,9 @@ class UploadChunkRequest(ContractModel):
     sequence: int = Field(..., ge=1, description="Monotonic chunk sequence number.")
     time: UploadChunkTime = Field(..., description="Collector/server transport timing metadata.")
     transport: UploadChunkTransport = Field(..., description="Transport metadata for payload.")
-    payload: PolarHrPayload = Field(..., description="Raw payload wrapper.")
+    payload: dict[str, Any] = Field(
+        ..., description="Opaque stream-defined payload retained exactly as provided."
+    )
 
 
 class SessionCollector(ContractModel):

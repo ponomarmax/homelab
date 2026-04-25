@@ -41,6 +41,7 @@ def main() -> int:
             "payload": {
                 "samples": [
                     {
+                        "received_at_collector": "2026-04-25T11:00:00.000Z",
                         "hr": 71,
                         "ppgQuality": 0,
                         "correctedHr": 0,
@@ -56,8 +57,11 @@ def main() -> int:
         invalid_chunk = {
             **valid_chunk,
             "chunk_id": "smoke-chunk-002",
-            "sequence": 2,
-            "payload": {"samples": [{"hr": 71}]},
+            "transport": {
+                "compression": "none",
+                "payload_schema": "polar.hr",
+                "payload_version": "1.0",
+            },
         }
 
         valid_response = client.post("/upload-chunk", json=valid_chunk)
@@ -78,14 +82,14 @@ def main() -> int:
             print("FAIL: raw JSONL file is empty")
             return 1
 
-        if invalid_response.status_code != 422 or invalid_response.json().get("status") != "rejected":
-            print("FAIL: invalid payload was not rejected")
+        if invalid_response.status_code != 400 or invalid_response.json().get("status") != "rejected":
+            print("FAIL: malformed transport was not rejected")
             return 1
 
         print("OK: HR upload accepted")
         print(f"OK: raw JSONL written at {storage_path}")
         print("OK: ACK returned")
-        print("OK: invalid payload rejected")
+        print("OK: malformed transport rejected")
         return 0
 
 

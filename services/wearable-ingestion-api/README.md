@@ -4,7 +4,7 @@ Lightweight CP3 backend for wearable HR uploads.
 
 Responsibilities:
 - accept `UploadChunkContract`
-- validate transport envelope + `polar.hr@1.0` payload shape
+- validate transport envelope only (payload is opaque)
 - append accepted raw chunks as JSONL under configured raw path
 - return ACK on success
 - return structured error on failure

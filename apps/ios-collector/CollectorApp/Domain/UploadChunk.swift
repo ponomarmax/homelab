@@ -18,6 +18,7 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
         let payloadSamples = samples.map { sample in
             if let streamData = sample.streamData {
                 return CanonicalPolarHrSample(
+                    receivedAtCollector: Self.iso8601(from: sample.collectorReceivedAtUTC),
                     hr: streamData.hr,
                     ppgQuality: streamData.ppgQuality,
                     correctedHr: streamData.correctedHr,
@@ -30,6 +31,7 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
 
             // Keep mock provider support by emitting a minimal raw-compatible fallback.
             return CanonicalPolarHrSample(
+                receivedAtCollector: Self.iso8601(from: sample.collectorReceivedAtUTC),
                 hr: sample.hrBPM,
                 ppgQuality: 0,
                 correctedHr: 0,
@@ -82,6 +84,7 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
 }
 
 struct CanonicalPolarHrSample: Equatable, Codable, Sendable {
+    let receivedAtCollector: String
     let hr: Int
     let ppgQuality: Int
     let correctedHr: Int
@@ -89,6 +92,17 @@ struct CanonicalPolarHrSample: Equatable, Codable, Sendable {
     let rrAvailable: Bool
     let contactStatus: Bool
     let contactStatusSupported: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case receivedAtCollector = "received_at_collector"
+        case hr
+        case ppgQuality
+        case correctedHr
+        case rrsMs
+        case rrAvailable
+        case contactStatus
+        case contactStatusSupported
+    }
 }
 
 struct CanonicalPolarHrPayload: Equatable, Codable, Sendable {

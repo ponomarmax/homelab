@@ -14,5 +14,5 @@ This registry lists sensor-specific payload contracts that may be referenced by 
 
 - Transport schema versions and payload versions are independent.
 - Draft payloads must remain clearly marked as draft.
-- Ingestion should validate that a referenced payload schema is registered or explicitly allowed.
+- Ingestion validates the transport envelope only; payload content remains opaque at ingest boundary.
 - Deep sensor parsing belongs after raw ingestion.

@@ -39,6 +39,7 @@ def build_valid_chunk() -> dict[str, object]:
         "payload": {
             "samples": [
                 {
+                    "received_at_collector": "2026-04-25T10:00:00.000Z",
                     "hr": 71,
                     "ppgQuality": 0,
                     "correctedHr": 0,
@@ -107,42 +108,43 @@ class IngestionApiTests(unittest.TestCase):
         persisted_files = list(self.raw_root.rglob("*.jsonl"))
         self.assertEqual(persisted_files, [])
 
-    def test_malformed_payload_returns_400(self) -> None:
+    def test_arbitrary_payload_shape_is_accepted(self) -> None:
         chunk = build_valid_chunk()
-        chunk["payload"] = {"samples": [{"hr": "not-an-int"}]}
+        chunk["payload"] = {"samples": [{"hr": "not-an-int"}], "opaque": {"nested": ["value"]}}
 
         response = self.client.post("/upload-chunk", json=chunk)
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertFalse(payload["accepted"])
-        self.assertEqual(payload["error_code"], "validation_error")
-        self.assertTrue(any(item["field"].startswith("payload.samples[0].hr") for item in payload["details"]))
+        self.assertTrue(payload["accepted"])
+        self.assertEqual(payload["status"], "accepted")
 
-    def test_empty_payload_array_returns_400(self) -> None:
+    def test_payload_without_samples_is_accepted(self) -> None:
         chunk = build_valid_chunk()
-        chunk["payload"] = {"samples": []}
+        chunk["payload"] = {"events": [{"kind": "marker", "value": 1}], "metadata": {"source": "custom"}}
 
         response = self.client.post("/upload-chunk", json=chunk)
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload["error_code"], "validation_error")
-        self.assertTrue(any(item["field"] == "payload.samples" for item in payload["details"]))
+        self.assertTrue(payload["accepted"])
 
-    def test_unknown_payload_schema_returns_400_unsupported_schema(self) -> None:
+        raw_path = Path(payload["storage"]["storage_path"])
+        stored = json.loads(raw_path.read_text(encoding="utf-8").strip().splitlines()[0])
+        self.assertEqual(stored["payload"], chunk["payload"])
+
+    def test_unknown_payload_schema_is_accepted(self) -> None:
         chunk = build_valid_chunk()
         chunk["transport"] = {
             "encoding": "json",
             "compression": "none",
             "payload_schema": "polar.unknown",
-            "payload_version": "1.0",
+            "payload_version": "99.0",
         }
 
         response = self.client.post("/upload-chunk", json=chunk)
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertFalse(payload["accepted"])
-        self.assertEqual(payload["error_code"], "unsupported_schema")
-        self.assertTrue(any(item["field"] == "transport" for item in payload["details"]))
+        self.assertTrue(payload["accepted"])
+        self.assertEqual(payload["status"], "accepted")
 
     def test_openapi_exposes_typed_contract_models(self) -> None:
         response = self.client.get("/openapi.json")

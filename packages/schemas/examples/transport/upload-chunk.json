@@ -19,6 +19,7 @@
   "payload": {
     "samples": [
       {
+        "received_at_collector": "2026-04-23T09:30:01.357Z",
         "hr": 71,
         "ppgQuality": 0,
         "correctedHr": 0,

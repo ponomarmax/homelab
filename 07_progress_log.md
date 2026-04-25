@@ -11,6 +11,20 @@ LinkedIn post idea:
 
 ## Entries
 
+Date: 2026-04-25
+
+What was done:
+- Deployed the latest wearable ingestion contract-boundary refactor with the existing Docker Compose workflow.
+- Updated deployment validation to assert the new opaque payload behavior: valid generic payload accepted, valid HR payload accepted, payload without `samples` accepted, and malformed transport envelope rejected.
+- Verified deployed raw JSONL persistence preserves payloads exactly as received, including sample-level `received_at_collector` for HR samples.
+- Revalidated ingestion unit/contract tests and schema/example JSON checks before deployment.
+
+Key insight:
+Boundary-safe deployment validation should test transport correctness and raw preservation, not sensor-specific payload semantics.
+
+LinkedIn post idea:
+How contract-boundary validation in production catches the right failures while keeping ingestion sensor-agnostic.
+
 Date: 2026-04-24
 
 What was done:
