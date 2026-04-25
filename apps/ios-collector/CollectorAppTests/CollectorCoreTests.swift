@@ -25,6 +25,22 @@ final class CollectorCoreTests: XCTestCase {
         }
     }
 
+    private func waitUntil(
+        timeoutNanoseconds: UInt64 = 1_000_000_000,
+        pollIntervalNanoseconds: UInt64 = 10_000_000,
+        _ condition: @escaping @MainActor () -> Bool
+    ) async -> Bool {
+        let started = DispatchTime.now().uptimeNanoseconds
+        while !condition() {
+            let elapsed = DispatchTime.now().uptimeNanoseconds - started
+            if elapsed >= timeoutNanoseconds {
+                return false
+            }
+            try? await Task.sleep(nanoseconds: pollIntervalNanoseconds)
+        }
+        return true
+    }
+
     func testMockHeartRateProviderEmitsSamples() async {
         let provider = MockHeartRateStreamProvider(
             values: [61, 62],
@@ -123,6 +139,11 @@ final class CollectorCoreTests: XCTestCase {
         core.selectDevice()
         await core.startCollection()
 
+        let receivedAllSamples = await waitUntil {
+            core.totalSamplesReceived >= 3 && core.latestHeartRateSample != nil
+        }
+        XCTAssertTrue(receivedAllSamples, "Timed out waiting for HR samples to be processed")
+
         let latestSample = try XCTUnwrap(core.latestHeartRateSample)
         XCTAssertEqual(core.totalSamplesReceived, 3)
         XCTAssertEqual(core.bufferedSamplesCount, 3)
@@ -160,6 +181,11 @@ final class CollectorCoreTests: XCTestCase {
 
         core.selectDevice()
         await core.startCollection()
+
+        let bufferedSamplesReady = await waitUntil {
+            core.bufferedSamplesCount >= 2
+        }
+        XCTAssertTrue(bufferedSamplesReady, "Timed out waiting for buffered HR samples")
 
         let session = try XCTUnwrap(core.activeSession)
         let chunk = try XCTUnwrap(core.prepareUploadChunk())

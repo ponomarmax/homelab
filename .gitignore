@@ -29,3 +29,13 @@ DerivedData/
 *.perspectivev3
 !default.perspectivev3
 **/xcuserdata/
+build/
+*.xcuserdatad/
+
+# CocoaPods
+Pods/
+
+# Xcode
+
+# macOS
+.DS_Store

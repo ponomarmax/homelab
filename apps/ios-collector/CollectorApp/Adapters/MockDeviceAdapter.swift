@@ -23,6 +23,15 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
         self.hrProvider = hrProvider
     }
 
+    func scanDevices() async throws -> [CollectorDevice] {
+        [deviceIdentity]
+    }
+
+    func selectDevice(_ device: CollectorDevice) throws {
+        guard device.id == deviceIdentity.id else { return }
+        connectionState = .deviceSelected
+    }
+
     func connect() async throws {
         connectionState = .connecting
         try await Task.sleep(nanoseconds: 150_000_000)

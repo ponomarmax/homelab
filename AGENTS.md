@@ -1,18 +1,16 @@
-# AGENTS.md
-
 ## Project purpose
 
-This repository contains a local single-node platform that evolves through several layers:
+This repository contains a local single-node platform evolving across:
 
-1. infrastructure platform
-2. monitoring and observability
-3. Home Assistant and smart-home automation
-4. environmental data collection
-5. wearable physiological data collection
-6. backend ingestion and visualization
-7. future analytics and ML experiments
+- infrastructure
+- observability
+- smart home / Home Assistant
+- environment data
+- wearable data
+- backend ingestion
+- future analytics / ML
 
-This is a production-like portfolio project, not a throwaway hobby setup.
+Production-like portfolio project.
 
 ---
 
@@ -22,81 +20,48 @@ Use Ukrainian for communication with the user.
 
 Use English for:
 - commit messages
-- README content
-- changelog / progress entries intended for repo
-- LinkedIn post drafts
-- public-facing text
-- architecture notes that are meant to be published
-
-If unsure:
-- internal discussion -> Ukrainian
-- anything public or committed -> English
+- README
+- progress logs
+- architecture docs
 
 ---
 
-## Primary constraints
+## Constraints
 
-Host machine:
+Host:
 - Intel i7-10510U
 - 8GB RAM
 - 512GB SSD
 
-Main limitation:
-- RAM is the primary constraint
-
-General rules:
+Rules:
 - prefer lightweight solutions
-- keep architecture simple
-- optimize for single-node deployment
-- do not introduce Kubernetes
-- do not introduce heavy local ML workloads unless explicitly requested
+- simple architecture
+- single-node optimized
+- no Kubernetes
+- no heavy ML unless requested
 
 ---
 
-## Source of truth
+## Source of truth (priority)
 
-Before major changes, read and follow these files if they exist:
-
-- 01_vision.md
-- 02_architecture.md
-- 03_roadmap.md
-- 04_constraints.md
-- 05_workflow.md
-- 06_linkedin_strategy.md
-- 07_progress_log.md
-- 08_data_strategy.md
-- docs/wearable/canonical_contracts.md
-- docs/wearable/checkpoints.md
-- docs/wearable/hr_mvp_pipeline.md
-- docs/wearable/testing_strategy.md
-- docs/wearable/time_alignment.md
-- docs/repo_structure.md
-- docs/observability/README.md
-
-If there is a conflict:
 1. 04_constraints.md
 2. 02_architecture.md
 3. 03_roadmap.md
 4. docs/wearable/canonical_contracts.md
 5. docs/wearable/hr_mvp_pipeline.md
-6. everything else
 
 ---
 
 ## Working style
 
 For non-trivial tasks:
-1. briefly restate the task
+
+1. restate task briefly
 2. inspect relevant files
-3. propose a short plan
+3. propose short plan
 4. implement in small steps
 5. verify results
-6. summarize what changed
-
-Do not make large structural changes without explaining:
-- why the change is needed
-- trade-offs
-- expected resource impact
+6. provide concise summary
 
 ---
 
@@ -105,142 +70,92 @@ Do not make large structural changes without explaining:
 Prefer:
 - Docker Compose
 - modular services
-- isolated networks where useful
-- persistent volumes for stateful services
-- simple reverse proxy setup
-- monitoring from early stages
-- one repository for shared docs, shared contracts, collector app, and backend services
-- one collector application with multiple sensor adapters
-- stable outer transport contracts with flexible sensor-specific payloads
 - raw-first ingestion
+- stable transport contracts
+- single collector app with adapters
 
 Avoid:
 - overengineering
+- premature microservices
 - unnecessary abstractions
-- premature microservice decomposition
-- adding tools without a clear operational need
-- mixing sensor-specific parsing directly into ingestion when not necessary
 
 ---
 
-## Observability working rule
+## Wearable rules
 
-For monitoring and observability tasks:
-- read docs/observability/README.md first if it exists
-- reuse the established observability scaffolding
-- add services incrementally by checkpoint
-- validate beyond container startup
-- for stateful services, verify persistence after recreate
----
-
-## Wearable direction
-
-Current baseline:
-- Polar Verity Sense
-
-Planned extension:
-- Muse Athena
-
-Collector direction:
-- one iOS collector app
-- multiple adapters
-- shared transport contracts
-- parsing and normalization after ingestion
-
-Before wearable work:
-- read the wearable docs first
-- keep terminology aligned with the documented pipeline phases
-
-Wearable implementation rules:
-- no new services without explicit request
+- no new services without request
 - no agent frameworks
-- raw-first principle is mandatory
-- each step must be independently verifiable
-- do not hardcode HR-only assumptions into long-term architecture
+- raw-first principle
+- each step must be verifiable
+- no HR-only assumptions in long-term design
 
 ---
 
-## Code and config quality
+## Code quality
 
-When writing code, config, or scripts:
-- keep files small and readable
-- use clear names
-- preserve simplicity
-- avoid noisy boilerplate
-- do not rewrite unrelated files
-
-For YAML / Compose:
-- keep service names stable
-- use restart policies where appropriate
-- use healthchecks when useful
-- prefer explicit volumes and networks
+- keep code small and readable
+- no boilerplate noise
+- do not modify unrelated files
 
 ---
 
 ## Resource awareness
 
-Every proposal should consider:
-- memory footprint
-- storage growth
+Always consider:
+- RAM
+- storage
 - operational complexity
-
-If adding monitoring or storage systems:
-- mention retention strategy
-- mention expected resource impact
 
 ---
 
 ## Git workflow
 
-When a task is complete:
-1. propose a logical commit split
-2. write concise commit messages in English
-3. summarize the changes in plain English
+After task:
+- provide concise change summary
+- suggest commit message (single or multiple if obvious)
 
-Do not create one giant commit if changes can be logically separated.
+Do NOT:
+- over-split commits unless clearly needed
+- generate large commit plans automatically
 
 ---
 
-## Required handoff after each logical task
+## REQUIRED HANDOFF (minimal)
 
-Provide:
+Provide ONLY:
 
 ### Change summary
-- Added:
-- Changed:
-- Not done:
+- Added
+- Changed
+- Not done
 
-### Commit plan
-- use conventional commit format
-- avoid sensitive info to be in commits
+### Suggested commit message
 
-### Progress log draft
-Date:
-What was done:
-Key insight:
-LinkedIn post idea:
-
-### LinkedIn angles
-Provide 2 short ideas for possible LinkedIn posts based on the work.
-
-### Visual ideas
-Suggest 1-2 visuals if the work is post-worthy:
-- screenshot
-- diagram
-- graph
-- before/after comparison
-
-If the task is not post-worthy, say so explicitly.
+Keep it short.
 
 ---
 
-## Safety / decision rules
+## ON-DEMAND SUMMARY MODE
 
-If requirements are unclear:
-- prefer the simplest solution consistent with the roadmap
+Only when explicitly requested (e.g. "generate summary"):
 
-If a task would significantly change architecture:
-- stop and ask for confirmation before implementing
+Provide:
+- detailed change summary
+- logical commit split
+- progress log
+- LinkedIn ideas
 
-If a change may exceed hardware limits:
-- explicitly warn about RAM / storage impact
+Do NOT generate this by default.
+
+---
+
+## Safety rules
+
+If unclear:
+- choose simplest solution
+
+If architecture impact:
+- stop and ask
+
+If resource risk:
+- warn explicitly

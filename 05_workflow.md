@@ -102,3 +102,77 @@ Avoid manual one-off changes without documentation.
 All remote server changes must be either:
 - executed through repo scripts
 - logged in 10_server_change_log.md
+
+---
+
+## NEW — Checkpoint-based Infrastructure Workflow
+
+Infrastructure work should follow a checkpoint-based approach.
+
+Each checkpoint should:
+- focus on one service or one logical step
+- be implemented via Codex
+- be validated empirically
+- produce a clean handoff
+- update progress log
+
+Typical checkpoint flow:
+1. read context (repo docs)
+2. implement via Codex
+3. validate functionality (not just container startup)
+4. validate persistence if stateful
+5. prepare commit plan
+6. update 07_progress_log.md
+
+---
+
+## NEW — Validation Standard
+
+A service is not considered ready if:
+- container is running
+- port is open
+
+A service is considered ready only if:
+- endpoint returns meaningful data
+- integration works (e.g. Prometheus scraping)
+- UI is usable (if applicable)
+- real data is visible (not empty panels)
+- state persists if required
+
+---
+
+## NEW — Dashboards as Code Rule
+
+Grafana dashboards must be treated as infrastructure.
+
+Required approach:
+- dashboards stored in repository (JSON)
+- dashboards provisioned automatically
+- no reliance on manual UI creation as primary workflow
+
+When adding dashboards:
+- place them in the repository structure
+- ensure provisioning loads them automatically
+- validate that panels show real data
+- avoid empty or placeholder dashboards
+
+---
+
+## NEW — Stateful Services Rule
+
+All services must be classified:
+
+Stateful:
+- Prometheus
+- Grafana
+- databases
+- Home Assistant
+
+Stateless (effectively):
+- Node Exporter
+- cAdvisor
+
+For stateful services:
+- persistence must be explicit
+- recreate must not destroy state
+- validation must include persistence checks

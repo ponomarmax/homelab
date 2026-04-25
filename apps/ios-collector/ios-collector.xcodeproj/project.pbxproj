@@ -27,6 +27,10 @@
 		A10000010000000000000013 /* StreamDescriptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000016 /* StreamDescriptor.swift */; };
 		A10000010000000000000014 /* UploadChunk.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000017 /* UploadChunk.swift */; };
 		A10000010000000000000015 /* HeartRateChunkBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000018 /* HeartRateChunkBuilder.swift */; };
+		A10000010000000000000016 /* PolarHrStreamProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000019 /* PolarHrStreamProvider.swift */; };
+		A10000010000000000000017 /* PolarDeviceAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001000000000000001A /* PolarDeviceAdapter.swift */; };
+		A10000010000000000000018 /* HrSampleDebugExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001000000000000001B /* HrSampleDebugExporter.swift */; };
+		A73B1BAE82178FC109A9A2CD /* libPods-CollectorApp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 194AC702E05B377D67F9B776 /* libPods-CollectorApp.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,6 +44,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		194AC702E05B377D67F9B776 /* libPods-CollectorApp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-CollectorApp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		495D1304D8EA94C0DF6DBCD4 /* Pods-CollectorApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CollectorApp.release.xcconfig"; path = "Target Support Files/Pods-CollectorApp/Pods-CollectorApp.release.xcconfig"; sourceTree = "<group>"; };
+		9923C98DBF490FAA85F1EA44 /* Pods-CollectorApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CollectorApp.debug.xcconfig"; path = "Target Support Files/Pods-CollectorApp/Pods-CollectorApp.debug.xcconfig"; sourceTree = "<group>"; };
 		B10000010000000000000001 /* CollectorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectorApp.swift; sourceTree = "<group>"; };
 		B10000010000000000000002 /* CollectorCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectorCore.swift; sourceTree = "<group>"; };
 		B10000010000000000000003 /* CollectionMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionMode.swift; sourceTree = "<group>"; };
@@ -63,6 +70,9 @@
 		B10000010000000000000016 /* StreamDescriptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDescriptor.swift; sourceTree = "<group>"; };
 		B10000010000000000000017 /* UploadChunk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadChunk.swift; sourceTree = "<group>"; };
 		B10000010000000000000018 /* HeartRateChunkBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeartRateChunkBuilder.swift; sourceTree = "<group>"; };
+		B10000010000000000000019 /* PolarHrStreamProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolarHrStreamProvider.swift; sourceTree = "<group>"; };
+		B1000001000000000000001A /* PolarDeviceAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolarDeviceAdapter.swift; sourceTree = "<group>"; };
+		B1000001000000000000001B /* HrSampleDebugExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HrSampleDebugExporter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +80,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A73B1BAE82178FC109A9A2CD /* libPods-CollectorApp.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -89,6 +100,8 @@
 				A10000010000000000000061 /* CollectorApp */,
 				A10000010000000000000062 /* CollectorAppTests */,
 				A10000010000000000000063 /* Products */,
+				C5364EE09ECA356EC56B059E /* Pods */,
+				FAE2318C39AEFBEFE1B949E8 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -127,6 +140,7 @@
 			isa = PBXGroup;
 			children = (
 				B10000010000000000000002 /* CollectorCore.swift */,
+				B1000001000000000000001B /* HrSampleDebugExporter.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -152,6 +166,8 @@
 		A10000010000000000000066 /* Adapters */ = {
 			isa = PBXGroup;
 			children = (
+				B1000001000000000000001A /* PolarDeviceAdapter.swift */,
+				B10000010000000000000019 /* PolarHrStreamProvider.swift */,
 				B1000001000000000000000F /* MockHeartRateStreamProvider.swift */,
 				B10000010000000000000010 /* MockDeviceAdapter.swift */,
 			);
@@ -176,6 +192,24 @@
 			path = UI;
 			sourceTree = "<group>";
 		};
+		C5364EE09ECA356EC56B059E /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				9923C98DBF490FAA85F1EA44 /* Pods-CollectorApp.debug.xcconfig */,
+				495D1304D8EA94C0DF6DBCD4 /* Pods-CollectorApp.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
+		FAE2318C39AEFBEFE1B949E8 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				194AC702E05B377D67F9B776 /* libPods-CollectorApp.a */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -183,9 +217,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A10000010000000000000070 /* Build configuration list for PBXNativeTarget "CollectorApp" */;
 			buildPhases = (
+				1BC72A295B4319BCCA512B9C /* [CP] Check Pods Manifest.lock */,
 				A10000010000000000000071 /* Sources */,
 				A10000010000000000000050 /* Frameworks */,
 				A10000010000000000000072 /* Resources */,
+				903FC8B3B30BE053AA7956D8 /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -269,6 +305,48 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		1BC72A295B4319BCCA512B9C /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-CollectorApp-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		903FC8B3B30BE053AA7956D8 /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-CollectorApp/Pods-CollectorApp-resources-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-CollectorApp/Pods-CollectorApp-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-CollectorApp/Pods-CollectorApp-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		A10000010000000000000071 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -292,6 +370,9 @@
 				A1000001000000000000000E /* MockCollectorTransport.swift in Sources */,
 				A1000001000000000000000F /* MockHeartRateStreamProvider.swift in Sources */,
 				A10000010000000000000010 /* MockDeviceAdapter.swift in Sources */,
+				A10000010000000000000016 /* PolarHrStreamProvider.swift in Sources */,
+				A10000010000000000000017 /* PolarDeviceAdapter.swift in Sources */,
+				A10000010000000000000018 /* HrSampleDebugExporter.swift in Sources */,
 				A10000010000000000000011 /* CollectorView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -358,6 +439,7 @@
 		};
 		A10000010000000000000082 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9923C98DBF490FAA85F1EA44 /* Pods-CollectorApp.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
@@ -382,6 +464,7 @@
 		};
 		A10000010000000000000083 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 495D1304D8EA94C0DF6DBCD4 /* Pods-CollectorApp.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
