@@ -31,6 +31,31 @@ Implemented in CP2:
 - `CollectionSession`, `StreamDescriptor`, and `UploadChunk` keep the transport-facing model explicit
 - `HeartRateChunkBuilder` turns buffered mock HR samples into transport-ready chunk payloads
 
+## Runtime Configuration (Best Practice)
+
+Collector uses a layered configuration strategy:
+
+1. `Info.plist` defaults (versioned in repo, stable for device builds).
+2. Launch environment variables (for local overrides).
+3. Launch arguments (highest priority for explicit mode switches).
+
+Configured keys:
+- `COLLECTOR_USE_MOCK_DEFAULT` (`Bool`)  
+  Default mock mode when no explicit override is provided.
+- `COLLECTOR_UPLOAD_ENDPOINT` (`String`)  
+  Upload destination. If only base URL is provided (for example `http://192.168.0.5:18090/`), collector auto-expands to `/upload-chunk`.
+
+Launch overrides:
+- `--mock` forces mock adapter.
+- `--real` forces real adapter.
+- `COLLECTOR_USE_MOCK=1|0` forces adapter mode.
+- `COLLECTOR_UPLOAD_ENDPOINT=http://host:port/...` overrides upload URL.
+
+Recommended workflow:
+- Keep `COLLECTOR_USE_MOCK_DEFAULT=false` in `Info.plist`.
+- Keep server URL in `Info.plist` for normal app runs.
+- Use launch args/env only for tests, CI, and temporary local diagnostics.
+
 ## Open in Xcode
 
 Open:

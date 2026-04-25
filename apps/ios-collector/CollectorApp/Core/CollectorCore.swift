@@ -2,6 +2,13 @@ import Foundation
 
 @MainActor
 final class CollectorCore: ObservableObject {
+    private enum CoreLogLevel: String {
+        case debug = "DEBUG"
+        case info = "INFO"
+        case warning = "WARN"
+        case error = "ERROR"
+    }
+
     @Published private(set) var status: CollectorStatus = .disconnected
     @Published private(set) var uploadStatus: UploadStatus = .idle
     @Published private(set) var discoveredDevices: [CollectorDevice] = []
@@ -11,9 +18,12 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var latestHeartRateSample: HeartRateSample?
     @Published private(set) var totalSamplesReceived: Int = 0
     @Published private(set) var bufferedSamplesCount: Int = 0
+    @Published private(set) var pendingUploadChunksCount: Int = 0
     @Published private(set) var lastPreparedChunk: UploadChunk?
     @Published private(set) var debugExportFileURL: URL?
+    @Published private(set) var logExportFileURL: URL?
     @Published private(set) var lastErrorMessage: String?
+    @Published private(set) var shouldSuggestLogExport: Bool = false
     @Published private(set) var isScanningDevices: Bool = false
     @Published private(set) var isConnectingDevice: Bool = false
     @Published private(set) var isPreparingChunk: Bool = false
@@ -26,6 +36,8 @@ final class CollectorCore: ObservableObject {
     private let adapter: CollectorDeviceAdapter
     private let transport: CollectorTransporting
     private let debugExporter = HrSampleDebugExporter()
+    private let isVerboseLoggingEnabled: Bool
+    private var pendingUploadChunks: [UploadChunk] = []
     private var bufferedSamples: [HeartRateSample] = []
     private var nextChunkSequenceNumber: Int = 1
 
@@ -35,15 +47,31 @@ final class CollectorCore: ObservableObject {
     ) {
         self.adapter = adapter
         self.transport = transport
-        log("Collector initialized")
+        let environment = ProcessInfo.processInfo.environment
+        self.isVerboseLoggingEnabled = environment["COLLECTOR_VERBOSE_LOGS"] == "1"
+            || environment["COLLECTOR_LOG_LEVEL"]?.lowercased() == "debug"
+
+        log("Collector initialized", category: "core")
+        log("Upload target: \(transport.uploadDestinationDescription)", category: "transport")
+        if !transport.isNetworkUploadConfigured {
+            log(
+                "Server upload endpoint is not configured. Upload uses mock mode only.",
+                level: .warning,
+                category: "transport"
+            )
+        }
     }
 
     var deviceActionTitle: String {
         adapter.deviceSelectionActionTitle
     }
 
+    var uploadDestinationDescription: String {
+        transport.uploadDestinationDescription
+    }
+
     func selectDevice() {
-        lastErrorMessage = nil
+        clearFailureState()
         activityMessage = "Selecting mock device..."
         log("Select device tapped")
         do {
@@ -60,14 +88,17 @@ final class CollectorCore: ObservableObject {
             selectedDevice = nil
             status = .disconnected
             uploadStatus = .idle
-            lastErrorMessage = "Device selection failed: \(error.localizedDescription)"
-            activityMessage = "Device selection failed"
-            log("Device selection failed: \(error.localizedDescription)")
+            reportFailure(
+                userMessage: "Device selection failed: \(error.localizedDescription)",
+                activity: "Device selection failed",
+                technical: "Device selection failed: \(error.localizedDescription)",
+                category: "device"
+            )
         }
     }
 
     func scanAndSelectDevice() async {
-        lastErrorMessage = nil
+        clearFailureState()
         selectedDevice = nil
         status = .disconnected
         uploadStatus = .idle
@@ -104,14 +135,17 @@ final class CollectorCore: ObservableObject {
             selectedDevice = nil
             status = .disconnected
             uploadStatus = .idle
-            lastErrorMessage = "Scan failed: \(error.localizedDescription)"
-            activityMessage = "Scan failed"
-            log("Scan failed: \(error.localizedDescription)")
+            reportFailure(
+                userMessage: "Scan failed: \(error.localizedDescription)",
+                activity: "Scan failed",
+                technical: "Scan failed: \(error.localizedDescription)",
+                category: "device"
+            )
         }
     }
 
     func selectScannedDevice(_ device: CollectorDevice) {
-        lastErrorMessage = nil
+        clearFailureState()
         activityMessage = "Selecting \(device.name)..."
         log("Selecting scanned device: \(device.name)")
 
@@ -126,9 +160,12 @@ final class CollectorCore: ObservableObject {
             selectedDevice = nil
             status = .disconnected
             uploadStatus = .idle
-            lastErrorMessage = "Device selection failed: \(error.localizedDescription)"
-            activityMessage = "Device selection failed"
-            log("Device selection failed: \(error.localizedDescription)")
+            reportFailure(
+                userMessage: "Device selection failed: \(error.localizedDescription)",
+                activity: "Device selection failed",
+                technical: "Scanned device selection failed: \(error.localizedDescription)",
+                category: "device"
+            )
         }
     }
 
@@ -137,7 +174,7 @@ final class CollectorCore: ObservableObject {
         guard let provider = adapter.heartRateStreamProvider() else { return }
         guard selectedDevice != nil else { return }
 
-        lastErrorMessage = nil
+        clearFailureState()
         uploadStatus = .idle
         isConnectingDevice = true
         activityMessage = "Connecting to device..."
@@ -145,19 +182,25 @@ final class CollectorCore: ObservableObject {
         totalSamplesReceived = 0
         bufferedSamples = []
         bufferedSamplesCount = 0
+        pendingUploadChunks = []
+        pendingUploadChunksCount = 0
         nextChunkSequenceNumber = 1
         latestHeartRateSample = nil
         lastPreparedChunk = nil
         debugExportFileURL = nil
+        logExportFileURL = nil
 
         do {
             try await adapter.connect()
         } catch {
             status = .deviceSelected
-            lastErrorMessage = "Connection failed: \(error.localizedDescription)"
             isConnectingDevice = false
-            activityMessage = "Connection failed"
-            log("Connection failed: \(error.localizedDescription)")
+            reportFailure(
+                userMessage: "Connection failed: \(error.localizedDescription)",
+                activity: "Connection failed",
+                technical: "Connection failed: \(error.localizedDescription)",
+                category: "device"
+            )
             return
         }
         isConnectingDevice = false
@@ -185,7 +228,7 @@ final class CollectorCore: ObservableObject {
 
         status = .collecting
         activityMessage = "Collecting HR samples..."
-        log("Collection started. Session: \(session.sessionID.uuidString)")
+        log("Collection started. Session: \(session.sessionID.uuidString)", category: "core")
     }
 
     func stopCollection() {
@@ -232,49 +275,83 @@ final class CollectorCore: ObservableObject {
         )
 
         if let chunk {
-            lastPreparedChunk = chunk
+            pendingUploadChunks.append(chunk)
+            pendingUploadChunksCount = pendingUploadChunks.count
+            lastPreparedChunk = pendingUploadChunks.last
             nextChunkSequenceNumber += 1
             bufferedSamples.removeAll()
             bufferedSamplesCount = 0
             activityMessage = "Chunk #\(chunk.chunkSequenceNumber) prepared (\(chunk.samples.count) samples)"
-            log("Prepared chunk #\(chunk.chunkSequenceNumber), samples: \(chunk.samples.count)")
+            log(
+                "Prepared chunk #\(chunk.chunkSequenceNumber), samples: \(chunk.samples.count), pending queue: \(pendingUploadChunksCount)",
+                category: "upload"
+            )
         } else {
             activityMessage = "Chunk preparation returned no data"
-            log("Prepare returned nil chunk")
+            log("Prepare returned nil chunk", level: .warning, category: "upload")
         }
 
         return chunk
     }
 
     func uploadLastPreparedChunk() async {
-        guard let chunk = lastPreparedChunk else {
-            activityMessage = "Nothing to upload (prepare chunk first)"
-            lastErrorMessage = "No prepared chunk available"
+        guard !pendingUploadChunks.isEmpty else {
+            reportFailure(
+                userMessage: "No prepared chunk available",
+                activity: "Nothing to upload (prepare chunk first)",
+                technical: "Upload requested with empty pending queue",
+                category: "upload"
+            )
             uploadStatus = .failure
-            log("Upload failed: no prepared chunk")
             return
         }
 
         isUploadingChunk = true
         uploadStatus = .idle
-        lastErrorMessage = nil
-        activityMessage = "Uploading chunk #\(chunk.chunkSequenceNumber)..."
-        log("Upload started for chunk #\(chunk.chunkSequenceNumber)")
+        clearFailureState()
+        let firstChunk = pendingUploadChunks[0]
+        activityMessage = "Uploading chunk #\(firstChunk.chunkSequenceNumber) to server..."
+        log(
+            "Upload started for chunk #\(firstChunk.chunkSequenceNumber), destination: \(transport.uploadDestinationDescription), pending queue before upload: \(pendingUploadChunksCount)",
+            category: "upload"
+        )
+        if !transport.isNetworkUploadConfigured {
+            log(
+                "Network upload endpoint is not configured. This upload runs in mock mode and does not send an HTTP request.",
+                level: .warning,
+                category: "upload"
+            )
+        }
         defer {
             isUploadingChunk = false
         }
 
-        do {
-            let ack = try await transport.upload(chunk: chunk)
-            uploadStatus = .success
-            activityMessage = "Upload success (\(ack.status))"
-            log("Upload success for chunk #\(chunk.chunkSequenceNumber)")
-        } catch {
-            uploadStatus = .failure
-            let message = error.localizedDescription
-            lastErrorMessage = "Upload failed: \(message)"
-            activityMessage = "Upload failed"
-            log("Upload failed for chunk #\(chunk.chunkSequenceNumber): \(message)")
+        var uploadedCount = 0
+
+        while let chunk = pendingUploadChunks.first {
+            do {
+                let ack = try await transport.upload(chunk: chunk)
+                pendingUploadChunks.removeFirst()
+                pendingUploadChunksCount = pendingUploadChunks.count
+                lastPreparedChunk = pendingUploadChunks.last
+                uploadedCount += 1
+                uploadStatus = .success
+                activityMessage = "Uploaded \(uploadedCount) chunk(s). Pending: \(pendingUploadChunksCount)"
+                log(
+                    "Upload success for chunk #\(chunk.chunkSequenceNumber), ackStatus: \(ack.status), accepted: \(ack.accepted), pending queue after upload: \(pendingUploadChunksCount), message: \(ack.message ?? "none")",
+                    category: "upload"
+                )
+            } catch {
+                uploadStatus = .failure
+                let message = error.localizedDescription
+                reportFailure(
+                    userMessage: "Upload failed: \(message)",
+                    activity: "Upload failed after \(uploadedCount) success(es). Pending: \(pendingUploadChunksCount)",
+                    technical: "Upload failed for chunk #\(chunk.chunkSequenceNumber): \(message). Chunk kept in pending queue for retry.",
+                    category: "upload"
+                )
+                return
+            }
         }
     }
 
@@ -284,9 +361,9 @@ final class CollectorCore: ObservableObject {
         bufferedSamples.append(sample)
         bufferedSamplesCount = bufferedSamples.count
         if totalSamplesReceived == 1 {
-            log("First HR sample received: \(sample.hrBPM) bpm")
+            log("First HR sample received: \(sample.hrBPM) bpm", category: "samples")
         } else if totalSamplesReceived.isMultiple(of: 25) {
-            log("HR samples received: \(totalSamplesReceived)")
+            log("HR samples received: \(totalSamplesReceived)", level: .debug, category: "samples")
         }
 
         if let sessionID = activeSession?.sessionID {
@@ -297,13 +374,68 @@ final class CollectorCore: ObservableObject {
         }
     }
 
-    private func log(_ message: String) {
+    func prepareLogExportFile() {
+        guard !eventLogs.isEmpty else {
+            reportFailure(
+                userMessage: "No logs available for export",
+                activity: "No logs to export",
+                technical: "Log export skipped: no logs",
+                category: "logging"
+            )
+            return
+        }
+
+        let fileName = "collector-events-\(Self.logFileDateFormatter.string(from: Date())).log"
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        let payload = eventLogs.joined(separator: "\n") + "\n"
+
+        do {
+            try payload.write(to: fileURL, atomically: true, encoding: .utf8)
+            logExportFileURL = fileURL
+            activityMessage = "Log export ready"
+            log("Log export created: \(fileURL.lastPathComponent)", category: "logging")
+        } catch {
+            reportFailure(
+                userMessage: "Failed to export logs: \(error.localizedDescription)",
+                activity: "Log export failed",
+                technical: "Failed to export logs: \(error.localizedDescription)",
+                category: "logging"
+            )
+        }
+    }
+
+    private func clearFailureState() {
+        lastErrorMessage = nil
+        shouldSuggestLogExport = false
+    }
+
+    private func reportFailure(
+        userMessage: String,
+        activity: String,
+        technical: String,
+        category: String
+    ) {
+        lastErrorMessage = userMessage
+        activityMessage = activity
+        shouldSuggestLogExport = true
+        log(technical, level: .error, category: category)
+    }
+
+    private func log(
+        _ message: String,
+        level: CoreLogLevel = .info,
+        category: String = "core"
+    ) {
+        if level == .debug && !isVerboseLoggingEnabled {
+            return
+        }
+
         let timestamp = Self.logTimestampFormatter.string(from: Date())
-        let line = "[\(timestamp)] \(message)"
+        let line = "[\(timestamp)] [\(level.rawValue)] [\(category)] \(message)"
         print(line)
         eventLogs.append(line)
-        if eventLogs.count > 200 {
-            eventLogs.removeFirst(eventLogs.count - 200)
+        if eventLogs.count > 1000 {
+            eventLogs.removeFirst(eventLogs.count - 1000)
         }
     }
 
@@ -314,15 +446,25 @@ final class CollectorCore: ObservableObject {
         return formatter
     }()
 
+    private static let logFileDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter
+    }()
+
     private func prepareDebugExport(for session: CollectionSession) {
         debugExportFileURL = debugExporter.startSession(sessionID: session.sessionID)
         if let debugExportFileURL {
-            log("Export file created: \(debugExportFileURL.lastPathComponent)")
+            log("Raw export file created: \(debugExportFileURL.lastPathComponent)", category: "export")
             activityMessage = "Collecting and writing JSONL export"
         } else {
-            lastErrorMessage = "Failed to create JSONL export file"
-            activityMessage = "Export file creation failed"
-            log("Failed to create JSONL export file")
+            reportFailure(
+                userMessage: "Failed to create JSONL export file",
+                activity: "Export file creation failed",
+                technical: "Failed to create JSONL export file",
+                category: "export"
+            )
         }
     }
 }

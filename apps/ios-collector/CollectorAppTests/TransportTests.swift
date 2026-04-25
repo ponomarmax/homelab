@@ -2,6 +2,13 @@ import XCTest
 @testable import CollectorApp
 
 final class TransportTests: XCTestCase {
+    func testTransportReportsMockModeWhenEndpointIsMissing() {
+        let transport = MockCollectorTransport()
+
+        XCTAssertFalse(transport.isNetworkUploadConfigured)
+        XCTAssertEqual(transport.uploadDestinationDescription, "mock://local-only (no server request)")
+    }
+
     func testPrepareUploadChunkReturnsNilForEmptySamples() {
         let transport = MockCollectorTransport()
         let session = CollectionSession(
@@ -30,7 +37,7 @@ final class TransportTests: XCTestCase {
 
     func testUploadUsesConfiguredEndpointAndBuildsPostRequest() async throws {
         let capturedRequest = LockedValueBox<URLRequest?>(nil)
-        let endpoint = URL(string: "http://localhost:8080/ingest/wearable/chunk")!
+        let endpoint = URL(string: "http://localhost:8080/upload-chunk")!
         let uploadAck = UploadAck(
             accepted: true,
             status: "accepted",
@@ -77,17 +84,24 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(ack.status, "accepted")
         XCTAssertEqual(request?.url, endpoint)
         XCTAssertEqual(request?.httpMethod, "POST")
+        XCTAssertEqual(request?.value(forHTTPHeaderField: "Accept"), "application/json")
         XCTAssertEqual(request?.value(forHTTPHeaderField: "Content-Type"), "application/json")
         XCTAssertNotNil(request?.httpBody)
     }
 
     func testUploadHandlesRejectedErrorResponse() async throws {
-        let endpoint = URL(string: "http://localhost:8080/ingest/wearable/chunk")!
+        let endpoint = URL(string: "http://localhost:8080/upload-chunk")!
         let errorResponse = UploadErrorResponse(
             accepted: false,
-            status: "error",
-            errorCode: "VALIDATION_FAILED",
-            message: "payload rejected"
+            status: "rejected",
+            errorCode: "unsupported_schema",
+            message: "Upload chunk validation failed",
+            details: [
+                UploadErrorResponse.UploadErrorDetail(
+                    field: "transport",
+                    issue: "only polar.hr@1.0 is supported in CP3"
+                )
+            ]
         )
         let responseData = try JSONEncoder().encode(errorResponse)
         let response = HTTPURLResponse(
@@ -119,7 +133,9 @@ final class TransportTests: XCTestCase {
         } catch let error as CollectorUploadError {
             switch error {
             case .rejected(let message):
-                XCTAssertEqual(message, "payload rejected")
+                XCTAssertTrue(message.contains("[unsupported_schema]"))
+                XCTAssertTrue(message.contains("Upload chunk validation failed"))
+                XCTAssertTrue(message.contains("transport"))
             default:
                 XCTFail("Expected rejected error")
             }

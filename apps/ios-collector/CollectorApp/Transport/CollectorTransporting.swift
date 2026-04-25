@@ -1,6 +1,9 @@
 import Foundation
 
 protocol CollectorTransporting {
+    var uploadDestinationDescription: String { get }
+    var isNetworkUploadConfigured: Bool { get }
+
     func makeStreamDescriptor(
         for stream: CollectorStream,
         source: String

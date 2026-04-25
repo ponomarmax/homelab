@@ -6,12 +6,20 @@ final class CollectorCoreTests: XCTestCase {
     final class RecordingTransport: CollectorTransporting {
         private let chunkBuilder = HeartRateChunkBuilder()
         private let shouldFailUpload: Bool
+        let uploadDestinationDescription: String
+        let isNetworkUploadConfigured: Bool
 
         private(set) var descriptorSourceInputs: [String] = []
         private(set) var uploadedChunks: [UploadChunk] = []
 
-        init(shouldFailUpload: Bool = false) {
+        init(
+            shouldFailUpload: Bool = false,
+            uploadDestinationDescription: String = "http://localhost:8080/ingest/wearable/chunk",
+            isNetworkUploadConfigured: Bool = true
+        ) {
             self.shouldFailUpload = shouldFailUpload
+            self.uploadDestinationDescription = uploadDestinationDescription
+            self.isNetworkUploadConfigured = isNetworkUploadConfigured
         }
 
         func makeStreamDescriptor(for stream: CollectorStream, source: String) -> StreamDescriptor {
@@ -215,6 +223,7 @@ final class CollectorCoreTests: XCTestCase {
 
         XCTAssertEqual(core.uploadStatus, .success)
         XCTAssertEqual(transport.uploadedChunks.count, 1)
+        XCTAssertEqual(core.pendingUploadChunksCount, 0)
     }
 
     func testCoreUploadFailureUpdatesState() async {
@@ -237,5 +246,47 @@ final class CollectorCoreTests: XCTestCase {
 
         XCTAssertEqual(core.uploadStatus, .failure)
         XCTAssertNotNil(core.lastErrorMessage)
+        XCTAssertEqual(core.pendingUploadChunksCount, 1)
+        XCTAssertTrue(core.shouldSuggestLogExport)
+    }
+
+    func testPendingQueueAccumulatesChunksWhenServerIsUnavailable() async {
+        let transport = RecordingTransport(shouldFailUpload: true)
+        let core = CollectorCore(
+            adapter: MockDeviceAdapter(
+                hrProvider: MockHeartRateStreamProvider(
+                    values: [70, 71, 72, 73],
+                    intervalNanoseconds: 10_000_000
+                )
+            ),
+            transport: transport
+        )
+
+        core.selectDevice()
+        await core.startCollection()
+        let firstBufferReady = await waitUntil { core.bufferedSamplesCount >= 1 }
+        XCTAssertTrue(firstBufferReady)
+        _ = core.prepareUploadChunk()
+        XCTAssertEqual(core.pendingUploadChunksCount, 1)
+
+        let secondBufferReady = await waitUntil { core.bufferedSamplesCount >= 1 }
+        XCTAssertTrue(secondBufferReady)
+        _ = core.prepareUploadChunk()
+        XCTAssertEqual(core.pendingUploadChunksCount, 2)
+
+        await core.uploadLastPreparedChunk()
+        XCTAssertEqual(core.uploadStatus, .failure)
+        XCTAssertEqual(core.pendingUploadChunksCount, 2)
+    }
+
+    func testPrepareLogExportCreatesShareableFile() {
+        let core = CollectorCore(
+            adapter: MockDeviceAdapter(),
+            transport: RecordingTransport()
+        )
+
+        core.prepareLogExportFile()
+
+        XCTAssertNotNil(core.logExportFileURL)
     }
 }

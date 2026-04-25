@@ -9,6 +9,14 @@ struct MockCollectorTransport: CollectorTransporting {
     private let nowProvider: @Sendable () -> Date
     private let httpDataProvider: HTTPDataProvider
 
+    var uploadDestinationDescription: String {
+        uploadEndpoint?.absoluteString ?? "mock://local-only (no server request)"
+    }
+
+    var isNetworkUploadConfigured: Bool {
+        uploadEndpoint != nil
+    }
+
     init(
         uploadEndpoint: URL? = nil,
         shouldSucceedInMockMode: Bool = true,
@@ -75,7 +83,7 @@ struct MockCollectorTransport: CollectorTransporting {
                     rawPersisted: true,
                     storagePath: "mock/raw/\(requestBody.sessionID)/\(requestBody.streamID).jsonl"
                 ),
-                message: "Mock upload accepted"
+                message: "Mock upload accepted (no network request)"
             )
         }
 
@@ -89,6 +97,7 @@ struct MockCollectorTransport: CollectorTransporting {
     ) async throws -> UploadAck {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let encoder = JSONEncoder()
@@ -108,7 +117,13 @@ struct MockCollectorTransport: CollectorTransporting {
         }
 
         if let errorResponse = try? decoder.decode(UploadErrorResponse.self, from: data) {
-            throw CollectorUploadError.rejected(message: errorResponse.message)
+            let detailSummary = (errorResponse.details ?? [])
+                .map { "\($0.field): \($0.issue)" }
+                .joined(separator: "; ")
+            let detailsSuffix = detailSummary.isEmpty ? "" : " Details: \(detailSummary)"
+            throw CollectorUploadError.rejected(
+                message: "[\(errorResponse.errorCode)] \(errorResponse.message)\(detailsSuffix)"
+            )
         }
 
         throw CollectorUploadError.rejected(

@@ -8,7 +8,8 @@ struct WearableCollectorApp: App {
     init() {
         let configuration = CollectorRuntimeConfiguration.from(
             environment: ProcessInfo.processInfo.environment,
-            arguments: ProcessInfo.processInfo.arguments
+            arguments: ProcessInfo.processInfo.arguments,
+            bundleInfo: Bundle.main.infoDictionary
         )
         let adapter: CollectorDeviceAdapter = configuration.useMockDevice
             ? MockDeviceAdapter()

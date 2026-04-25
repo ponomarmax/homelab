@@ -47,8 +47,10 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
             streamID: "stream-\(streamType)-\(sessionID.uuidString.lowercased())",
             sequence: chunkSequenceNumber,
             time: CanonicalUploadChunkRequest.TimeMetadata(
+                deviceTimeReference: Self.deviceTimeReference(from: samples[0]),
                 receivedAtCollector: Self.iso8601(from: samples[0].collectorReceivedAtUTC),
-                uploadedAtCollector: Self.iso8601(from: uploadedAtUTC)
+                uploadedAtCollector: Self.iso8601(from: uploadedAtUTC),
+                receivedAtServer: nil
             ),
             transport: CanonicalUploadChunkRequest.TransportMetadata(
                 encoding: "json",
@@ -69,6 +71,13 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
 
     private static func iso8601(from date: Date) -> String {
         iso8601Formatter.string(from: date)
+    }
+
+    private static func deviceTimeReference(from sample: HeartRateSample) -> String {
+        if let deviceTimestampRaw = sample.deviceTimestampRaw {
+            return "device:\(iso8601(from: deviceTimestampRaw))"
+        }
+        return "collector:\(sample.sourceTimestampKind?.rawValue ?? "unknown")"
     }
 }
 
@@ -108,12 +117,16 @@ struct CanonicalUploadChunkRequest: Equatable, Codable, Sendable {
     }
 
     struct TimeMetadata: Equatable, Codable, Sendable {
+        let deviceTimeReference: String
         let receivedAtCollector: String
         let uploadedAtCollector: String
+        let receivedAtServer: String?
 
         enum CodingKeys: String, CodingKey {
+            case deviceTimeReference = "device_time_reference"
             case receivedAtCollector = "received_at_collector"
             case uploadedAtCollector = "uploaded_at_collector"
+            case receivedAtServer = "received_at_server"
         }
     }
 
@@ -169,12 +182,19 @@ struct UploadErrorResponse: Equatable, Codable, Sendable {
     let status: String
     let errorCode: String
     let message: String
+    let details: [UploadErrorDetail]?
 
     enum CodingKeys: String, CodingKey {
         case accepted
         case status
         case errorCode = "error_code"
         case message
+        case details
+    }
+
+    struct UploadErrorDetail: Equatable, Codable, Sendable {
+        let field: String
+        let issue: String
     }
 }
 

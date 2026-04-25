@@ -26,6 +26,10 @@
     <string>Collector uses Bluetooth to scan and connect to Polar sensors for heart rate streaming.</string>
     <key>NSBluetoothPeripheralUsageDescription</key>
     <string>Collector uses Bluetooth to connect to Polar sensors.</string>
+    <key>COLLECTOR_USE_MOCK_DEFAULT</key>
+    <false/>
+    <key>COLLECTOR_UPLOAD_ENDPOINT</key>
+    <string>http://192.168.0.5:18090/</string>
     <key>UIFileSharingEnabled</key>
     <true/>
     <key>UIApplicationSceneManifest</key>

@@ -50,7 +50,6 @@ final class PolarHrStreamProvider: HeartRateStreamProviding {
             .subscribe(
                 onNext: { [weak self] hrData in
                     guard let self else { return }
-                    print(hrData)
                     for entry in hrData {
                         let streamData = PolarHrStreamData(
                             hr: Int(entry.hr),
@@ -70,6 +69,7 @@ final class PolarHrStreamProvider: HeartRateStreamProviding {
                             sampleSequenceNumber: self.sampleSequenceNumber,
                             streamData: streamData
                         )
+                        
 
                         self.sampleSequenceNumber += 1
                         onSample(sample)

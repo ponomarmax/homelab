@@ -65,6 +65,8 @@ final class ContractMappingTests: XCTestCase {
         XCTAssertEqual(payload.sequence, 1)
         XCTAssertEqual(payload.transport.payloadSchema, "polar.hr")
         XCTAssertEqual(payload.transport.payloadVersion, "1.0")
+        XCTAssertFalse(payload.time.deviceTimeReference.isEmpty)
+        XCTAssertNil(payload.time.receivedAtServer)
     }
 
     func testCanonicalMappingUsesFallbackPayloadForMockSamples() throws {

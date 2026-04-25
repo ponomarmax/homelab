@@ -183,6 +183,7 @@ struct CollectorView: View {
                 .font(.headline)
 
             statusRow(title: "Buffered Samples", value: "\(collectorCore.bufferedSamplesCount)")
+            statusRow(title: "Pending Chunks", value: "\(collectorCore.pendingUploadChunksCount)")
             statusRow(
                 title: "Stream",
                 value: collectorCore.streamDescriptor?.streamName ?? "Not prepared"
@@ -194,6 +195,7 @@ struct CollectorView: View {
                 } ?? "Not prepared"
             )
             statusRow(title: "Upload Status", value: collectorCore.uploadStatus.displayName)
+            statusRow(title: "Upload Target", value: collectorCore.uploadDestinationDescription)
             statusRow(
                 title: "Export File",
                 value: collectorCore.debugExportFileURL?.lastPathComponent ?? "Not created"
@@ -203,6 +205,13 @@ struct CollectorView: View {
                 Text(lastErrorMessage)
                     .font(.footnote)
                     .foregroundStyle(.red)
+
+                if collectorCore.shouldSuggestLogExport {
+                    Button("Prepare Logs Export For Diagnostics") {
+                        collectorCore.prepareLogExportFile()
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
         }
         .padding()
@@ -250,14 +259,14 @@ struct CollectorView: View {
             .buttonStyle(.bordered)
             .disabled(collectorCore.bufferedSamplesCount == 0 || collectorCore.isPreparingChunk)
 
-            Button(collectorCore.isUploadingChunk ? "Uploading..." : "Upload Last Chunk") {
+            Button(collectorCore.isUploadingChunk ? "Uploading..." : "Upload Next Pending Chunk") {
                 Task {
                     await collectorCore.uploadLastPreparedChunk()
                 }
             }
             .buttonStyle(.borderedProminent)
             .disabled(
-                collectorCore.lastPreparedChunk == nil
+                collectorCore.pendingUploadChunksCount == 0
                 || collectorCore.isUploadingChunk
                 || collectorCore.isPreparingChunk
             )
@@ -269,9 +278,22 @@ struct CollectorView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Event Log")
                 .font(.headline)
-            Text("Prepare Chunk only packs buffered samples into a chunk and clears that buffer.")
+            Text("Structured logs for collection, connectivity, chunk queue, and upload lifecycle.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Button("Prepare Logs Export") {
+                    collectorCore.prepareLogExportFile()
+                }
+                .buttonStyle(.bordered)
+
+                if let url = collectorCore.logExportFileURL {
+                    ShareLink(item: url) {
+                        Text("Export Logs")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(collectorCore.eventLogs.suffix(20).enumerated()), id: \.offset) { item in
