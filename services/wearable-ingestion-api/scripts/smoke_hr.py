@@ -29,7 +29,7 @@ def main() -> int:
             "stream_id": "stream-hr-001",
             "sequence": 1,
             "time": {
-                "received_at_collector": "2026-04-25T11:00:00Z",
+                "first_sample_received_at_collector": "2026-04-25T11:00:00Z",
                 "uploaded_at_collector": "2026-04-25T11:00:01Z",
             },
             "transport": {

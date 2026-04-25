@@ -22,7 +22,7 @@ class ValidationAndSchemaTests(unittest.TestCase):
             "stream_id": "stream-hr-001",
             "sequence": 1,
             "time": {
-                "received_at_collector": "2026-04-25T10:00:00Z",
+                "first_sample_received_at_collector": "2026-04-25T10:00:00Z",
                 "uploaded_at_collector": "2026-04-25T10:00:01Z",
             },
             "transport": {
@@ -45,7 +45,7 @@ class ValidationAndSchemaTests(unittest.TestCase):
             "session_id": "session-001",
             "stream_id": "stream-hr-001",
             "time": {
-                "received_at_collector": "2026-04-25T10:00:00Z",
+                "first_sample_received_at_collector": "2026-04-25T10:00:00Z",
                 "uploaded_at_collector": "2026-04-25T10:00:01Z",
             },
             "transport": {
@@ -60,6 +60,30 @@ class ValidationAndSchemaTests(unittest.TestCase):
         error_code, issues = validate_upload_chunk_contract(chunk)
         self.assertEqual(error_code, "validation_error")
         self.assertTrue(any(item["field"] == "sequence" for item in issues))
+
+    def test_chunk_time_with_legacy_chunk_level_field_is_rejected(self) -> None:
+        chunk = {
+            "schema_version": "1.0",
+            "chunk_id": "chunk-001",
+            "session_id": "session-001",
+            "stream_id": "stream-hr-001",
+            "sequence": 1,
+            "time": {
+                "received_at_collector": "2026-04-25T10:00:00Z",
+                "uploaded_at_collector": "2026-04-25T10:00:01Z",
+            },
+            "transport": {
+                "encoding": "json",
+                "compression": "none",
+                "payload_schema": "polar.hr",
+                "payload_version": "1.0",
+            },
+            "payload": {},
+        }
+
+        error_code, issues = validate_upload_chunk_contract(chunk)
+        self.assertEqual(error_code, "validation_error")
+        self.assertTrue(any(item["field"] == "time.first_sample_received_at_collector" for item in issues))
 
 
 if __name__ == "__main__":

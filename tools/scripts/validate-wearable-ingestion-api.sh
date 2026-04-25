@@ -117,7 +117,7 @@ cat > "${generic_payload_file}" <<EOF
   "stream_id": "${stream_id}",
   "sequence": 1,
   "time": {
-    "received_at_collector": "2026-04-25T11:00:00Z",
+    "first_sample_received_at_collector": "2026-04-25T11:00:00Z",
     "uploaded_at_collector": "2026-04-25T11:00:01Z"
   },
   "transport": {
@@ -143,7 +143,7 @@ cat > "${hr_payload_file}" <<EOF
   "stream_id": "${stream_id}",
   "sequence": 2,
   "time": {
-    "received_at_collector": "2026-04-25T11:01:00Z",
+    "first_sample_received_at_collector": "2026-04-25T11:01:00Z",
     "uploaded_at_collector": "2026-04-25T11:01:01Z"
   },
   "transport": {
@@ -177,7 +177,7 @@ cat > "${no_samples_payload_file}" <<EOF
   "stream_id": "${stream_id}",
   "sequence": 3,
   "time": {
-    "received_at_collector": "2026-04-25T11:02:00Z",
+    "first_sample_received_at_collector": "2026-04-25T11:02:00Z",
     "uploaded_at_collector": "2026-04-25T11:02:01Z"
   },
   "transport": {
@@ -203,7 +203,7 @@ cat > "${invalid_payload_file}" <<EOF
   "stream_id": "${stream_id}",
   "sequence": 4,
   "time": {
-    "received_at_collector": "2026-04-25T11:03:00Z",
+    "first_sample_received_at_collector": "2026-04-25T11:03:00Z",
     "uploaded_at_collector": "2026-04-25T11:03:01Z"
   },
   "transport": {

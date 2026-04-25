@@ -32,6 +32,10 @@
     <string>http://192.168.0.5:18090/</string>
     <key>UIFileSharingEnabled</key>
     <true/>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>bluetooth-central</string>
+    </array>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>

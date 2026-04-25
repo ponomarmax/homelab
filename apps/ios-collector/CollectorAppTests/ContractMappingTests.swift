@@ -65,8 +65,27 @@ final class ContractMappingTests: XCTestCase {
         XCTAssertEqual(payload.sequence, 1)
         XCTAssertEqual(payload.transport.payloadSchema, "polar.hr")
         XCTAssertEqual(payload.transport.payloadVersion, "1.0")
+        XCTAssertEqual(payload.time.firstSampleReceivedAtCollector, "1970-01-01T00:16:40.000Z")
         XCTAssertFalse(payload.time.deviceTimeReference.isEmpty)
         XCTAssertNil(payload.time.receivedAtServer)
+    }
+
+    func testCanonicalMappingUsesFirstSampleTimestampForChunkTime() throws {
+        let first = makeSample(hr: 70, receivedAt: Date(timeIntervalSince1970: 1_000), sequence: 0)
+        let second = makeSample(hr: 72, receivedAt: Date(timeIntervalSince1970: 1_005), sequence: 1)
+        let chunk = UploadChunk(
+            sessionID: UUID(),
+            streamName: "HR",
+            streamType: "hr",
+            chunkID: UUID(),
+            chunkSequenceNumber: 1,
+            createdAtUTC: Date(),
+            samples: [first, second],
+            collectionMode: .live
+        )
+
+        let payload = try XCTUnwrap(chunk.makeCanonicalRequest(uploadedAtUTC: Date(timeIntervalSince1970: 1_010)))
+        XCTAssertEqual(payload.time.firstSampleReceivedAtCollector, "1970-01-01T00:16:40.000Z")
     }
 
     func testCanonicalMappingUsesFallbackPayloadForMockSamples() throws {

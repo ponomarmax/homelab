@@ -179,7 +179,7 @@ JSON shape
   "sequence": 1,
   "time": {
     "device_time_reference": "optional string",
-    "received_at_collector": "timestamp",
+    "first_sample_received_at_collector": "timestamp",
     "uploaded_at_collector": "timestamp",
     "received_at_server": "optional timestamp"
   },
@@ -197,7 +197,7 @@ chunk_id
 session_id
 stream_id
 sequence
-time.received_at_collector
+time.first_sample_received_at_collector
 time.uploaded_at_collector
 transport.encoding
 transport.payload_schema
@@ -208,6 +208,7 @@ chunk_id must be unique enough for idempotency.
 sequence is monotonically increasing within one stream.
 device_time_reference is optional because some SDKs provide strong device time and some do not.
 received_at_server is assigned by backend when persisted or accepted.
+time.first_sample_received_at_collector must equal the first sample timestamp in payload.samples[].received_at_collector when samples exist.
 4. AckContract
 Purpose
 

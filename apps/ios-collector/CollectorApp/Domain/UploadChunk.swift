@@ -50,7 +50,7 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
             sequence: chunkSequenceNumber,
             time: CanonicalUploadChunkRequest.TimeMetadata(
                 deviceTimeReference: Self.deviceTimeReference(from: samples[0]),
-                receivedAtCollector: Self.iso8601(from: samples[0].collectorReceivedAtUTC),
+                firstSampleReceivedAtCollector: Self.iso8601(from: samples[0].collectorReceivedAtUTC),
                 uploadedAtCollector: Self.iso8601(from: uploadedAtUTC),
                 receivedAtServer: nil
             ),
@@ -132,13 +132,13 @@ struct CanonicalUploadChunkRequest: Equatable, Codable, Sendable {
 
     struct TimeMetadata: Equatable, Codable, Sendable {
         let deviceTimeReference: String
-        let receivedAtCollector: String
+        let firstSampleReceivedAtCollector: String
         let uploadedAtCollector: String
         let receivedAtServer: String?
 
         enum CodingKeys: String, CodingKey {
             case deviceTimeReference = "device_time_reference"
-            case receivedAtCollector = "received_at_collector"
+            case firstSampleReceivedAtCollector = "first_sample_received_at_collector"
             case uploadedAtCollector = "uploaded_at_collector"
             case receivedAtServer = "received_at_server"
         }

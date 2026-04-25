@@ -198,12 +198,15 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
 
     func connect() async throws {
         guard isBluetoothOn else {
+            log("Connect blocked: Bluetooth is powered off")
             throw PolarAdapterError.bluetoothPoweredOff
         }
         guard let selectedPolarIdentifier else {
+            log("Connect blocked: no selected Polar device")
             throw PolarAdapterError.noDeviceSelected
         }
 
+        log("BLE connect requested for device: \(selectedPolarIdentifier)")
         connectionState = .connecting
         isSelectedDeviceConnected = false
         isSelectedDeviceHrFeatureReady = api.isFeatureReady(selectedPolarIdentifier, feature: .feature_hr)
@@ -217,6 +220,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             } catch {
                 connectContinuation = nil
                 connectionState = .deviceSelected
+                log("BLE connect failed for device: \(selectedPolarIdentifier), error: \(error.localizedDescription)")
                 continuation.resume(throwing: error)
             }
         }
@@ -227,6 +231,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
 
         if let selectedPolarIdentifier {
             try? api.disconnectFromDevice(selectedPolarIdentifier)
+            log("BLE disconnect requested for device: \(selectedPolarIdentifier)")
         }
 
         isSelectedDeviceConnected = false
@@ -254,12 +259,17 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Unknown" : trimmed
     }
+
+    private func log(_ message: String) {
+        print("[polar-adapter] \(message)")
+    }
 }
 
 extension PolarDeviceAdapter: PolarBleApiObserver {
     func deviceConnecting(_ identifier: PolarDeviceInfo) {
         guard identifier.deviceId == selectedPolarIdentifier else { return }
         connectionState = .connecting
+        log("BLE connecting: \(identifier.deviceId)")
     }
 
     func deviceConnected(_ identifier: PolarDeviceInfo) {
@@ -273,6 +283,7 @@ extension PolarDeviceAdapter: PolarBleApiObserver {
         )
 
         isSelectedDeviceConnected = true
+        log("BLE connected: \(identifier.deviceId)")
         tryResumeConnectIfReady()
     }
 
@@ -282,6 +293,7 @@ extension PolarDeviceAdapter: PolarBleApiObserver {
         isSelectedDeviceConnected = false
         isSelectedDeviceHrFeatureReady = false
         connectionState = .deviceSelected
+        log("BLE disconnected: \(identifier.deviceId), pairingError: \(pairingError)")
 
         if let connectContinuation {
             connectContinuation.resume(throwing: PolarAdapterError.connectionInterrupted)
@@ -293,10 +305,12 @@ extension PolarDeviceAdapter: PolarBleApiObserver {
 extension PolarDeviceAdapter: PolarBleApiPowerStateObserver {
     func blePowerOn() {
         isBluetoothOn = true
+        log("Bluetooth power on")
     }
 
     func blePowerOff() {
         isBluetoothOn = false
+        log("Bluetooth power off")
     }
 }
 

@@ -25,6 +25,20 @@ Boundary-safe deployment validation should test transport correctness and raw pr
 LinkedIn post idea:
 How contract-boundary validation in production catches the right failures while keeping ingestion sensor-agnostic.
 
+Date: 2026-04-25
+
+What was done:
+- Deployed the latest `wearable-ingestion-api` changes with the existing Docker Compose deployment workflow.
+- Validated the renamed chunk-level transport timestamp contract in deployment: `time.first_sample_received_at_collector` is accepted, while legacy chunk-level `time.received_at_collector` is rejected when the new required field is missing.
+- Revalidated deployed transport-boundary behavior: valid generic opaque payload accepted, valid HR payload accepted with sample-level `payload.samples[].received_at_collector`, payload without `samples` accepted when transport envelope is valid, malformed envelope rejected.
+- Confirmed raw JSONL persistence remains exact and preserves the new chunk-level field plus sample-level receive timestamps without adding normalization.
+
+Key insight:
+Contract rename rollouts are safer when deployment validation checks both acceptance of the new required field and explicit rejection of the stale envelope shape.
+
+LinkedIn post idea:
+How to ship a contract rename safely in a raw-ingestion pipeline without breaking opaque payload handling.
+
 Date: 2026-04-24
 
 What was done:

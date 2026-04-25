@@ -14,7 +14,9 @@ class UploadChunkTime(ContractModel):
     device_time_reference: str | None = Field(
         default=None, min_length=1, description="Opaque device time reference from collector."
     )
-    received_at_collector: datetime = Field(..., description="Collector receive time.")
+    first_sample_received_at_collector: datetime = Field(
+        ..., description="Collector receive time for the first sample in this chunk."
+    )
     uploaded_at_collector: datetime = Field(..., description="Collector upload time.")
     received_at_server: datetime | None = Field(
         default=None,

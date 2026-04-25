@@ -6,7 +6,7 @@
   "sequence": 1,
   "time": {
     "device_time_reference": "polar-device-tick-000001",
-    "received_at_collector": "2026-04-23T09:30:01Z",
+    "first_sample_received_at_collector": "2026-04-23T09:30:01Z",
     "uploaded_at_collector": "2026-04-23T09:30:02Z",
     "received_at_server": "2026-04-23T09:30:03Z"
   },

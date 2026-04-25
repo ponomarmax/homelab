@@ -70,6 +70,14 @@ final class CollectorCore: ObservableObject {
         transport.uploadDestinationDescription
     }
 
+    func appDidBecomeActive() {
+        log("App became active", category: "lifecycle")
+    }
+
+    func appDidEnterBackground() {
+        log("App moved to background", category: "lifecycle")
+    }
+
     func selectDevice() {
         clearFailureState()
         activityMessage = "Selecting mock device..."
@@ -275,6 +283,8 @@ final class CollectorCore: ObservableObject {
         )
 
         if let chunk {
+            let firstSampleAt = Self.iso8601(from: chunk.samples.first?.collectorReceivedAtUTC)
+            let lastSampleAt = Self.iso8601(from: chunk.samples.last?.collectorReceivedAtUTC)
             pendingUploadChunks.append(chunk)
             pendingUploadChunksCount = pendingUploadChunks.count
             lastPreparedChunk = pendingUploadChunks.last
@@ -283,7 +293,7 @@ final class CollectorCore: ObservableObject {
             bufferedSamplesCount = 0
             activityMessage = "Chunk #\(chunk.chunkSequenceNumber) prepared (\(chunk.samples.count) samples)"
             log(
-                "Prepared chunk #\(chunk.chunkSequenceNumber), samples: \(chunk.samples.count), pending queue: \(pendingUploadChunksCount)",
+                "Prepared chunk #\(chunk.chunkSequenceNumber), samples: \(chunk.samples.count), first_sample: \(firstSampleAt), last_sample: \(lastSampleAt), pending queue: \(pendingUploadChunksCount)",
                 category: "upload"
             )
         } else {
@@ -310,9 +320,11 @@ final class CollectorCore: ObservableObject {
         uploadStatus = .idle
         clearFailureState()
         let firstChunk = pendingUploadChunks[0]
+        let firstSampleAt = Self.iso8601(from: firstChunk.samples.first?.collectorReceivedAtUTC)
+        let lastSampleAt = Self.iso8601(from: firstChunk.samples.last?.collectorReceivedAtUTC)
         activityMessage = "Uploading chunk #\(firstChunk.chunkSequenceNumber) to server..."
         log(
-            "Upload started for chunk #\(firstChunk.chunkSequenceNumber), destination: \(transport.uploadDestinationDescription), pending queue before upload: \(pendingUploadChunksCount)",
+            "Upload started for chunk #\(firstChunk.chunkSequenceNumber), samples: \(firstChunk.samples.count), first_sample: \(firstSampleAt), last_sample: \(lastSampleAt), destination: \(transport.uploadDestinationDescription), pending queue before upload: \(pendingUploadChunksCount)",
             category: "upload"
         )
         if !transport.isNetworkUploadConfigured {
@@ -337,8 +349,10 @@ final class CollectorCore: ObservableObject {
                 uploadedCount += 1
                 uploadStatus = .success
                 activityMessage = "Uploaded \(uploadedCount) chunk(s). Pending: \(pendingUploadChunksCount)"
+                let uploadedFirstSampleAt = Self.iso8601(from: chunk.samples.first?.collectorReceivedAtUTC)
+                let uploadedLastSampleAt = Self.iso8601(from: chunk.samples.last?.collectorReceivedAtUTC)
                 log(
-                    "Upload success for chunk #\(chunk.chunkSequenceNumber), ackStatus: \(ack.status), accepted: \(ack.accepted), pending queue after upload: \(pendingUploadChunksCount), message: \(ack.message ?? "none")",
+                    "Upload success for chunk #\(chunk.chunkSequenceNumber), samples: \(chunk.samples.count), first_sample: \(uploadedFirstSampleAt), last_sample: \(uploadedLastSampleAt), ackStatus: \(ack.status), accepted: \(ack.accepted), pending queue after upload: \(pendingUploadChunksCount), message: \(ack.message ?? "none")",
                     category: "upload"
                 )
             } catch {
@@ -452,6 +466,18 @@ final class CollectorCore: ObservableObject {
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         return formatter
     }()
+
+    private static let uploadIso8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter
+    }()
+
+    private static func iso8601(from date: Date?) -> String {
+        guard let date else { return "n/a" }
+        return uploadIso8601Formatter.string(from: date)
+    }
 
     private func prepareDebugExport(for session: CollectionSession) {
         debugExportFileURL = debugExporter.startSession(sessionID: session.sessionID)

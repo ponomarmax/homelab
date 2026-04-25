@@ -110,3 +110,18 @@ Optional:
 - run on a real iPhone for UI sanity checking only
 
 Real iPhone is not required for CP2.
+
+## Manual Validation: Locked-Screen BLE HR Collection
+
+Use a real iPhone and Polar device:
+
+1. Start HR collection.
+2. Confirm HR samples are arriving in the app.
+3. Lock the iPhone screen for 30-60 seconds while collection continues.
+4. Unlock the iPhone.
+5. Prepare and upload a chunk.
+6. Verify sample timestamps continue through the locked interval without a large gap.
+7. Verify uploaded raw JSONL includes:
+   - sample-level `payload.samples[].received_at_collector`
+   - chunk-level `time.first_sample_received_at_collector`
+   - no chunk-level `time.received_at_collector`
