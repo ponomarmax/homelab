@@ -39,3 +39,9 @@ Pods/
 
 # macOS
 .DS_Store
+
+# Pyhton
+__pycache__/
+*.pyc
+*.pyo
+*.pyd

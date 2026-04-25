@@ -2,4 +2,8 @@ platform :ios, '17.0'
 
 target 'CollectorApp' do
   pod 'PolarBleSdk'
+
+  target 'CollectorAppTests' do
+    inherit! :search_paths
+  end
 end

@@ -15,17 +15,41 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "offset_ns",
-          "hr"
+          "hr",
+          "ppgQuality",
+          "correctedHr",
+          "rrsMs",
+          "rrAvailable",
+          "contactStatus",
+          "contactStatusSupported"
         ],
         "properties": {
-          "offset_ns": {
-            "type": "integer",
-            "minimum": 0
-          },
           "hr": {
             "type": "integer",
             "minimum": 0
+          },
+          "ppgQuality": {
+            "type": "integer"
+          },
+          "correctedHr": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rrsMs": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "rrAvailable": {
+            "type": "boolean"
+          },
+          "contactStatus": {
+            "type": "boolean"
+          },
+          "contactStatusSupported": {
+            "type": "boolean"
           }
         }
       }

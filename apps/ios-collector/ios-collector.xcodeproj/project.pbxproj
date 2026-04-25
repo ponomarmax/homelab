@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		464F201D40316CAB07115426 /* libPods-CollectorAppTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 103DC74283FB792F135E715A /* libPods-CollectorAppTests.a */; };
 		A10000010000000000000001 /* CollectorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000001 /* CollectorApp.swift */; };
 		A10000010000000000000002 /* CollectorCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000002 /* CollectorCore.swift */; };
 		A10000010000000000000003 /* CollectionMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000003 /* CollectionMode.swift */; };
@@ -44,9 +45,12 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		103DC74283FB792F135E715A /* libPods-CollectorAppTests.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-CollectorAppTests.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		194AC702E05B377D67F9B776 /* libPods-CollectorApp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-CollectorApp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		495D1304D8EA94C0DF6DBCD4 /* Pods-CollectorApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CollectorApp.release.xcconfig"; path = "Target Support Files/Pods-CollectorApp/Pods-CollectorApp.release.xcconfig"; sourceTree = "<group>"; };
+		7514FBF28486148DA6E64718 /* Pods-CollectorAppTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CollectorAppTests.release.xcconfig"; path = "Target Support Files/Pods-CollectorAppTests/Pods-CollectorAppTests.release.xcconfig"; sourceTree = "<group>"; };
 		9923C98DBF490FAA85F1EA44 /* Pods-CollectorApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CollectorApp.debug.xcconfig"; path = "Target Support Files/Pods-CollectorApp/Pods-CollectorApp.debug.xcconfig"; sourceTree = "<group>"; };
+		9AF9516B230A4B2D66F003D8 /* Pods-CollectorAppTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CollectorAppTests.debug.xcconfig"; path = "Target Support Files/Pods-CollectorAppTests/Pods-CollectorAppTests.debug.xcconfig"; sourceTree = "<group>"; };
 		B10000010000000000000001 /* CollectorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectorApp.swift; sourceTree = "<group>"; };
 		B10000010000000000000002 /* CollectorCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectorCore.swift; sourceTree = "<group>"; };
 		B10000010000000000000003 /* CollectionMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionMode.swift; sourceTree = "<group>"; };
@@ -88,6 +92,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				464F201D40316CAB07115426 /* libPods-CollectorAppTests.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -197,6 +202,8 @@
 			children = (
 				9923C98DBF490FAA85F1EA44 /* Pods-CollectorApp.debug.xcconfig */,
 				495D1304D8EA94C0DF6DBCD4 /* Pods-CollectorApp.release.xcconfig */,
+				9AF9516B230A4B2D66F003D8 /* Pods-CollectorAppTests.debug.xcconfig */,
+				7514FBF28486148DA6E64718 /* Pods-CollectorAppTests.release.xcconfig */,
 			);
 			name = Pods;
 			path = Pods;
@@ -206,6 +213,7 @@
 			isa = PBXGroup;
 			children = (
 				194AC702E05B377D67F9B776 /* libPods-CollectorApp.a */,
+				103DC74283FB792F135E715A /* libPods-CollectorAppTests.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -236,6 +244,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A10000010000000000000073 /* Build configuration list for PBXNativeTarget "CollectorAppTests" */;
 			buildPhases = (
+				1D13DB2E07981E9CF08E375A /* [CP] Check Pods Manifest.lock */,
 				A10000010000000000000074 /* Sources */,
 				A10000010000000000000051 /* Frameworks */,
 				A10000010000000000000075 /* Resources */,
@@ -322,6 +331,28 @@
 			);
 			outputPaths = (
 				"$(DERIVED_FILE_DIR)/Pods-CollectorApp-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		1D13DB2E07981E9CF08E375A /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-CollectorAppTests-checkManifestLockResult.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -488,6 +519,7 @@
 		};
 		A10000010000000000000084 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9AF9516B230A4B2D66F003D8 /* Pods-CollectorAppTests.debug.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
@@ -509,6 +541,7 @@
 		};
 		A10000010000000000000085 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7514FBF28486148DA6E64718 /* Pods-CollectorAppTests.release.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;

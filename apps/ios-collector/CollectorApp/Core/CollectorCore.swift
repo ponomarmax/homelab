@@ -3,6 +3,7 @@ import Foundation
 @MainActor
 final class CollectorCore: ObservableObject {
     @Published private(set) var status: CollectorStatus = .disconnected
+    @Published private(set) var uploadStatus: UploadStatus = .idle
     @Published private(set) var discoveredDevices: [CollectorDevice] = []
     @Published private(set) var selectedDevice: CollectorDevice?
     @Published private(set) var activeSession: CollectionSession?
@@ -16,6 +17,7 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var isScanningDevices: Bool = false
     @Published private(set) var isConnectingDevice: Bool = false
     @Published private(set) var isPreparingChunk: Bool = false
+    @Published private(set) var isUploadingChunk: Bool = false
     @Published private(set) var activityMessage: String = "Idle"
     @Published private(set) var eventLogs: [String] = []
 
@@ -51,11 +53,13 @@ final class CollectorCore: ObservableObject {
                 mockAdapter.markSelected()
             }
             status = .deviceSelected
+            uploadStatus = .idle
             activityMessage = "Device selected"
             log("Device selected: \(selectedDevice?.name ?? "unknown")")
         } catch {
             selectedDevice = nil
             status = .disconnected
+            uploadStatus = .idle
             lastErrorMessage = "Device selection failed: \(error.localizedDescription)"
             activityMessage = "Device selection failed"
             log("Device selection failed: \(error.localizedDescription)")
@@ -66,6 +70,7 @@ final class CollectorCore: ObservableObject {
         lastErrorMessage = nil
         selectedDevice = nil
         status = .disconnected
+        uploadStatus = .idle
         isScanningDevices = true
         activityMessage = "Scanning for Polar devices..."
         log("Scan started")
@@ -98,6 +103,7 @@ final class CollectorCore: ObservableObject {
             discoveredDevices = []
             selectedDevice = nil
             status = .disconnected
+            uploadStatus = .idle
             lastErrorMessage = "Scan failed: \(error.localizedDescription)"
             activityMessage = "Scan failed"
             log("Scan failed: \(error.localizedDescription)")
@@ -113,11 +119,13 @@ final class CollectorCore: ObservableObject {
             try adapter.selectDevice(device)
             selectedDevice = adapter.deviceIdentity
             status = .deviceSelected
+            uploadStatus = .idle
             activityMessage = "Device selected: \(selectedDevice?.name ?? "Unknown")"
             log("Device selected: \(selectedDevice?.id ?? "unknown")")
         } catch {
             selectedDevice = nil
             status = .disconnected
+            uploadStatus = .idle
             lastErrorMessage = "Device selection failed: \(error.localizedDescription)"
             activityMessage = "Device selection failed"
             log("Device selection failed: \(error.localizedDescription)")
@@ -130,6 +138,7 @@ final class CollectorCore: ObservableObject {
         guard selectedDevice != nil else { return }
 
         lastErrorMessage = nil
+        uploadStatus = .idle
         isConnectingDevice = true
         activityMessage = "Connecting to device..."
         log("Start tapped")
@@ -198,6 +207,7 @@ final class CollectorCore: ObservableObject {
     @discardableResult
     func prepareUploadChunk() -> UploadChunk? {
         isPreparingChunk = true
+        uploadStatus = .idle
         activityMessage = "Preparing upload chunk..."
         log("Prepare Chunk tapped")
         defer {
@@ -234,6 +244,38 @@ final class CollectorCore: ObservableObject {
         }
 
         return chunk
+    }
+
+    func uploadLastPreparedChunk() async {
+        guard let chunk = lastPreparedChunk else {
+            activityMessage = "Nothing to upload (prepare chunk first)"
+            lastErrorMessage = "No prepared chunk available"
+            uploadStatus = .failure
+            log("Upload failed: no prepared chunk")
+            return
+        }
+
+        isUploadingChunk = true
+        uploadStatus = .idle
+        lastErrorMessage = nil
+        activityMessage = "Uploading chunk #\(chunk.chunkSequenceNumber)..."
+        log("Upload started for chunk #\(chunk.chunkSequenceNumber)")
+        defer {
+            isUploadingChunk = false
+        }
+
+        do {
+            let ack = try await transport.upload(chunk: chunk)
+            uploadStatus = .success
+            activityMessage = "Upload success (\(ack.status))"
+            log("Upload success for chunk #\(chunk.chunkSequenceNumber)")
+        } catch {
+            uploadStatus = .failure
+            let message = error.localizedDescription
+            lastErrorMessage = "Upload failed: \(message)"
+            activityMessage = "Upload failed"
+            log("Upload failed for chunk #\(chunk.chunkSequenceNumber): \(message)")
+        }
     }
 
     private func handle(sample: HeartRateSample) {

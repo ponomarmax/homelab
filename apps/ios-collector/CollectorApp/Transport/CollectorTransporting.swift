@@ -12,4 +12,6 @@ protocol CollectorTransporting {
         chunkSequenceNumber: Int,
         samples: [HeartRateSample]
     ) -> UploadChunk?
+
+    func upload(chunk: UploadChunk) async throws -> UploadAck
 }

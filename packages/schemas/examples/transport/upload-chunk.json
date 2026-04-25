@@ -19,8 +19,13 @@
   "payload": {
     "samples": [
       {
-        "offset_ns": 0,
-        "hr": 72
+        "hr": 71,
+        "ppgQuality": 0,
+        "correctedHr": 0,
+        "rrsMs": [],
+        "rrAvailable": false,
+        "contactStatus": false,
+        "contactStatusSupported": false
       }
     ]
   }

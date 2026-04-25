@@ -295,7 +295,15 @@ polar.hr
 version 1.0
 {
   "samples": [
-    { "offset_ns": 0, "hr": 72 }
+    {
+      "hr": 71,
+      "ppgQuality": 0,
+      "correctedHr": 0,
+      "rrsMs": [],
+      "rrAvailable": false,
+      "contactStatus": false,
+      "contactStatusSupported": false
+    }
   ]
 }
 
@@ -303,8 +311,13 @@ Rules:
 
 samples must be an array
 each sample must contain:
-offset_ns
 hr
+ppgQuality
+correctedHr
+rrsMs
+rrAvailable
+contactStatus
+contactStatusSupported
 7.2 Polar PPI Payload V1
 
 Schema id:

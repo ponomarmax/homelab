@@ -12,9 +12,12 @@ struct WearableCollectorApp: App {
 
         let adapter: CollectorDeviceAdapter = useMock ? MockDeviceAdapter() : PolarDeviceAdapter()
 
+        let uploadEndpoint = environment["COLLECTOR_UPLOAD_ENDPOINT"].flatMap { URL(string: $0) }
+        let transport = MockCollectorTransport(uploadEndpoint: uploadEndpoint)
+
         collectorCore = CollectorCore(
             adapter: adapter,
-            transport: MockCollectorTransport()
+            transport: transport
         )
     }
 

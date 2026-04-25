@@ -13,6 +13,7 @@ struct HeartRateChunkBuilder {
         return UploadChunk(
             sessionID: session.sessionID,
             streamName: streamDescriptor.streamName,
+            streamType: streamDescriptor.streamType,
             chunkID: UUID(),
             chunkSequenceNumber: chunkSequenceNumber,
             createdAtUTC: createdAtUTC,

@@ -36,6 +36,7 @@ struct CollectorView: View {
     private var statusCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             statusRow(title: "State", value: collectorCore.status.displayName)
+            statusRow(title: "Upload", value: collectorCore.uploadStatus.displayName)
             statusRow(title: "Device", value: collectorCore.selectedDevice?.name ?? "None")
             statusRow(title: "Mode", value: collectorCore.defaultCollectionMode.rawValue)
             statusRow(
@@ -51,7 +52,10 @@ struct CollectorView: View {
 
     private var activityCard: some View {
         HStack(spacing: 12) {
-            if collectorCore.isScanningDevices || collectorCore.isConnectingDevice || collectorCore.isPreparingChunk {
+            if collectorCore.isScanningDevices
+                || collectorCore.isConnectingDevice
+                || collectorCore.isPreparingChunk
+                || collectorCore.isUploadingChunk {
                 ProgressView()
                     .controlSize(.small)
             }
@@ -189,6 +193,7 @@ struct CollectorView: View {
                     "#\($0.chunkSequenceNumber) (\($0.samples.count) samples)"
                 } ?? "Not prepared"
             )
+            statusRow(title: "Upload Status", value: collectorCore.uploadStatus.displayName)
             statusRow(
                 title: "Export File",
                 value: collectorCore.debugExportFileURL?.lastPathComponent ?? "Not created"
@@ -244,6 +249,18 @@ struct CollectorView: View {
             }
             .buttonStyle(.bordered)
             .disabled(collectorCore.bufferedSamplesCount == 0 || collectorCore.isPreparingChunk)
+
+            Button(collectorCore.isUploadingChunk ? "Uploading..." : "Upload Last Chunk") {
+                Task {
+                    await collectorCore.uploadLastPreparedChunk()
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(
+                collectorCore.lastPreparedChunk == nil
+                || collectorCore.isUploadingChunk
+                || collectorCore.isPreparingChunk
+            )
             }
         }
     }
