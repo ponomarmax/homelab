@@ -50,6 +50,23 @@ services:
     networks:
       - internal
 
+  data-browser:
+    image: nginx:1.27-alpine
+    entrypoint: ["nginx", "-g", "daemon off;"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    ports:
+      - "${DATA_BROWSER_BIND_ADDRESS:-0.0.0.0}:${DATA_BROWSER_PORT:-11000}:8080"
+    volumes:
+      - wearable_raw_data:/data:ro
+      - ./data-browser/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - internal
+
 networks:
   internal:
     name: homelab_internal
