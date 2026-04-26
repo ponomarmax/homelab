@@ -50,11 +50,42 @@ services:
     networks:
       - internal
 
+  wearable-pipeline-api:
+    build:
+      context: ${PROJECT_ROOT}/services/wearable-pipeline-api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      WEARABLE_PIPELINE_API_HOST: ${WEARABLE_PIPELINE_API_HOST:-0.0.0.0}
+      WEARABLE_PIPELINE_API_PORT: ${WEARABLE_PIPELINE_API_INTERNAL_PORT:-8091}
+      RAW_ROOT: ${WEARABLE_PIPELINE_RAW_ROOT:-/data/wearable/raw}
+      PROCESSED_ROOT: ${WEARABLE_PIPELINE_PROCESSED_ROOT:-/data/wearable/processed}
+      PIPELINE_STATE_ROOT: ${WEARABLE_PIPELINE_STATE_ROOT:-/data/wearable/pipeline_runs}
+      LOG_LEVEL: ${WEARABLE_PIPELINE_LOG_LEVEL:-INFO}
+    ports:
+      - "${WEARABLE_PIPELINE_API_PORT:-18091}:${WEARABLE_PIPELINE_API_INTERNAL_PORT:-8091}"
+    volumes:
+      - wearable_raw_data:${WEARABLE_PIPELINE_RAW_ROOT:-/data/wearable/raw}
+      - wearable_processed_data:${WEARABLE_PIPELINE_PROCESSED_ROOT:-/data/wearable/processed}
+      - wearable_pipeline_state:${WEARABLE_PIPELINE_STATE_ROOT:-/data/wearable/pipeline_runs}
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - import os,urllib.request; p=os.environ.get("WEARABLE_PIPELINE_API_PORT","8091"); urllib.request.urlopen(f"http://127.0.0.1:{p}/health", timeout=2).read()
+      interval: 20s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - internal
+
   data-browser:
     image: nginx:1.27-alpine
     entrypoint: ["nginx", "-g", "daemon off;"]
     restart: unless-stopped
-    read_only: true
+    read_only: false
     tmpfs:
       - /var/cache/nginx
       - /var/run
@@ -62,7 +93,9 @@ services:
     ports:
       - "${DATA_BROWSER_BIND_ADDRESS:-0.0.0.0}:${DATA_BROWSER_PORT:-11000}:8080"
     volumes:
-      - wearable_raw_data:/data:ro
+      - wearable_raw_data:/data/wearable/raw
+      - wearable_processed_data:/data/wearable/processed
+      - wearable_pipeline_state:/data/wearable/pipeline_runs
       - ./data-browser/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - internal
@@ -75,3 +108,7 @@ networks:
 volumes:
   wearable_raw_data:
     name: ${WEARABLE_RAW_VOLUME_NAME:-homelab_wearable_raw_data}
+  wearable_processed_data:
+    name: ${WEARABLE_PROCESSED_VOLUME_NAME:-homelab_wearable_processed_data}
+  wearable_pipeline_state:
+    name: ${WEARABLE_PIPELINE_STATE_VOLUME_NAME:-homelab_wearable_pipeline_state}

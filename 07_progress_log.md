@@ -14,6 +14,19 @@ LinkedIn post idea:
 Date: 2026-04-26
 
 What was done:
+- Completed the new `wearable-pipeline-api` checkpoint: HR normalization from raw JSONL into clean Parquet with `time_alignment_report.json` and file-based tracker state in `pipeline_runs/state.json`.
+- Validated HTTP trigger flow (`POST /api/v1/pipeline/normalize/hr`), health endpoint, idempotent reruns, and persistence after service recreate in deployed Compose environment.
+- Updated `data-browser` mounts to expose `/data/wearable/raw`, `/data/wearable/processed`, and `/data/wearable/pipeline_runs` with read-write access for local admin/developer workflows.
+
+Key insight:
+Keeping normalization and tracker logic in a dedicated HTTP-triggered service preserves ingestion immutability while making processing state and artifacts inspectable and reproducible.
+
+LinkedIn post idea:
+From append-only wearable raw JSONL to reproducible clean Parquet artifacts: why a lightweight HTTP-triggered normalization layer is a practical first processing boundary.
+
+Date: 2026-04-26
+
+What was done:
 - Deployed the updated `wearable-ingestion-api` using the repository Docker Compose workflow.
 - Completed post-deployment validation for the new upload contract (`stream_type`, `source`, `collection`) with default `X-User-ID` fallback behavior.
 - Verified append-only raw persistence to one `chunks.jsonl` per session/stream and confirmed stored records include `user_id` plus `server.received_at_server`.
