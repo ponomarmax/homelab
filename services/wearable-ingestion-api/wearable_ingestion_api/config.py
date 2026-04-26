@@ -13,12 +13,7 @@ ENV_RAW_ROOT = "WEARABLE_INGESTION_RAW_DATA_PATH"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8090
-DEFAULT_RAW_ROOT = "/data/raw/wearable"
-
-
-def resolve_default_raw_root() -> Path:
-    repo_root = Path(__file__).resolve().parents[3]
-    return repo_root / "data" / "raw" / "wearable"
+DEFAULT_RAW_ROOT = "/data/wearable/raw"
 
 
 def resolve_host() -> str:
@@ -33,4 +28,4 @@ def resolve_raw_root_from_env() -> Path:
     raw_root = os.environ.get(ENV_RAW_ROOT)
     if raw_root:
         return Path(raw_root)
-    return resolve_default_raw_root()
+    return Path(DEFAULT_RAW_ROOT)

@@ -11,6 +11,23 @@ LinkedIn post idea:
 
 ## Entries
 
+Date: 2026-04-26
+
+What was done:
+- Deployed the updated `wearable-ingestion-api` using the repository Docker Compose workflow.
+- Completed post-deployment validation for the new upload contract (`stream_type`, `source`, `collection`) with default `X-User-ID` fallback behavior.
+- Verified append-only raw persistence to one `chunks.jsonl` per session/stream and confirmed stored records include `user_id` plus `server.received_at_server`.
+- Updated Compose and environment example defaults to use `/data/wearable/raw`, then redeployed and revalidated.
+- Recreated the service and confirmed raw artifacts persist.
+- Removed hardcoded raw Docker volume name by making it configurable via `WEARABLE_RAW_VOLUME_NAME`.
+- Verified `wearable-ingestion-api` and `data-browser` use the same Docker volume and that `data-browser` can read the same uploaded JSONL artifacts.
+
+Key insight:
+Runtime defaults in Compose and env templates must stay aligned with service-level defaults, or deployment can silently keep legacy storage paths even when application code is updated.
+
+LinkedIn post idea:
+How a post-deploy checklist caught a config-default mismatch and ensured the raw-ingestion contract change was truly effective in production.
+
 Date: 2026-04-25
 
 What was done:

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -21,6 +19,7 @@ from .config import (
     resolve_raw_root_from_env,
 )
 from .models import AckResponse, AckStorage, ErrorResponse, UploadChunkRequest
+from .raw_storage import append_chunk_jsonl
 from .validation import validate_upload_chunk_contract
 
 logger = logging.getLogger(__name__)
@@ -28,23 +27,6 @@ logger = logging.getLogger(__name__)
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def sanitize_segment(value: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9._-]", "_", value)
-
-
-def append_jsonl(raw_root: Path, session_id: str, stream_id: str, chunk: dict[str, object]) -> str:
-    session_dir = raw_root / sanitize_segment(session_id)
-    session_dir.mkdir(parents=True, exist_ok=True)
-
-    target_file = session_dir / f"{sanitize_segment(stream_id)}.jsonl"
-    raw_line = json.dumps(chunk, separators=(",", ":"), ensure_ascii=False)
-    with target_file.open("a", encoding="utf-8") as handle:
-        handle.write(raw_line)
-        handle.write("\n")
-
-    return str(target_file)
 
 
 def ack_response(chunk: UploadChunkRequest, received_at_server: str, storage_path: str) -> AckResponse:
@@ -132,6 +114,11 @@ def create_app(raw_root: Path) -> FastAPI:
         chunk: UploadChunkRequest = Body(..., description="UploadChunk transport contract payload."),
     ) -> AckResponse | JSONResponse:
         raw_chunk = await request.json()
+        if isinstance(raw_chunk, dict):
+            time_obj = raw_chunk.get("time")
+            if isinstance(time_obj, dict):
+                time_obj.pop("received_at_server", None)
+
         error_code, issues = validate_upload_chunk_contract(raw_chunk)
         if error_code:
             logger.warning(
@@ -154,9 +141,22 @@ def create_app(raw_root: Path) -> FastAPI:
             )
 
         received_at_server = utc_now_iso()
+        user_id = request.headers.get("X-User-ID", "1")
+        persisted_record = dict(raw_chunk)
+        persisted_record["user_id"] = user_id
+        persisted_record["server"] = {"received_at_server": received_at_server}
 
         try:
-            storage_path = append_jsonl(app.state.raw_root, chunk.session_id, chunk.stream_id, raw_chunk)
+            storage_path = append_chunk_jsonl(
+                raw_root=app.state.raw_root,
+                user_id=user_id,
+                vendor=chunk.source.vendor,
+                device_model=chunk.source.device_model,
+                received_at_server=received_at_server,
+                session_id=chunk.session_id,
+                stream_type=chunk.stream_type,
+                record=persisted_record,
+            )
         except OSError as exc:
             logger.exception(
                 "upload_persistence_failed",
@@ -164,6 +164,7 @@ def create_app(raw_root: Path) -> FastAPI:
                     "chunk_id": chunk.chunk_id,
                     "session_id": chunk.session_id,
                     "stream_id": chunk.stream_id,
+                    "stream_type": chunk.stream_type,
                 },
             )
             return JSONResponse(
@@ -181,6 +182,8 @@ def create_app(raw_root: Path) -> FastAPI:
                 "chunk_id": chunk.chunk_id,
                 "session_id": chunk.session_id,
                 "stream_id": chunk.stream_id,
+                "stream_type": chunk.stream_type,
+                "user_id": user_id,
                 "storage_path": storage_path,
             },
         )

@@ -25,8 +25,18 @@ def build_valid_chunk() -> dict[str, object]:
         "chunk_id": "chunk-real-001",
         "session_id": "session-real-001",
         "stream_id": "stream-hr-001",
+        "stream_type": "hr",
         "sequence": 1,
+        "source": {
+            "vendor": "polar",
+            "device_model": "verity_sense",
+            "device_id": "dev-123",
+        },
+        "collection": {
+            "mode": "online_live",
+        },
         "time": {
+            "device_time_reference": "ref-001",
             "first_sample_received_at_collector": "2026-04-25T10:00:00Z",
             "uploaded_at_collector": "2026-04-25T10:00:01Z",
         },
@@ -64,10 +74,10 @@ class IngestionApiTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def test_upload_success_writes_raw_jsonl_and_returns_ack(self) -> None:
+    def test_upload_creates_expected_directory_structure_and_file(self) -> None:
         chunk = build_valid_chunk()
 
-        response = self.client.post("/upload-chunk", json=chunk)
+        response = self.client.post("/upload-chunk", json=chunk, headers={"X-User-ID": "42"})
         self.assertEqual(response.status_code, 200)
 
         payload = response.json()
@@ -78,13 +88,24 @@ class IngestionApiTests(unittest.TestCase):
 
         raw_path = Path(payload["storage"]["storage_path"])
         self.assertTrue(raw_path.exists())
+        self.assertEqual(raw_path.name, "chunks.jsonl")
+        relative_parts = raw_path.relative_to(self.raw_root).parts
+        self.assertEqual(relative_parts[0], "user_id=42")
+        self.assertEqual(relative_parts[1], "source=polar_verity_sense")
+        self.assertTrue(relative_parts[2].startswith("date="))
+        self.assertEqual(relative_parts[3], "session_id=session-real-001")
+        self.assertEqual(relative_parts[4], "streams")
+        self.assertEqual(relative_parts[5], "hr")
+        self.assertEqual(relative_parts[6], "chunks.jsonl")
 
         lines = raw_path.read_text(encoding="utf-8").strip().splitlines()
         self.assertEqual(len(lines), 1)
 
         stored = json.loads(lines[0])
-        self.assertEqual(stored, chunk)
-        self.assertNotIn("received_at_server", stored["time"])
+        self.assertEqual(stored["chunk_id"], chunk["chunk_id"])
+        self.assertEqual(stored["user_id"], "42")
+        self.assertIn("server", stored)
+        self.assertIn("received_at_server", stored["server"])
 
     def test_health_endpoint_returns_ok(self) -> None:
         response = self.client.get("/healthz")
@@ -108,43 +129,62 @@ class IngestionApiTests(unittest.TestCase):
         persisted_files = list(self.raw_root.rglob("*.jsonl"))
         self.assertEqual(persisted_files, [])
 
-    def test_arbitrary_payload_shape_is_accepted(self) -> None:
+    def test_data_is_appended_for_multiple_requests(self) -> None:
         chunk = build_valid_chunk()
-        chunk["payload"] = {"samples": [{"hr": "not-an-int"}], "opaque": {"nested": ["value"]}}
+        response1 = self.client.post("/upload-chunk", json=chunk, headers={"X-User-ID": "9"})
+        self.assertEqual(response1.status_code, 200)
+
+        chunk_2 = build_valid_chunk()
+        chunk_2["chunk_id"] = "chunk-real-002"
+        chunk_2["sequence"] = 2
+        response2 = self.client.post("/upload-chunk", json=chunk_2, headers={"X-User-ID": "9"})
+        self.assertEqual(response2.status_code, 200)
+
+        raw_path = Path(response1.json()["storage"]["storage_path"])
+        self.assertEqual(raw_path, Path(response2.json()["storage"]["storage_path"]))
+        lines = raw_path.read_text(encoding="utf-8").strip().splitlines()
+        self.assertEqual(len(lines), 2)
+
+        stored_first = json.loads(lines[0])
+        stored_second = json.loads(lines[1])
+        self.assertEqual(stored_first["chunk_id"], "chunk-real-001")
+        self.assertEqual(stored_second["chunk_id"], "chunk-real-002")
+
+    def test_missing_user_header_falls_back_to_default_user_id(self) -> None:
+        chunk = build_valid_chunk()
 
         response = self.client.post("/upload-chunk", json=chunk)
         self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertTrue(payload["accepted"])
-        self.assertEqual(payload["status"], "accepted")
 
-    def test_payload_without_samples_is_accepted(self) -> None:
-        chunk = build_valid_chunk()
-        chunk["payload"] = {"events": [{"kind": "marker", "value": 1}], "metadata": {"source": "custom"}}
-
-        response = self.client.post("/upload-chunk", json=chunk)
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertTrue(payload["accepted"])
-
-        raw_path = Path(payload["storage"]["storage_path"])
+        raw_path = Path(response.json()["storage"]["storage_path"])
+        self.assertIn("/user_id=1/", str(raw_path))
         stored = json.loads(raw_path.read_text(encoding="utf-8").strip().splitlines()[0])
-        self.assertEqual(stored["payload"], chunk["payload"])
+        self.assertEqual(stored["user_id"], "1")
 
-    def test_unknown_payload_schema_is_accepted(self) -> None:
+    def test_server_received_timestamp_is_added(self) -> None:
         chunk = build_valid_chunk()
-        chunk["transport"] = {
-            "encoding": "json",
-            "compression": "none",
-            "payload_schema": "polar.unknown",
-            "payload_version": "99.0",
-        }
 
         response = self.client.post("/upload-chunk", json=chunk)
         self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertTrue(payload["accepted"])
-        self.assertEqual(payload["status"], "accepted")
+
+        raw_path = Path(response.json()["storage"]["storage_path"])
+        stored = json.loads(raw_path.read_text(encoding="utf-8").strip().splitlines()[0])
+        self.assertIn("server", stored)
+        self.assertIn("received_at_server", stored["server"])
+        self.assertTrue(stored["server"]["received_at_server"].endswith("Z"))
+
+    def test_client_received_at_server_field_is_ignored(self) -> None:
+        chunk = build_valid_chunk()
+        chunk["time"]["received_at_server"] = "1999-01-01T00:00:00Z"
+
+        response = self.client.post("/upload-chunk", json=chunk)
+        self.assertEqual(response.status_code, 200)
+
+        raw_path = Path(response.json()["storage"]["storage_path"])
+        stored = json.loads(raw_path.read_text(encoding="utf-8").strip().splitlines()[0])
+        self.assertNotIn("received_at_server", stored["time"])
+        self.assertIn("received_at_server", stored["server"])
+        self.assertNotEqual(stored["server"]["received_at_server"], "1999-01-01T00:00:00Z")
 
     def test_openapi_exposes_typed_contract_models(self) -> None:
         response = self.client.get("/openapi.json")

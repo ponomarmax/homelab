@@ -11,17 +11,22 @@ class ContractModel(BaseModel):
 
 
 class UploadChunkTime(ContractModel):
-    device_time_reference: str | None = Field(
-        default=None, min_length=1, description="Opaque device time reference from collector."
-    )
+    model_config = ConfigDict(extra="ignore")
+    device_time_reference: str = Field(..., min_length=1, description="Opaque device time reference from collector.")
     first_sample_received_at_collector: datetime = Field(
         ..., description="Collector receive time for the first sample in this chunk."
     )
     uploaded_at_collector: datetime = Field(..., description="Collector upload time.")
-    received_at_server: datetime | None = Field(
-        default=None,
-        description="Optional server receive time from caller; ingestion service does not mutate it.",
-    )
+
+
+class UploadChunkSource(ContractModel):
+    vendor: str = Field(..., min_length=1, description="Source device vendor.")
+    device_model: str = Field(..., min_length=1, description="Source device model.")
+    device_id: str | None = Field(default=None, description="Optional source device identifier.")
+
+
+class UploadChunkCollection(ContractModel):
+    mode: str = Field(..., min_length=1, description="Collection mode.")
 
 
 class UploadChunkTransport(ContractModel):
@@ -38,7 +43,10 @@ class UploadChunkRequest(ContractModel):
     chunk_id: str = Field(..., min_length=1, description="Unique chunk id from collector.")
     session_id: str = Field(..., min_length=1, description="Session id reference.")
     stream_id: str = Field(..., min_length=1, description="Stream id reference.")
+    stream_type: str = Field(..., min_length=1, description="Stream type reference.")
     sequence: int = Field(..., ge=1, description="Monotonic chunk sequence number.")
+    source: UploadChunkSource = Field(..., description="Source metadata.")
+    collection: UploadChunkCollection = Field(..., description="Collection metadata.")
     time: UploadChunkTime = Field(..., description="Collector/server transport timing metadata.")
     transport: UploadChunkTransport = Field(..., description="Transport metadata for payload.")
     payload: dict[str, Any] = Field(

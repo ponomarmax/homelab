@@ -20,8 +20,18 @@ class ValidationAndSchemaTests(unittest.TestCase):
             "chunk_id": "chunk-001",
             "session_id": "session-001",
             "stream_id": "stream-hr-001",
+            "stream_type": "hr",
             "sequence": 1,
+            "source": {
+                "vendor": "polar",
+                "device_model": "verity_sense",
+                "device_id": "dev-01",
+            },
+            "collection": {
+                "mode": "online_live",
+            },
             "time": {
+                "device_time_reference": "ref-1",
                 "first_sample_received_at_collector": "2026-04-25T10:00:00Z",
                 "uploaded_at_collector": "2026-04-25T10:00:01Z",
             },
@@ -44,7 +54,17 @@ class ValidationAndSchemaTests(unittest.TestCase):
             "chunk_id": "chunk-001",
             "session_id": "session-001",
             "stream_id": "stream-hr-001",
+            "stream_type": "hr",
+            "source": {
+                "vendor": "polar",
+                "device_model": "verity_sense",
+                "device_id": "dev-01",
+            },
+            "collection": {
+                "mode": "online_live",
+            },
             "time": {
+                "device_time_reference": "ref-1",
                 "first_sample_received_at_collector": "2026-04-25T10:00:00Z",
                 "uploaded_at_collector": "2026-04-25T10:00:01Z",
             },
@@ -61,16 +81,27 @@ class ValidationAndSchemaTests(unittest.TestCase):
         self.assertEqual(error_code, "validation_error")
         self.assertTrue(any(item["field"] == "sequence" for item in issues))
 
-    def test_chunk_time_with_legacy_chunk_level_field_is_rejected(self) -> None:
+    def test_chunk_time_with_legacy_server_timestamp_field_is_ignored(self) -> None:
         chunk = {
             "schema_version": "1.0",
             "chunk_id": "chunk-001",
             "session_id": "session-001",
             "stream_id": "stream-hr-001",
+            "stream_type": "hr",
             "sequence": 1,
+            "source": {
+                "vendor": "polar",
+                "device_model": "verity_sense",
+                "device_id": "dev-01",
+            },
+            "collection": {
+                "mode": "online_live",
+            },
             "time": {
-                "received_at_collector": "2026-04-25T10:00:00Z",
+                "device_time_reference": "ref-1",
+                "received_at_server": "2026-04-25T10:00:00Z",
                 "uploaded_at_collector": "2026-04-25T10:00:01Z",
+                "first_sample_received_at_collector": "2026-04-25T10:00:00Z",
             },
             "transport": {
                 "encoding": "json",
@@ -82,8 +113,8 @@ class ValidationAndSchemaTests(unittest.TestCase):
         }
 
         error_code, issues = validate_upload_chunk_contract(chunk)
-        self.assertEqual(error_code, "validation_error")
-        self.assertTrue(any(item["field"] == "time.first_sample_received_at_collector" for item in issues))
+        self.assertIsNone(error_code)
+        self.assertEqual(issues, [])
 
 
 if __name__ == "__main__":
