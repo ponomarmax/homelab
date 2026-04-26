@@ -1,0 +1,5 @@
+data_cache/
+.env
+.venv/
+data_cache/**/*.parquet
+data_cache/**/*.json
