@@ -27,6 +27,9 @@ Single-node homelab platform for infrastructure, observability, Home Assistant, 
 - Ingestion must not do normalization, features, LLM calls, or Telegram delivery.
 - Stateful services must declare persistence and be validated after recreate.
 - A service is not integrated only because the container starts.
+- Session summary is the deterministic factual artifact after window features.
+- Do not call it night summary unless the task is explicitly sleep/night-specific.
+- LLM interpretation, prompt building, report generation, and Telegram delivery belong to a downstream insights/reporting layer.
 
 ## Output
 Return only:

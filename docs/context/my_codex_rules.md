@@ -26,7 +26,7 @@
 
 ## Wearable pipeline
 MVP flow:
-Polar HR -> iOS Collector -> ingestion API -> raw JSONL -> nightly job -> clean Parquet -> window features -> summary JSON -> report MD -> Telegram.
+Polar HR -> iOS Collector -> ingestion API -> raw JSONL -> pipeline processing -> clean Parquet -> window features -> session summary JSON -> insights/report MD -> communication delivery.
 
 Rules:
 - Raw JSONL is append-only truth.
@@ -34,6 +34,10 @@ Rules:
 - Normalizer expands batches but does not aggregate.
 - Features are the first aggregation layer.
 - Add new streams through handlers, not pipeline rewrites.
+- Session summary is deterministic and non-LLM.
+- Use `session_summary` instead of `nightly_summary` unless the task is explicitly sleep/night-specific.
+- LLM interpretation, prompt building, response validation, report generation, and Telegram delivery belong to a downstream insights/reporting layer.
+- Notebooks and ML experiments are exploration layers and must not be required for the production pipeline.
 
 ## Handoff
 Keep the final answer short:

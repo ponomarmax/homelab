@@ -79,14 +79,21 @@ tree -L 3 -I ".git|node_modules|venv|.venv|__pycache__|.pytest_cache|data|dist|b
 ├── services
 │   ├── visualization
 │   │   └── README.md
-│   └── wearable-ingestion-api
+│   ├── wearable-ingestion-api
+│   │   ├── Dockerfile
+│   │   ├── README.md
+│   │   ├── app.py
+│   │   ├── requirements.txt
+│   │   ├── scripts
+│   │   ├── tests
+│   │   └── wearable_ingestion_api
+│   └── wearable-pipeline-api
 │       ├── Dockerfile
 │       ├── README.md
 │       ├── app.py
 │       ├── requirements.txt
-│       ├── scripts
 │       ├── tests
-│       └── wearable_ingestion_api
+│       └── wearable_pipeline_api
 └── tools
     ├── README.md
     └── scripts

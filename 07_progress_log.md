@@ -10,6 +10,27 @@ LinkedIn post idea:
 ---
 
 ## Entries
+Date: 2026-04-26
+
+What was done:
+- Implemented deterministic `build_session_summary` step in the wearable pipeline (HR MVP).
+- Generated session-level `session_summary.json` artifact based on window features (30s, 1m, 5m).
+- Designed extensible summary structure with per-stream (HR) breakdown and session-level aggregation.
+- Integrated summary step with existing pipeline run tracking (`/data/wearable/pipeline_runs/`).
+- Deployed updated `wearable-pipeline-api` using Docker Compose workflow.
+- Completed post-deployment validation:
+  - verified summary generation for real session
+  - validated JSON structure and metrics correctness
+  - confirmed idempotent reruns
+  - verified handling of partial/missing window inputs
+  - validated persistence after container recreate
+  - checked logs for warnings and edge cases
+
+Key insight:
+A deterministic session summary creates a stable and inspectable boundary between raw feature engineering and future interpretation layers (LLM, reports), allowing safe iteration on analytics without breaking the core pipeline.
+
+LinkedIn post idea:
+From raw HR streams to a deterministic session summary: how to design a stable analytical boundary before introducing AI or ML into a data pipeline.
 
 Date: 2026-04-26
 

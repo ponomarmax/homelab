@@ -15,7 +15,6 @@ PHASE 1 — ANALYSIS
 проаналізувати мою постановку задачі перед тим, як генерувати Codex prompt.
 
 Використай мої sources як базу знань:
-- prompt_templates.md
 - repo_tree.md
 - AGENTS.md
 - AGENTS.light.md
@@ -32,6 +31,7 @@ PHASE 1 — ANALYSIS
 - 05_workflow.md
 - 06_linkedin_strategy.md
 - 04_constraints.md
+- my_codex_rules.md
 
 Правила:
 1. НЕ генеруй Codex prompt у цій фазі.

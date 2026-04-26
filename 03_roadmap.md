@@ -11,10 +11,10 @@
 6. raw storage
 7. normalize
 8. features
-9. summary
+9. session summary
 10. orchestrator
-11. LLM
-12. Telegram
+11. insights / LLM interpretation
+12. communication delivery
 13. full smoke
 
 Status: documentation checkpoint defined
@@ -122,10 +122,10 @@ Planned sequence:
 - CP6: persist raw JSONL
 - CP7: normalize to clean Parquet
 - CP8: build window features (session-based multi-stream processing)
-- CP9: build nightly deterministic summary
+- CP9: build deterministic session summary
 - CP10: add single-container orchestrator
-- CP11: add LLM interpretation layer
-- CP12: add Telegram delivery
+- CP11: add downstream insights / LLM interpretation layer
+- CP12: add communication delivery, starting with Telegram
 - CP13: run full smoke validation
 
 Rules:

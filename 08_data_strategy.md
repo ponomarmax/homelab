@@ -108,15 +108,23 @@ The wearable pipeline should follow these layers:
    - computed per stream within a session
    - produced via step + handler architecture
 
-4. Nightly summary (`JSON`)
+4. Session summary (`JSON`)
    - deterministic
    - non-LLM
+   - session-based, not necessarily night-based
+   - may represent a night session, daytime session, test session, or long-running wearable session
+   - compact factual artifact for validation, reporting, and future interpretation
 
-5. Report (`Markdown`)
+5. Insights / report (`Markdown` / `JSON`)
    - interpretation layer only
+   - may use LLM later
+   - must be based on deterministic session summary artifacts
+   - must not replace deterministic pipeline outputs
 
-6. Telegram output
-   - final delivery layer
+6. Communication output
+   - Telegram or other delivery channels
+   - final downstream layer
+   - downstream of report generation
 
 ---
 

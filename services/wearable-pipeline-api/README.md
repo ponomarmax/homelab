@@ -2,6 +2,11 @@
 
 Lightweight processing API for wearable raw JSONL artifacts.
 
+Pipeline flow:
+- `normalize`
+- `window_features`
+- `build_session_summary` (deterministic `session_summary.json` artifact)
+
 ## Endpoints
 
 - `GET /health`

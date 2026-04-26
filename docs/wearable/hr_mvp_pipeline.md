@@ -18,7 +18,7 @@ This checkpoint does **not** introduce:
 
 Strict MVP flow:
 
-`Polar Verity Sense HR -> iOS Collector -> wearable-ingestion-api -> raw JSONL -> nightly-orchestrator-job -> normalize -> clean Parquet -> window features -> nightly summary -> LLM interpretation -> Telegram`
+`pipeline processing -> normalize -> clean Parquet -> window features -> session_summary.json -> insights/reporting layer -> optional Telegram delivery`
 
 MVP focus:
 - heart rate only
@@ -45,7 +45,7 @@ iOS Collector
   -> wearable-ingestion-api
   -> structured raw storage (append-only JSONL)
 
-`nightly-orchestrator-job -> normalize -> clean Parquet -> window features -> summary JSON -> (Here a place for LLM communication but let mock it for a while) report MD -> Telegram`
+`wearable-pipeline-api -> normalize -> clean Parquet -> window features -> summary JSON -> (Here a place for LLM communication but let mock it for a while) report MD -> Telegram`
 
 The ingestion API is always-on.
 The orchestrator is a single-container batch-style job.
@@ -103,24 +103,60 @@ Must **not** do:
 - one `chunks.jsonl` file per session per stream_type
 - ingestion does not modify payloads
 
-### 3. `nightly-orchestrator-job`
+### 3. `wearable-pipeline-api` / pipeline processing
 
 Role:
-- run pipeline steps
+- run deterministic pipeline steps
 - track run status
-- produce artifacts
+- produce processing artifacts
 - remain extensible for future streams
 
-The orchestrator is deterministic workflow logic, **not** an AI agent.
+The pipeline is deterministic workflow logic, **not** an AI agent.
 
-Initial steps:
+Initial deterministic steps:
 - `normalize_hr`
 - `build_window_features`
-- `build_nightly_summary`
-- `generate_llm_report`
-- `send_telegram`
+- `build_session_summary`
+
+Rules:
+- session summary is computed from processed artifacts, not from raw ingestion directly
+- session summary is deterministic and non-LLM
+- session summary may represent a night session, daytime session, test session, or long-running wearable session
+- session summary is the compact factual artifact used by future reporting and interpretation layers
 
 ---
+
+### 4. Future `wearable-insights-job`
+
+Role:
+- read deterministic `session_summary.json`
+- build prompts for optional LLM interpretation
+- call an LLM provider when enabled
+- validate and store LLM responses
+- generate human-readable reports
+- send reports to communication channels such as Telegram
+
+This service/job is downstream of deterministic processing.
+
+It must not:
+- read raw ingestion as its primary input
+- normalize timestamps
+- build window features
+- mutate deterministic artifacts
+- be required for the core processing pipeline to succeed
+
+Recommended first inputs:
+- `session_summary.json`
+- pipeline run metadata
+- artifact paths
+
+Recommended outputs:
+- `llm_prompt.json` or `prompt.md`
+- `llm_response.json`
+- `report.md`
+- delivery status metadata
+
+
 
 ## iOS Collector Architecture
 
@@ -233,7 +269,7 @@ Rules:
 - first aggregation layer
 - window sizes begin with `30s`, `1m`, and `5m`
 
-### 4. Nightly Summary
+### 4. Session Summary
 
 Format:
 - JSON
@@ -241,21 +277,27 @@ Format:
 Rules:
 - deterministic
 - computed without LLM
+- session-based, not necessarily night-based
+- compact factual artifact for validation, reporting, and future interpretation
 
-### 5. Report
+### 5. Insights / Report
 
 Format:
-- Markdown
+- Markdown and/or JSON
 
 Rules:
 - interpretation layer only
-- generated from deterministic summary artifacts
+- may use LLM later
+- generated from deterministic session summary artifacts
+- not required for deterministic pipeline success
 
-### 6. Telegram Output
+### 6. Communication Output
 
 Rules:
 - final delivery layer
 - downstream of report generation
+- first planned channel: Telegram
+- future channels may include email, dashboard annotations, or local notifications
 
 ---
 

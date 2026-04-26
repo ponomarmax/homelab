@@ -48,3 +48,4 @@ class StepRunRecord:
 class PipelineRunSummary:
     normalize: dict[str, Any]
     window_features: dict[str, Any]
+    session_summary: dict[str, Any]

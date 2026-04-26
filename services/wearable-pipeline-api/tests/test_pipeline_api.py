@@ -277,8 +277,10 @@ class PipelineApiTests(unittest.TestCase):
 
         normalize_states = sorted((self.state_root / "normalize").glob("*.json"))
         features_states = sorted((self.state_root / "window_features").glob("*.json"))
+        summary_states = sorted((self.state_root / "build_session_summary").glob("*.json"))
         self.assertEqual(len(normalize_states), 1)
         self.assertEqual(len(features_states), 1)
+        self.assertEqual(len(summary_states), 1)
 
         state_payload = json.loads(normalize_states[0].read_text(encoding="utf-8"))
         self.assertIn("per_stream_results", state_payload)
@@ -384,6 +386,7 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(payload["sessions_discovered"], 1)
         self.assertEqual(len(payload["normalize_runs"]), 1)
         self.assertEqual(len(payload["window_feature_runs"]), 1)
+        self.assertEqual(len(payload["session_summary_runs"]), 1)
 
 
 if __name__ == "__main__":

@@ -27,3 +27,4 @@ class PipelineRunResponse(BaseModel):
     sessions_discovered: int
     normalize_runs: list[StepRun]
     window_feature_runs: list[StepRun]
+    session_summary_runs: list[StepRun]
