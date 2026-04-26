@@ -1,0 +1,19 @@
+{
+  "sample_rate_hz": 130,
+  "units": {
+    "ecg_uv": "uV",
+    "device_time_ns": "ns_since_2000_epoch"
+  },
+  "samples": [
+    {
+      "device_time_ns": 831889595100000000,
+      "received_at_collector": "2026-04-26T12:30:11.001Z",
+      "ecg_uv": 145
+    },
+    {
+      "device_time_ns": 831889595107692307,
+      "received_at_collector": "2026-04-26T12:30:11.009Z",
+      "ecg_uv": 138
+    }
+  ]
+}

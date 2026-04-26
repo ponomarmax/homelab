@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://homelab.local/schemas/payloads/polar/polar.acc.v1.schema.json",
-  "title": "polar.acc v1",
+  "$id": "https://homelab.local/schemas/payloads/polar/polar.ecg.v1.schema.json",
+  "title": "polar.ecg v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -12,27 +12,15 @@
       "type": "number",
       "exclusiveMinimum": 0
     },
-    "range_mg": {
-      "type": "integer",
-      "exclusiveMinimum": 0
-    },
     "units": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "x_mg",
-        "y_mg",
-        "z_mg",
+        "ecg_uv",
         "device_time_ns"
       ],
       "properties": {
-        "x_mg": {
-          "type": "string"
-        },
-        "y_mg": {
-          "type": "string"
-        },
-        "z_mg": {
+        "ecg_uv": {
           "type": "string"
         },
         "device_time_ns": {
@@ -49,9 +37,7 @@
         "required": [
           "device_time_ns",
           "received_at_collector",
-          "x_mg",
-          "y_mg",
-          "z_mg"
+          "ecg_uv"
         ],
         "properties": {
           "device_time_ns": {
@@ -62,13 +48,7 @@
             "type": "string",
             "format": "date-time"
           },
-          "x_mg": {
-            "type": "number"
-          },
-          "y_mg": {
-            "type": "number"
-          },
-          "z_mg": {
+          "ecg_uv": {
             "type": "number"
           }
         }

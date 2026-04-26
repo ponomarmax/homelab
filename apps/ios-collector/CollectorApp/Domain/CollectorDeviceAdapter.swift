@@ -11,5 +11,12 @@ protocol CollectorDeviceAdapter: AnyObject {
     func selectDevice(_ device: CollectorDevice) throws
     func connect() async throws
     func disconnect()
+    func streamProviders() -> [HeartRateStreamProviding]
     func heartRateStreamProvider() -> HeartRateStreamProviding?
+}
+
+extension CollectorDeviceAdapter {
+    func heartRateStreamProvider() -> HeartRateStreamProviding? {
+        streamProviders().first(where: { $0.streamType == .heartRate })
+    }
 }

@@ -3,10 +3,11 @@ import Foundation
 final class HrSampleDebugExporter {
     private struct SampleLine: Codable {
         let session_id: String
+        let stream: String
         let sample_seq: Int
-        let hr_bpm: Int
+        let hr_bpm: Int?
         let collector_received_at_utc: String
-        let stream_data: PolarHrStreamData?
+        let payload: CollectorSamplePayload
     }
 
     private let fileManager: FileManager
@@ -58,10 +59,11 @@ final class HrSampleDebugExporter {
 
         let line = SampleLine(
             session_id: sessionID.uuidString,
+            stream: sample.stream.transportType,
             sample_seq: sample.sampleSequenceNumber,
-            hr_bpm: sample.hrBPM,
+            hr_bpm: sample.stream == .heartRate ? sample.hrBPM : nil,
             collector_received_at_utc: timestampFormatter.string(from: sample.collectorReceivedAtUTC),
-            stream_data: sample.streamData
+            payload: sample.payload
         )
 
         do {

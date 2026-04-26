@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homelab.local/schemas/payloads/polar/polar.device_battery.v1.schema.json",
+  "title": "polar.device_battery v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_type",
+    "received_at_collector",
+    "units"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "callback_update",
+        "poll_snapshot",
+        "battery_unavailable"
+      ]
+    },
+    "battery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "level_percent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "charge_state": {
+          "type": "string"
+        },
+        "power_sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "sdk_raw": {
+      "type": "string"
+    },
+    "unavailable_reason": {
+      "type": "string"
+    },
+    "received_at_collector": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "units": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "level_percent"
+      ],
+      "properties": {
+        "level_percent": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

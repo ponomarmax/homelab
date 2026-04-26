@@ -1,0 +1,17 @@
+{
+  "event_type": "callback_update",
+  "battery": {
+    "level_percent": 88,
+    "charge_state": "charging",
+    "power_sources": [
+      "battery_present",
+      "wired_connected",
+      "wireless_not_connected"
+    ]
+  },
+  "sdk_raw": "battery_level_callback",
+  "received_at_collector": "2026-04-26T12:31:01.904Z",
+  "units": {
+    "level_percent": "percent"
+  }
+}

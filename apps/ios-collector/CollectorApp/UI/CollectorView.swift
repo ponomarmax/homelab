@@ -11,7 +11,7 @@ struct CollectorView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("Wearable HR Collector")
+                    Text("Wearable Polar Collector")
                         .font(.largeTitle.weight(.semibold))
 
                     statusCard
@@ -42,6 +42,10 @@ struct CollectorView: View {
             statusRow(
                 title: "Session",
                 value: collectorCore.activeSession?.sessionID.uuidString ?? "Not started"
+            )
+            statusRow(
+                title: "Streams",
+                value: collectorCore.activeSession?.supportedStreams.map(\.displayName).joined(separator: ", ") ?? "Not started"
             )
         }
         .padding()
@@ -128,7 +132,7 @@ struct CollectorView: View {
                 Text("JSONL file: \(url.lastPathComponent)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                Text("Each HR sample is appended immediately. Prepare Chunk does not export data.")
+                Text("Each raw stream event is appended immediately. Prepare Chunk does not export data.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 

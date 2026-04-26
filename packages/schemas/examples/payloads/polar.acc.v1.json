@@ -1,17 +1,26 @@
 {
-  "sample_rate_hz": 52,
+  "sample_rate_hz": 200,
+  "range_mg": 8000,
+  "units": {
+    "x_mg": "mg",
+    "y_mg": "mg",
+    "z_mg": "mg",
+    "device_time_ns": "ns_since_2000_epoch"
+  },
   "samples": [
     {
-      "offset_ns": 0,
-      "x": 10,
-      "y": -3,
-      "z": 1005
+      "device_time_ns": 831889595000000000,
+      "received_at_collector": "2026-04-26T12:30:10.221Z",
+      "x_mg": 10,
+      "y_mg": -3,
+      "z_mg": 1005
     },
     {
-      "offset_ns": 19230769,
-      "x": 12,
-      "y": -2,
-      "z": 1001
+      "device_time_ns": 831889595005000000,
+      "received_at_collector": "2026-04-26T12:30:10.226Z",
+      "x_mg": 12,
+      "y_mg": -2,
+      "z_mg": 1001
     }
   ]
 }

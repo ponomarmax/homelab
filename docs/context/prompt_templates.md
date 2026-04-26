@@ -15,6 +15,10 @@ PHASE 1 — ANALYSIS
 проаналізувати мою постановку задачі перед тим, як генерувати Codex prompt.
 
 Використай мої sources як базу знань:
+
+- polar_device_time_sync_guide.md
+- polar_battery_status_modes.md
+- polar_sdk_discovery.md
 - repo_tree.md
 - AGENTS.md
 - AGENTS.light.md

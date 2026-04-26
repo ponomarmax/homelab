@@ -12,6 +12,7 @@ protocol CollectorTransporting {
     func prepareUploadChunk(
         session: CollectionSession,
         streamDescriptor: StreamDescriptor,
+        streamProfile: StreamMetadataProfile,
         chunkSequenceNumber: Int,
         samples: [HeartRateSample]
     ) -> UploadChunk?

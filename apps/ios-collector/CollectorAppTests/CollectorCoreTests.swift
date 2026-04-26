@@ -36,13 +36,14 @@ final class CollectorCoreTests: XCTestCase {
         func prepareUploadChunk(
             session: CollectionSession,
             streamDescriptor: StreamDescriptor,
+            streamProfile: StreamMetadataProfile,
             chunkSequenceNumber: Int,
             samples: [HeartRateSample]
         ) -> UploadChunk? {
             chunkBuilder.buildChunk(
                 session: session,
                 streamDescriptor: streamDescriptor,
-                streamProfile: PolarHrStreamProfile.live,
+                streamProfile: streamProfile,
                 chunkSequenceNumber: chunkSequenceNumber,
                 samples: samples
             )
@@ -113,8 +114,75 @@ final class CollectorCoreTests: XCTestCase {
             connectionState = .disconnected
         }
 
+        func streamProviders() -> [HeartRateStreamProviding] {
+            [provider]
+        }
+
         func heartRateStreamProvider() -> HeartRateStreamProviding? {
             provider
+        }
+    }
+
+    final class CountingProvider: HeartRateStreamProviding {
+        let streamType: CollectorStream
+        private(set) var startCount: Int = 0
+        private(set) var stopCount: Int = 0
+
+        init(streamType: CollectorStream) {
+            self.streamType = streamType
+        }
+
+        func start(onSample: @escaping @Sendable (HeartRateSample) -> Void) {
+            startCount += 1
+        }
+
+        func stop() {
+            stopCount += 1
+        }
+    }
+
+    final class PostConnectStreamsAdapter: CollectorDeviceAdapter {
+        let deviceIdentity: CollectorDevice = CollectorDevice(
+            id: "post-connect-device",
+            name: "Polar H10",
+            vendor: "Polar",
+            model: "H10"
+        )
+        let availableStreams: [CollectorStream] = [.heartRate, .ecg, .accelerometer]
+        let sourceIdentifier: String = "polar"
+        let deviceSelectionActionTitle: String = "Scan"
+        private(set) var connectionState: ConnectionState = .disconnected
+
+        private let preConnectProviders: [HeartRateStreamProviding]
+        private let postConnectProviders: [HeartRateStreamProviding]
+
+        init(
+            preConnectProviders: [HeartRateStreamProviding],
+            postConnectProviders: [HeartRateStreamProviding]
+        ) {
+            self.preConnectProviders = preConnectProviders
+            self.postConnectProviders = postConnectProviders
+        }
+
+        func scanDevices() async throws -> [CollectorDevice] {
+            [deviceIdentity]
+        }
+
+        func selectDevice(_ device: CollectorDevice) throws {
+            connectionState = .deviceSelected
+        }
+
+        func connect() async throws {
+            connectionState = .connected
+        }
+
+        func disconnect() {
+            connectionState = .disconnected
+            postConnectProviders.forEach { $0.stop() }
+        }
+
+        func streamProviders() -> [HeartRateStreamProviding] {
+            connectionState == .connected ? postConnectProviders : preConnectProviders
         }
     }
 
@@ -155,6 +223,26 @@ final class CollectorCoreTests: XCTestCase {
         XCTAssertEqual(core.deviceActionTitle, "Select")
         XCTAssertEqual(transport.descriptorSourceInputs, ["custom-sensor-source"])
         XCTAssertEqual(core.streamDescriptor?.source, "custom-sensor-source")
+    }
+
+    func testCoreResolvesStreamProvidersAfterConnect() async {
+        let hrProvider = CountingProvider(streamType: .heartRate)
+        let ecgProvider = CountingProvider(streamType: .ecg)
+        let accProvider = CountingProvider(streamType: .accelerometer)
+
+        let adapter = PostConnectStreamsAdapter(
+            preConnectProviders: [hrProvider],
+            postConnectProviders: [hrProvider, ecgProvider, accProvider]
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.startCollection()
+
+        XCTAssertEqual(core.status, .collecting)
+        XCTAssertEqual(hrProvider.startCount, 1)
+        XCTAssertEqual(ecgProvider.startCount, 1)
+        XCTAssertEqual(accProvider.startCount, 1)
     }
 
     func testCoreBuffersSamplesAndPreparesChunk() async throws {
@@ -318,7 +406,7 @@ final class CollectorCoreTests: XCTestCase {
             autoFlushSampleCount: 20,
             autoFlushIntervalSeconds: 0.05,
             userIDHeaderValue: "2",
-            streamProfile: PolarHrStreamProfile.live
+            streamProfiles: CollectorUploadConfiguration.default.streamProfiles
         )
         let core = CollectorCore(
             adapter: MockDeviceAdapter(
@@ -354,7 +442,7 @@ final class CollectorCoreTests: XCTestCase {
             autoFlushSampleCount: 20,
             autoFlushIntervalSeconds: 30,
             userIDHeaderValue: "2",
-            streamProfile: PolarHrStreamProfile.live
+            streamProfiles: CollectorUploadConfiguration.default.streamProfiles
         )
         let core = CollectorCore(
             adapter: MockDeviceAdapter(
@@ -381,7 +469,7 @@ final class CollectorCoreTests: XCTestCase {
             autoFlushSampleCount: 20,
             autoFlushIntervalSeconds: 30,
             userIDHeaderValue: "2",
-            streamProfile: PolarHrStreamProfile.live
+            streamProfiles: CollectorUploadConfiguration.default.streamProfiles
         )
         let core = CollectorCore(
             adapter: MockDeviceAdapter(

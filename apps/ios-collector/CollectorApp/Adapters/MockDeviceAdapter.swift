@@ -8,7 +8,7 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
     let sourceIdentifier: String = "mock"
     let deviceSelectionActionTitle: String = "Select Mock Device"
 
-    private let hrProvider: HeartRateStreamProviding
+    private let providers: [HeartRateStreamProviding]
 
     init(
         deviceIdentity: CollectorDevice = CollectorDevice(
@@ -18,11 +18,12 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
             model: "Verity Sense"
         ),
         availableStreams: [CollectorStream] = [.heartRate],
-        hrProvider: HeartRateStreamProviding = MockHeartRateStreamProvider()
+        hrProvider: HeartRateStreamProviding = MockHeartRateStreamProvider(),
+        additionalProviders: [HeartRateStreamProviding] = []
     ) {
         self.deviceIdentity = deviceIdentity
         self.availableStreams = availableStreams
-        self.hrProvider = hrProvider
+        self.providers = [hrProvider] + additionalProviders
     }
 
     func scanDevices() async throws -> [CollectorDevice] {
@@ -42,11 +43,15 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
 
     func disconnect() {
         connectionState = .disconnected
-        hrProvider.stop()
+        providers.forEach { $0.stop() }
+    }
+
+    func streamProviders() -> [HeartRateStreamProviding] {
+        providers.filter { availableStreams.contains($0.streamType) }
     }
 
     func heartRateStreamProvider() -> HeartRateStreamProviding? {
-        availableStreams.contains(.heartRate) ? hrProvider : nil
+        streamProviders().first(where: { $0.streamType == .heartRate })
     }
 
     func markSelected() {

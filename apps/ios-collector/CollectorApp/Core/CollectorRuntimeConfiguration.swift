@@ -33,6 +33,7 @@ struct StreamMetadataProfile: Equatable, Codable, Sendable {
 
     let schemaVersion: String
     let streamType: String
+    let streamIDPrefix: String?
     let source: Source
     let collection: Collection
     let deviceTimeReference: String
@@ -41,6 +42,7 @@ struct StreamMetadataProfile: Equatable, Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
         case streamType = "stream_type"
+        case streamIDPrefix = "stream_id_prefix"
         case source
         case collection
         case deviceTimeReference = "device_time_reference"
@@ -48,17 +50,19 @@ struct StreamMetadataProfile: Equatable, Codable, Sendable {
     }
 
     func streamID(for sessionID: UUID) -> String {
-        "stream-\(streamType)-\(sessionID.uuidString.lowercased())"
+        let prefix = streamIDPrefix ?? streamType
+        return "stream-\(prefix)-\(sessionID.uuidString.lowercased())"
     }
 }
 
-enum PolarHrStreamProfile {
-    static let live = StreamMetadataProfile(
+enum PolarStreamProfile {
+    static let hrLive = StreamMetadataProfile(
         schemaVersion: "1.0",
         streamType: "hr",
+        streamIDPrefix: "hr",
         source: StreamMetadataProfile.Source(
             vendor: "polar",
-            deviceModel: "verity_sense",
+            deviceModel: "Polar H10",
             deviceID: nil
         ),
         collection: StreamMetadataProfile.Collection(mode: "online_live"),
@@ -70,19 +74,104 @@ enum PolarHrStreamProfile {
             payloadVersion: "1.0"
         )
     )
+
+    static let ecgLive = StreamMetadataProfile(
+        schemaVersion: "1.0",
+        streamType: "ecg",
+        streamIDPrefix: "ecg",
+        source: StreamMetadataProfile.Source(
+            vendor: "polar",
+            deviceModel: "Polar H10",
+            deviceID: nil
+        ),
+        collection: StreamMetadataProfile.Collection(mode: "online_live"),
+        deviceTimeReference: "polar:ns_since_2000_epoch",
+        transport: StreamMetadataProfile.Transport(
+            encoding: "json",
+            compression: "none",
+            payloadSchema: "polar.ecg",
+            payloadVersion: "1.0"
+        )
+    )
+
+    static let accLive = StreamMetadataProfile(
+        schemaVersion: "1.0",
+        streamType: "acc",
+        streamIDPrefix: "acc",
+        source: StreamMetadataProfile.Source(
+            vendor: "polar",
+            deviceModel: "Polar H10",
+            deviceID: nil
+        ),
+        collection: StreamMetadataProfile.Collection(mode: "online_live"),
+        deviceTimeReference: "polar:ns_since_2000_epoch",
+        transport: StreamMetadataProfile.Transport(
+            encoding: "json",
+            compression: "none",
+            payloadSchema: "polar.acc",
+            payloadVersion: "1.0"
+        )
+    )
+
+    static let batteryLive = StreamMetadataProfile(
+        schemaVersion: "1.0",
+        streamType: "unknown",
+        streamIDPrefix: "battery",
+        source: StreamMetadataProfile.Source(
+            vendor: "polar",
+            deviceModel: "Polar H10",
+            deviceID: nil
+        ),
+        collection: StreamMetadataProfile.Collection(mode: "online_live"),
+        deviceTimeReference: "collector:collectorObserved",
+        transport: StreamMetadataProfile.Transport(
+            encoding: "json",
+            compression: "none",
+            payloadSchema: "polar.device_battery",
+            payloadVersion: "1.0"
+        )
+    )
 }
 
 struct CollectorUploadConfiguration: Equatable, Sendable {
     let autoFlushSampleCount: Int
     let autoFlushIntervalSeconds: TimeInterval
     let userIDHeaderValue: String
-    let streamProfile: StreamMetadataProfile
+    let streamProfiles: [CollectorStream: StreamMetadataProfile]
+
+    var streamProfile: StreamMetadataProfile {
+        streamProfile(for: .heartRate)
+    }
+
+    func streamProfile(for stream: CollectorStream) -> StreamMetadataProfile {
+        streamProfiles[stream] ?? PolarStreamProfile.hrLive
+    }
+
+    func sampleFlushCount(for stream: CollectorStream) -> Int {
+        switch stream {
+        case .heartRate:
+            return autoFlushSampleCount
+        case .ecg:
+            return 260
+        case .accelerometer:
+            return 200
+        case .battery:
+            return 1
+        default:
+            return autoFlushSampleCount
+        }
+    }
 
     static let `default` = CollectorUploadConfiguration(
         autoFlushSampleCount: 20,
         autoFlushIntervalSeconds: 30,
         userIDHeaderValue: "2",
-        streamProfile: PolarHrStreamProfile.live
+        streamProfiles: [
+            .heartRate: PolarStreamProfile.hrLive,
+            .ecg: PolarStreamProfile.ecgLive,
+            .accelerometer: PolarStreamProfile.accLive,
+            .battery: PolarStreamProfile.batteryLive
+        ]
     )
 }
 

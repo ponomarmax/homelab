@@ -47,10 +47,14 @@ final class CollectorCore: ObservableObject {
     private let sleepProvider: @Sendable (UInt64) async -> Void
     private let debugExporter = HrSampleDebugExporter()
     private let isVerboseLoggingEnabled: Bool
+
     private var pendingUploadChunks: [UploadChunk] = []
-    private var bufferedSamples: [HeartRateSample] = []
-    private var nextChunkSequenceNumber: Int = 1
-    private var lastFlushAtUTC: Date?
+    private var bufferedSamplesByStream: [CollectorStream: [HeartRateSample]] = [:]
+    private var streamDescriptorsByType: [CollectorStream: StreamDescriptor] = [:]
+    private var nextChunkSequenceNumberByStream: [CollectorStream: Int] = [:]
+    private var lastFlushAtUTCByStream: [CollectorStream: Date] = [:]
+    private var activeProviders: [HeartRateStreamProviding] = []
+
     private var autoFlushTask: Task<Void, Never>?
     private var isAutoFlushing: Bool = false
 
@@ -204,7 +208,6 @@ final class CollectorCore: ObservableObject {
 
     func startCollection() async {
         guard status == .deviceSelected || status == .stopped else { return }
-        guard let provider = adapter.heartRateStreamProvider() else { return }
         guard selectedDevice != nil else { return }
 
         clearFailureState()
@@ -212,17 +215,20 @@ final class CollectorCore: ObservableObject {
         isConnectingDevice = true
         activityMessage = "Connecting to device..."
         log("Start tapped")
+
         totalSamplesReceived = 0
-        bufferedSamples = []
+        bufferedSamplesByStream.removeAll()
         bufferedSamplesCount = 0
         pendingUploadChunks = []
         pendingUploadChunksCount = 0
-        nextChunkSequenceNumber = 1
-        lastFlushAtUTC = nowProvider()
+        nextChunkSequenceNumberByStream.removeAll()
+        lastFlushAtUTCByStream.removeAll()
         latestHeartRateSample = nil
         lastPreparedChunk = nil
         debugExportFileURL = nil
         logExportFileURL = nil
+        streamDescriptorsByType.removeAll()
+
         autoFlushTask?.cancel()
         startAutoFlushTask()
 
@@ -241,6 +247,18 @@ final class CollectorCore: ObservableObject {
         }
         isConnectingDevice = false
 
+        let providers = adapter.streamProviders()
+        guard !providers.isEmpty else {
+            status = .deviceSelected
+            reportFailure(
+                userMessage: "No stream providers available for selected device",
+                activity: "Cannot start collection",
+                technical: "Start blocked after connect: streamProviders() returned empty",
+                category: "core"
+            )
+            return
+        }
+
         let session = CollectionSession(
             device: adapter.deviceIdentity,
             collectionMode: defaultCollectionMode,
@@ -248,22 +266,44 @@ final class CollectorCore: ObservableObject {
             supportedStreams: adapter.availableStreams
         )
 
+        activeProviders = providers
         activeSession = session
-        streamDescriptor = transport.makeStreamDescriptor(
-            for: provider.streamType,
-            source: adapter.sourceIdentifier
-        )
+
+        for provider in providers {
+            streamDescriptorsByType[provider.streamType] = transport.makeStreamDescriptor(
+                for: provider.streamType,
+                source: adapter.sourceIdentifier
+            )
+            nextChunkSequenceNumberByStream[provider.streamType] = 1
+            lastFlushAtUTCByStream[provider.streamType] = nowProvider()
+            log("Stream provider prepared: \(provider.streamType.transportType)", category: "core")
+        }
+
+        streamDescriptor = streamDescriptorsByType[.heartRate] ?? providers.first.flatMap { streamDescriptorsByType[$0.streamType] }
         prepareDebugExport(for: session)
 
-        provider.start { [weak self] sample in
-            guard let self else { return }
-            Task { @MainActor in
-                await self.handle(sample: sample)
+        let streamStartPriority: [CollectorStream] = [.battery, .heartRate, .ecg, .accelerometer, .ppi, .eeg]
+        let orderedProviders = providers.sorted {
+            let leftIndex = streamStartPriority.firstIndex(of: $0.streamType) ?? Int.max
+            let rightIndex = streamStartPriority.firstIndex(of: $1.streamType) ?? Int.max
+            return leftIndex < rightIndex
+        }
+
+        for provider in orderedProviders {
+            provider.start { [weak self] sample in
+                guard let self else { return }
+                Task { @MainActor in
+                    await self.handle(sample: sample)
+                }
+            }
+            // Start streams in sequence to avoid PMD control-point contention on device startup.
+            if provider.streamType == .heartRate || provider.streamType == .ecg {
+                await sleepProvider(350_000_000)
             }
         }
 
         status = .collecting
-        activityMessage = "Collecting HR samples..."
+        activityMessage = "Collecting live streams..."
         log("Collection started. Session: \(session.sessionID.uuidString)", category: "core")
     }
 
@@ -271,7 +311,10 @@ final class CollectorCore: ObservableObject {
         log("Stop tapped")
         autoFlushTask?.cancel()
         autoFlushTask = nil
-        adapter.heartRateStreamProvider()?.stop()
+
+        activeProviders.forEach { $0.stop() }
+        activeProviders.removeAll()
+
         adapter.disconnect()
         debugExporter.stopSession()
         if activeSession != nil {
@@ -280,15 +323,17 @@ final class CollectorCore: ObservableObject {
         status = selectedDevice == nil ? .disconnected : .stopped
         activityMessage = "Collection stopped"
         log("Collection stopped")
-        if !bufferedSamples.isEmpty {
+
+        if bufferedSamplesCount > 0 {
             log(
-                "Final flush requested on stop, buffered samples: \(bufferedSamples.count)",
+                "Final flush requested on stop, buffered samples: \(bufferedSamplesCount)",
                 category: "upload"
             )
             Task { @MainActor [weak self] in
-                await self?.flushAndUploadBufferedSamples(trigger: .finalOnStop)
+                await self?.flushAndUploadAllBufferedSamples(trigger: .finalOnStop)
             }
         }
+
         if let debugExportFileURL {
             log("Export ready: \(debugExportFileURL.lastPathComponent)")
         }
@@ -296,32 +341,39 @@ final class CollectorCore: ObservableObject {
 
     @discardableResult
     func prepareUploadChunk() -> UploadChunk? {
-        prepareUploadChunk(trigger: .manual)
+        guard let stream = firstBufferedStream() else {
+            activityMessage = "Nothing to prepare (no buffered samples)"
+            log("Prepare skipped: no buffered samples")
+            return nil
+        }
+        return prepareUploadChunk(for: stream, trigger: .manual)
     }
 
     @discardableResult
-    private func prepareUploadChunk(trigger: FlushTrigger) -> UploadChunk? {
+    private func prepareUploadChunk(for stream: CollectorStream, trigger: FlushTrigger) -> UploadChunk? {
         isPreparingChunk = true
         uploadStatus = .idle
+
+        let streamLabel = stream.transportType
         switch trigger {
         case .manual:
-            activityMessage = "Preparing upload chunk..."
-            log("Prepare Chunk tapped")
+            activityMessage = "Preparing \(streamLabel) chunk..."
+            log("Prepare Chunk tapped for stream=\(streamLabel)")
         case .sampleCount:
-            activityMessage = "Auto flush: sample threshold reached"
+            activityMessage = "Auto flush: \(streamLabel) threshold reached"
             log(
-                "Auto flush triggered by sample count (\(bufferedSamples.count) >= \(uploadConfiguration.autoFlushSampleCount))",
+                "Auto flush triggered by sample count for stream=\(streamLabel)",
                 category: "upload"
             )
         case .timer:
-            activityMessage = "Auto flush: interval reached"
+            activityMessage = "Auto flush: interval reached for \(streamLabel)"
             log(
-                "Auto flush triggered by timer (\(Int(uploadConfiguration.autoFlushIntervalSeconds))s)",
+                "Auto flush triggered by timer for stream=\(streamLabel)",
                 category: "upload"
             )
         case .finalOnStop:
-            activityMessage = "Final flush on stop..."
-            log("Final flush on stop triggered", category: "upload")
+            activityMessage = "Final flush on stop (\(streamLabel))..."
+            log("Final flush on stop triggered for stream=\(streamLabel)", category: "upload")
         }
         defer {
             isPreparingChunk = false
@@ -329,19 +381,24 @@ final class CollectorCore: ObservableObject {
 
         guard
             let session = activeSession,
-            let streamDescriptor,
-            !bufferedSamples.isEmpty
+            let streamDescriptor = streamDescriptorsByType[stream],
+            let streamSamples = bufferedSamplesByStream[stream],
+            !streamSamples.isEmpty
         else {
             activityMessage = "Nothing to prepare (no buffered samples)"
-            log("Prepare skipped: no buffered samples")
+            log("Prepare skipped: no buffered samples for stream=\(streamLabel)")
             return nil
         }
+
+        let streamProfile = uploadConfiguration.streamProfile(for: stream)
+        let chunkSequenceNumber = nextChunkSequenceNumberByStream[stream] ?? 1
 
         let chunk = transport.prepareUploadChunk(
             session: session,
             streamDescriptor: streamDescriptor,
-            chunkSequenceNumber: nextChunkSequenceNumber,
-            samples: bufferedSamples
+            streamProfile: streamProfile,
+            chunkSequenceNumber: chunkSequenceNumber,
+            samples: streamSamples
         )
 
         if let chunk {
@@ -351,10 +408,13 @@ final class CollectorCore: ObservableObject {
             pendingUploadChunks.append(chunk)
             pendingUploadChunksCount = pendingUploadChunks.count
             lastPreparedChunk = pendingUploadChunks.last
-            nextChunkSequenceNumber += 1
-            bufferedSamples.removeAll()
-            bufferedSamplesCount = 0
-            lastFlushAtUTC = nowProvider()
+
+            nextChunkSequenceNumberByStream[stream] = chunkSequenceNumber + 1
+            bufferedSamplesByStream[stream] = []
+            bufferedSamplesCount = bufferedSampleTotalCount()
+            lastFlushAtUTCByStream[stream] = nowProvider()
+            self.streamDescriptor = streamDescriptor
+
             activityMessage = "Chunk #\(chunk.chunkSequenceNumber) prepared (\(chunk.samples.count) samples)"
             log(
                 "Chunk prepared session_id=\(sessionID) stream_type=\(chunk.streamType) sequence=\(chunk.chunkSequenceNumber) chunk_id=\(chunk.chunkID.uuidString.lowercased()) samples=\(chunk.samples.count) first_sample=\(firstSampleAt) last_sample=\(lastSampleAt) pending=\(pendingUploadChunksCount)",
@@ -436,14 +496,21 @@ final class CollectorCore: ObservableObject {
     }
 
     private func handle(sample: HeartRateSample) async {
-        latestHeartRateSample = sample
+        if sample.stream == .heartRate {
+            latestHeartRateSample = sample
+        }
+
         totalSamplesReceived += 1
-        bufferedSamples.append(sample)
-        bufferedSamplesCount = bufferedSamples.count
+
+        var streamSamples = bufferedSamplesByStream[sample.stream] ?? []
+        streamSamples.append(sample)
+        bufferedSamplesByStream[sample.stream] = streamSamples
+        bufferedSamplesCount = bufferedSampleTotalCount()
+
         if totalSamplesReceived == 1 {
-            log("First HR sample received: \(sample.hrBPM) bpm", category: "samples")
+            log("First sample received for stream=\(sample.stream.transportType)", category: "samples")
         } else if totalSamplesReceived.isMultiple(of: 25) {
-            log("HR samples received: \(totalSamplesReceived)", level: .debug, category: "samples")
+            log("Samples received total: \(totalSamplesReceived)", level: .debug, category: "samples")
         }
 
         if let sessionID = activeSession?.sessionID {
@@ -453,8 +520,15 @@ final class CollectorCore: ObservableObject {
             )
         }
 
-        if status == .collecting, bufferedSamples.count >= uploadConfiguration.autoFlushSampleCount {
-            await flushAndUploadBufferedSamples(trigger: .sampleCount)
+        if status == .collecting {
+            let flushCount = uploadConfiguration.sampleFlushCount(for: sample.stream)
+            if streamSamples.count >= flushCount {
+                await flushAndUploadBufferedSamples(
+                    for: sample.stream,
+                    trigger: .sampleCount,
+                    enforceThreshold: true
+                )
+            }
         }
     }
 
@@ -465,36 +539,77 @@ final class CollectorCore: ObservableObject {
                 await self.sleepProvider(1_000_000_000)
                 guard !Task.isCancelled else { return }
                 guard self.status == .collecting else { continue }
-                guard !self.bufferedSamples.isEmpty else { continue }
-                guard let lastFlushAtUTC else { continue }
+                guard self.bufferedSamplesCount > 0 else { continue }
 
-                let elapsed = self.nowProvider().timeIntervalSince(lastFlushAtUTC)
-                if elapsed >= self.uploadConfiguration.autoFlushIntervalSeconds {
-                    await self.flushAndUploadBufferedSamples(trigger: .timer)
+                for stream in self.streamFlushOrder() {
+                    guard let streamSamples = self.bufferedSamplesByStream[stream], !streamSamples.isEmpty else {
+                        continue
+                    }
+                    guard let lastFlushAtUTC = self.lastFlushAtUTCByStream[stream] else { continue }
+
+                    let elapsed = self.nowProvider().timeIntervalSince(lastFlushAtUTC)
+                    if elapsed >= self.uploadConfiguration.autoFlushIntervalSeconds {
+                        await self.flushAndUploadBufferedSamples(
+                            for: stream,
+                            trigger: .timer,
+                            enforceThreshold: false
+                        )
+                    }
                 }
             }
         }
     }
 
-    private func flushAndUploadBufferedSamples(trigger: FlushTrigger) async {
+    private func flushAndUploadAllBufferedSamples(trigger: FlushTrigger) async {
+        for stream in streamFlushOrder() {
+            await flushAndUploadBufferedSamples(
+                for: stream,
+                trigger: trigger,
+                enforceThreshold: false
+            )
+        }
+    }
+
+    private func flushAndUploadBufferedSamples(
+        for stream: CollectorStream,
+        trigger: FlushTrigger,
+        enforceThreshold: Bool
+    ) async {
         guard !isAutoFlushing else { return }
-        guard !bufferedSamples.isEmpty else { return }
+        guard let buffered = bufferedSamplesByStream[stream], !buffered.isEmpty else { return }
 
         isAutoFlushing = true
         defer { isAutoFlushing = false }
 
         var currentTrigger = trigger
-        while !bufferedSamples.isEmpty {
-            if currentTrigger == .sampleCount, bufferedSamples.count < uploadConfiguration.autoFlushSampleCount {
+
+        while let currentBuffered = bufferedSamplesByStream[stream], !currentBuffered.isEmpty {
+            let threshold = uploadConfiguration.sampleFlushCount(for: stream)
+            if enforceThreshold && currentBuffered.count < threshold {
                 return
             }
 
-            guard prepareUploadChunk(trigger: currentTrigger) != nil else { return }
+            guard prepareUploadChunk(for: stream, trigger: currentTrigger) != nil else { return }
             await uploadLastPreparedChunk()
 
-            guard status == .collecting else { return }
-            guard bufferedSamples.count >= uploadConfiguration.autoFlushSampleCount else { return }
-            currentTrigger = .sampleCount
+            if status != .collecting && trigger != .finalOnStop {
+                return
+            }
+
+            guard let remaining = bufferedSamplesByStream[stream], !remaining.isEmpty else { return }
+
+            if trigger == .sampleCount {
+                guard remaining.count >= threshold else { return }
+                currentTrigger = .sampleCount
+                continue
+            }
+
+            if trigger == .timer || trigger == .finalOnStop {
+                currentTrigger = trigger
+                continue
+            }
+
+            return
         }
     }
 
@@ -560,6 +675,28 @@ final class CollectorCore: ObservableObject {
         eventLogs.append(line)
         if eventLogs.count > 1000 {
             eventLogs.removeFirst(eventLogs.count - 1000)
+        }
+    }
+
+    private func bufferedSampleTotalCount() -> Int {
+        bufferedSamplesByStream.values.reduce(0) { $0 + $1.count }
+    }
+
+    private func streamFlushOrder() -> [CollectorStream] {
+        [
+            .heartRate,
+            .ecg,
+            .accelerometer,
+            .battery,
+            .ppi,
+            .eeg
+        ]
+    }
+
+    private func firstBufferedStream() -> CollectorStream? {
+        streamFlushOrder().first { stream in
+            let samples = bufferedSamplesByStream[stream] ?? []
+            return !samples.isEmpty
         }
     }
 

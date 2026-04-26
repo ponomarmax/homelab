@@ -50,13 +50,14 @@ struct MockCollectorTransport: CollectorTransporting {
     func prepareUploadChunk(
         session: CollectionSession,
         streamDescriptor: StreamDescriptor,
+        streamProfile: StreamMetadataProfile,
         chunkSequenceNumber: Int,
         samples: [HeartRateSample]
     ) -> UploadChunk? {
         chunkBuilder.buildChunk(
             session: session,
             streamDescriptor: streamDescriptor,
-            streamProfile: uploadConfiguration.streamProfile,
+            streamProfile: streamProfile,
             chunkSequenceNumber: chunkSequenceNumber,
             samples: samples
         )
