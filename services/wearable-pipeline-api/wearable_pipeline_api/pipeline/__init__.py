@@ -1,3 +1,3 @@
-from .runner import HrPipelineRunner
+from .runner import HrPipelineRunner, SessionPipelineRunner
 
-__all__ = ["HrPipelineRunner"]
+__all__ = ["HrPipelineRunner", "SessionPipelineRunner"]

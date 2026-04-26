@@ -260,45 +260,129 @@ Rules:
 ---
 
 ## Storage Layout
+## Pipeline Run State
 
-Target storage paths:
+Pipeline execution must produce lightweight run metadata.
 
-- `/data/wearable/raw/`
-- `/data/wearable/processed/clean_timeseries/`
-- `/data/wearable/processed/window_features/`
-- `/data/wearable/summaries/`
-- `/data/wearable/reports/`
-- `/data/wearable/pipeline_runs/`
+Storage path:
 
-These paths define the intended repository and runtime storage model for the pipeline artifacts.
+/data/wearable/pipeline_runs/
+
+Each step creates its own run record.
+
+---
+
+### Run Metadata Requirements
+
+Each run must include:
+
+- run_id
+- step_name
+- session_id
+- started_at_utc
+- finished_at_utc
+- status: success | partial | failed
+- discovered_streams
+
+Per-stream results:
+
+- stream_type
+- handler_name
+- status: success | skipped | failed
+- input artifact path
+- output artifact path (if produced)
+- error message (if any)
+
+---
+
+### Rules
+
+- Run state must be file-based
+- No database required
+- Must not be stored in raw layer
+- Must be inspectable manually
+
+---
+
+### Purpose
+
+- traceability
+- debugging
+- validation
+- future orchestrator integration
 
 ---
 
 ## Extensibility Model
 
-The pipeline separates **step** from **handler**.
+## Session-Based Multi-Stream Processing
 
-Definition:
+### Processing Unit
+
+The pipeline operates on the **session level**, not on individual streams.
+
+A single session may contain multiple streams, for example:
+- hr
+- ppi
+- acc
+- gyro
+- ppg
+- eeg
+
+All available streams within a session must be discovered and processed.
+
+---
+
+### Stream Discovery
+
+Pipeline steps must:
+
+1. Scan the session directory:
+   `/data/wearable/raw/.../session_id=<id>/streams/`
+
+2. Detect available `stream_type` folders.
+
+3. Build a list of available streams for the session.
+
+---
+
+### Handler Dispatch
+
+Each step must dispatch processing using a handler model:
+
 - Step = pipeline phase
-- Handler = stream-specific logic inside that phase
+- Handler = stream-specific implementation
 
 Examples:
 
-`normalize`
-- `PolarHrNormalizer`
-- `PolarPpiNormalizer`
-- `PolarAccNormalizer`
+normalize:
+- PolarHrNormalizer
+- PolarPpiNormalizer
+- PolarAccNormalizer
 
-`features`
-- `HrFeatureBuilder`
-- `HrvFeatureBuilder`
-- `MovementFeatureBuilder`
+window_features:
+- HrWindowFeatureBuilder
+- HrvWindowFeatureBuilder
+- MovementFeatureBuilder
 
-Rule:
-Adding a new stream should extend handler coverage inside existing steps rather than forcing a pipeline rewrite.
+---
 
-This keeps the outer pipeline stable while allowing stream-specific logic to grow over time.
+### Execution Rules
 
+- Streams are processed sequentially (no parallelism in MVP)
+- Unsupported streams are skipped with warnings
+- One failed stream must not stop processing of other streams
+- Each stream produces its own artifact
+
+---
+
+### Design Rule
+
+Adding a new stream must:
+- require adding a new handler
+- NOT require rewriting pipeline steps
+
+This ensures pipeline stability as new sensors are introduced.
 ---
 
 ## Time Alignment

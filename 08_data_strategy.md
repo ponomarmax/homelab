@@ -105,7 +105,8 @@ The wearable pipeline should follow these layers:
 
 3. Window features (`Parquet`)
    - first aggregation layer
-   - target windows include `30s`, `1m`, and `5m`
+   - computed per stream within a session
+   - produced via step + handler architecture
 
 4. Nightly summary (`JSON`)
    - deterministic

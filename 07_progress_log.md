@@ -14,6 +14,21 @@ LinkedIn post idea:
 Date: 2026-04-26
 
 What was done:
+- Refactored the wearable processing pipeline around session-based multi-stream step execution.
+- Preserved the validated HR normalization path while aligning it with the handler-based architecture.
+- Added the HR window-features step with 30s, 1m, and 5m feature windows.
+- Added lightweight pipeline run state under `/data/wearable/pipeline_runs/` with per-stream results and artifact traceability.
+- Deployed the updated processing pipeline and completed post-deployment validation for normalization, window features, run state, persistence, logs, and edge cases.
+
+Key insight:
+Treating a session as the processing unit keeps the pipeline ready for future multi-stream devices while allowing each stream to be handled by small, replaceable handlers.
+
+LinkedIn post idea:
+How a wearable pipeline evolved from HR-only processing into a session-based multi-stream architecture without jumping into ML too early.
+
+Date: 2026-04-26
+
+What was done:
 - Completed the new `wearable-pipeline-api` checkpoint: HR normalization from raw JSONL into clean Parquet with `time_alignment_report.json` and file-based tracker state in `pipeline_runs/state.json`.
 - Validated HTTP trigger flow (`POST /api/v1/pipeline/normalize/hr`), health endpoint, idempotent reruns, and persistence after service recreate in deployed Compose environment.
 - Updated `data-browser` mounts to expose `/data/wearable/raw`, `/data/wearable/processed`, and `/data/wearable/pipeline_runs` with read-write access for local admin/developer workflows.

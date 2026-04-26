@@ -7,9 +7,8 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from .config.settings import HEALTH_PATH, SERVICE_NAME, Settings
-from .pipeline import HrPipelineRunner
+from .pipeline import SessionPipelineRunner
 from .routes import build_router
-from .tracker import StateTracker
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +18,10 @@ def create_app(settings: Settings) -> FastAPI:
     settings.processed_root.mkdir(parents=True, exist_ok=True)
     settings.pipeline_state_root.mkdir(parents=True, exist_ok=True)
 
-    tracker = StateTracker(settings.pipeline_state_root)
-    runner = HrPipelineRunner(
+    runner = SessionPipelineRunner(
         raw_root=settings.raw_root,
         processed_root=settings.processed_root,
-        tracker=tracker,
+        state_root=settings.pipeline_state_root,
     )
 
     app = FastAPI(title=SERVICE_NAME, version="1.0.0")

@@ -121,7 +121,7 @@ Planned sequence:
 - CP5: add upload flow
 - CP6: persist raw JSONL
 - CP7: normalize to clean Parquet
-- CP8: build window features
+- CP8: build window features (session-based multi-stream processing)
 - CP9: build nightly deterministic summary
 - CP10: add single-container orchestrator
 - CP11: add LLM interpretation layer
