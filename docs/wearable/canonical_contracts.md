@@ -134,7 +134,7 @@ JSON shape
   "stream_id": "string",
   "session_id": "string",
   "stream_family": "cardio | motion | neural | optical | derived | quality | marker | unknown",
-  "stream_type": "hr | ppi | ppg | acc | gyro | mag | eeg | optics | fnirs | marker | unknown",
+  "stream_type": "hr | ppi | ppg | acc | ecg | gyro | mag | eeg | optics | fnirs | marker | device_battery | unknown",
   "origin": "raw | vendor_processed | server_derived",
   "mode": "online_live | offline_recording | file_import | playback",
   "payload_schema": "string",
@@ -162,6 +162,8 @@ payload_schema identifies the inner payload contract, for example:
 polar.hr
 polar.ppi
 polar.acc
+polar.ecg
+polar.device_battery
 muse.eeg
 muse.ppg
 payload_version versions the payload independently of the outer transport version.
@@ -313,6 +315,8 @@ Recommended registry examples:
 polar.hr / 1.0
 polar.ppi / 1.0
 polar.acc / 1.0
+polar.ecg / 1.0
+polar.device_battery / 1.0
 muse.eeg / 1.0-draft
 muse.ppg / 1.0-draft
 
@@ -381,21 +385,42 @@ Schema id:
 polar.acc
 version 1.0
 {
-  "sample_rate_hz": 52,
-  "samples": [
-    { "offset_ns": 0, "x": 10, "y": -3, "z": 1005 }
-  ]
+  "device_time_ns": 3412345678900,
+  "x_mg": 10,
+  "y_mg": -3,
+  "z_mg": 1005,
+  "received_at_collector": "2026-04-25T11:56:27.357Z"
 }
 
 Rules:
 
-sample_rate_hz is recommended
-each sample must contain:
-offset_ns
-x
-y
-z
-7.4 Muse EEG Payload Draft V1
+must contain:
+device_time_ns
+x_mg
+y_mg
+z_mg
+received_at_collector is optional
+x_mg, y_mg, z_mg are acceleration values in milligravity (mg)
+7.4 Polar ECG Payload V1
+
+Schema id:
+
+polar.ecg
+version 1.0
+{
+  "device_time_ns": 3412345678900,
+  "ecg_uv": 120,
+  "received_at_collector": "2026-04-25T11:56:27.357Z"
+}
+
+Rules:
+
+must contain:
+device_time_ns
+ecg_uv
+received_at_collector is optional
+ecg_uv is the ECG amplitude in microvolts (uV)
+7.5 Muse EEG Payload Draft V1
 
 Schema id:
 
@@ -415,7 +440,7 @@ Rules:
 
 channels order defines values order
 channels.length must equal values.length
-7.5 Muse PPG Payload Draft V1
+7.6 Muse PPG Payload Draft V1
 
 Schema id:
 
@@ -456,6 +481,8 @@ Current rule
 collector timestamps are mandatory
 device time is optional
 server receive time is backend-assigned
+for Polar H10 ACC and ECG payloads, `device_time_ns` is the strongest timing signal when present
+canonical analytical `ts_utc` is assigned only in normalization, never in ingestion
 Why
 
 Different devices and SDKs provide different time guarantees.

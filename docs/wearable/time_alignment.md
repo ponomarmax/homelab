@@ -15,6 +15,7 @@ The goal is to preserve raw truth while producing one canonical analytical times
 - timestamp alignment happens only in the normalizer
 - the normalizer expands batch payloads into sample-level rows
 - the normalizer does not aggregate
+- `sample_rate_hz` is metadata only and is not an authoritative timing source
 
 This means ingestion stores raw transport truth, while normalization creates analytical time alignment.
 
@@ -61,6 +62,14 @@ This layer is responsible for:
 - recording alignment confidence
 - preserving traceability to raw origin
 
+### Stream-Specific Priority
+
+The normalizer must choose timing basis per stream type:
+- ACC and ECG: prefer `device_time_ns` as the strongest timestamp basis
+- HR: use collector event time (`received_at_collector`) as the event timestamp basis
+
+When both device and collector time fields are present, device time wins for timestamped signal streams.
+
 ---
 
 ## Supported Modes
@@ -97,6 +106,7 @@ Rule:
 - expand the batch into individual samples
 - assign one `ts_utc` per sample
 - do not aggregate during normalization
+- do not assume offset-based batching when explicit `device_time_ns` exists
 
 ---
 
@@ -106,6 +116,8 @@ The normalizer should follow this order of intent:
 
 1. Preserve raw timestamp fields untouched.
 2. Determine the strongest available time reference.
+   - for ACC and ECG, prefer `device_time_ns`
+   - for HR event samples, use collector event time
 3. Expand any batch payload to sample-level records.
 4. Assign `ts_utc` to each sample.
 5. Record alignment confidence and reasoning.

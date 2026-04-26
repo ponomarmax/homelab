@@ -118,6 +118,11 @@ Initial deterministic steps:
 - `build_window_features`
 - `build_session_summary`
 
+Stream handling baseline:
+- HR is an event stream (around 1 Hz)
+- ACC and ECG are high-rate timestamped streams
+- `device_battery` is a known non-analytical status stream and must be skipped by analytical steps unless a dedicated handler exists
+
 Rules:
 - session summary is computed from processed artifacts, not from raw ingestion directly
 - session summary is deterministic and non-LLM
@@ -415,6 +420,9 @@ window_features:
 - Unsupported streams are skipped with warnings
 - One failed stream must not stop processing of other streams
 - Each stream produces its own artifact
+- Pipeline logic must not assume offset-based batching as a universal model
+- Batch expansion must respect per-sample `device_time_ns` when present
+- `device_battery` and legacy `unknown` status streams are skipped in HR/ACC/ECG analytical steps
 
 ---
 
@@ -437,6 +445,9 @@ Architecture-level rules:
 - alignment is performed only in the normalizer
 - the normalizer expands batches into sample-level rows
 - the normalizer must not aggregate
+- ACC and ECG should prefer device timestamps (`device_time_ns`) when available
+- HR remains event-like and uses collector timestamp basis
+- `sample_rate_hz` is metadata and not an authoritative timing source
 
 Required support:
 - live mode
