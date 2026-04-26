@@ -4,11 +4,14 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
     let sessionID: UUID
     let streamName: String
     let streamType: String
+    let streamID: String
     let chunkID: UUID
     let chunkSequenceNumber: Int
     let createdAtUTC: Date
     let samples: [HeartRateSample]
     let collectionMode: CollectionMode
+    let streamProfile: StreamMetadataProfile
+    let sourceDeviceID: String?
 
     var id: UUID { chunkID }
 
@@ -43,22 +46,30 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
         }
 
         return CanonicalUploadChunkRequest(
-            schemaVersion: "1.0",
+            schemaVersion: streamProfile.schemaVersion,
             chunkID: chunkID.uuidString.lowercased(),
             sessionID: sessionID.uuidString.lowercased(),
-            streamID: "stream-\(streamType)-\(sessionID.uuidString.lowercased())",
+            streamID: streamID,
+            streamType: streamProfile.streamType,
             sequence: chunkSequenceNumber,
+            source: CanonicalUploadChunkRequest.SourceMetadata(
+                vendor: streamProfile.source.vendor,
+                deviceModel: streamProfile.source.deviceModel,
+                deviceID: sourceDeviceID ?? streamProfile.source.deviceID
+            ),
+            collection: CanonicalUploadChunkRequest.CollectionMetadata(
+                mode: streamProfile.collection.mode
+            ),
             time: CanonicalUploadChunkRequest.TimeMetadata(
-                deviceTimeReference: Self.deviceTimeReference(from: samples[0]),
+                deviceTimeReference: streamProfile.deviceTimeReference,
                 firstSampleReceivedAtCollector: Self.iso8601(from: samples[0].collectorReceivedAtUTC),
-                uploadedAtCollector: Self.iso8601(from: uploadedAtUTC),
-                receivedAtServer: nil
+                uploadedAtCollector: Self.iso8601(from: uploadedAtUTC)
             ),
             transport: CanonicalUploadChunkRequest.TransportMetadata(
-                encoding: "json",
-                compression: "none",
-                payloadSchema: "polar.hr",
-                payloadVersion: "1.0"
+                encoding: streamProfile.transport.encoding,
+                compression: streamProfile.transport.compression,
+                payloadSchema: streamProfile.transport.payloadSchema,
+                payloadVersion: streamProfile.transport.payloadVersion
             ),
             payload: CanonicalPolarHrPayload(samples: payloadSamples)
         )
@@ -75,12 +86,6 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
         iso8601Formatter.string(from: date)
     }
 
-    private static func deviceTimeReference(from sample: HeartRateSample) -> String {
-        if let deviceTimestampRaw = sample.deviceTimestampRaw {
-            return "device:\(iso8601(from: deviceTimestampRaw))"
-        }
-        return "collector:\(sample.sourceTimestampKind?.rawValue ?? "unknown")"
-    }
 }
 
 struct CanonicalPolarHrSample: Equatable, Codable, Sendable {
@@ -114,7 +119,10 @@ struct CanonicalUploadChunkRequest: Equatable, Codable, Sendable {
     let chunkID: String
     let sessionID: String
     let streamID: String
+    let streamType: String
     let sequence: Int
+    let source: SourceMetadata
+    let collection: CollectionMetadata
     let time: TimeMetadata
     let transport: TransportMetadata
     let payload: CanonicalPolarHrPayload
@@ -124,23 +132,40 @@ struct CanonicalUploadChunkRequest: Equatable, Codable, Sendable {
         case chunkID = "chunk_id"
         case sessionID = "session_id"
         case streamID = "stream_id"
+        case streamType = "stream_type"
         case sequence
+        case source
+        case collection
         case time
         case transport
         case payload
+    }
+
+    struct SourceMetadata: Equatable, Codable, Sendable {
+        let vendor: String
+        let deviceModel: String
+        let deviceID: String?
+
+        enum CodingKeys: String, CodingKey {
+            case vendor
+            case deviceModel = "device_model"
+            case deviceID = "device_id"
+        }
+    }
+
+    struct CollectionMetadata: Equatable, Codable, Sendable {
+        let mode: String
     }
 
     struct TimeMetadata: Equatable, Codable, Sendable {
         let deviceTimeReference: String
         let firstSampleReceivedAtCollector: String
         let uploadedAtCollector: String
-        let receivedAtServer: String?
 
         enum CodingKeys: String, CodingKey {
             case deviceTimeReference = "device_time_reference"
             case firstSampleReceivedAtCollector = "first_sample_received_at_collector"
             case uploadedAtCollector = "uploaded_at_collector"
-            case receivedAtServer = "received_at_server"
         }
     }
 

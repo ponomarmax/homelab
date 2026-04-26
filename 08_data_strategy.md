@@ -156,3 +156,29 @@ For each new source:
 3. define storage format
 4. test small sample
 5. automate only after validation
+
+## Raw Storage Layout (Baseline V1)
+
+All wearable raw data is stored as append-only JSONL.
+
+### Directory structure
+
+
+/data/wearable/raw/
+user_id=<user_id>/
+source=<vendor>_<device_model>/
+date=<YYYY-MM-DD>/
+session_id=<session_id>/
+streams/
+<stream_type>/
+chunks.jsonl
+
+
+### Rules
+
+- append-only
+- one upload request = one JSON line
+- one `chunks.jsonl` per session per stream_type
+- no mutation of existing records
+- no processing state in raw layer
+- raw layer is the source of truth

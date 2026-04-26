@@ -40,7 +40,10 @@ Non-goals for MVP:
 
 Primary flow:
 
-`iOS Collector -> wearable-ingestion-api -> raw JSONL`
+iOS Collector
+  -> UploadChunkContract (v1.0)
+  -> wearable-ingestion-api
+  -> structured raw storage (append-only JSONL)
 
 `nightly-orchestrator-job -> normalize -> clean Parquet -> window features -> summary JSON -> (Here a place for LLM communication but let mock it for a while) report MD -> Telegram`
 
@@ -61,6 +64,17 @@ Role:
 
 The collector is the only mobile entry point for wearable collection.
 
+### Automatic chunk upload (HR MVP)
+
+For live HR collection:
+
+- samples are buffered in memory
+- chunk is flushed when:
+  - sample count >= 20
+  - OR 30 seconds passed
+- whichever happens first
+- remaining samples are flushed on session stop
+
 ### 2. `wearable-ingestion-api`
 
 Role:
@@ -80,6 +94,14 @@ Must **not** do:
 - call LLM
 - send Telegram
 - perform analytical aggregation
+
+### Raw ingestion behavior (Baseline V1)
+
+- chunks are uploaded via UploadChunkContract
+- ingestion API stores each chunk as one JSON line
+- storage is partitioned by user, source, date, session, and stream_type
+- one `chunks.jsonl` file per session per stream_type
+- ingestion does not modify payloads
 
 ### 3. `nightly-orchestrator-job`
 

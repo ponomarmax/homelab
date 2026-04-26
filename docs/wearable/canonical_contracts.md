@@ -165,23 +165,33 @@ polar.acc
 muse.eeg
 muse.ppg
 payload_version versions the payload independently of the outer transport version.
-3. UploadChunkContract
-Purpose
+## 3. UploadChunkContract (Baseline V1)
 
+### Purpose
 Represents one upload unit from collector to backend.
 
-JSON shape
+### JSON shape
+
+```json
 {
   "schema_version": "1.0",
   "chunk_id": "string",
   "session_id": "string",
   "stream_id": "string",
+  "stream_type": "string",
   "sequence": 1,
+  "source": {
+    "vendor": "string",
+    "device_model": "string",
+    "device_id": "string | null"
+  },
+  "collection": {
+    "mode": "online_live | offline_recording | file_import | playback"
+  },
   "time": {
-    "device_time_reference": "optional string",
+    "device_time_reference": "string",
     "first_sample_received_at_collector": "timestamp",
-    "uploaded_at_collector": "timestamp",
-    "received_at_server": "optional timestamp"
+    "uploaded_at_collector": "timestamp"
   },
   "transport": {
     "encoding": "json",
@@ -196,19 +206,44 @@ schema_version
 chunk_id
 session_id
 stream_id
+stream_type
 sequence
+source.vendor
+source.device_model
+collection.mode
 time.first_sample_received_at_collector
 time.uploaded_at_collector
 transport.encoding
 transport.payload_schema
 transport.payload_version
 payload
-Notes
-chunk_id must be unique enough for idempotency.
-sequence is monotonically increasing within one stream.
-device_time_reference is optional because some SDKs provide strong device time and some do not.
-received_at_server is assigned by backend when persisted or accepted.
-time.first_sample_received_at_collector must equal the first sample timestamp in payload.samples[].received_at_collector when samples exist.
+Server-side fields (NOT part of request)
+
+The ingestion API MUST add:
+
+"server": {
+  "received_at_server": "timestamp"
+}
+
+This field MUST NOT be sent by the client.
+
+Headers
+
+The collector MUST send:
+
+X-User-ID: <string>
+
+If the header is missing, the backend defaults to:
+
+user_id = "1"
+Rules
+one request = one chunk
+chunk_id must be unique
+sequence must be monotonically increasing per stream
+stream_id must remain stable for a session
+ingestion treats payload as opaque JSON
+
+
 4. AckContract
 Purpose
 

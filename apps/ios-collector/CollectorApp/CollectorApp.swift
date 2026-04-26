@@ -16,11 +16,15 @@ struct WearableCollectorApp: App {
             ? MockDeviceAdapter()
             : PolarDeviceAdapter()
 
-        let transport = MockCollectorTransport(uploadEndpoint: configuration.uploadEndpoint)
+        let transport = MockCollectorTransport(
+            uploadEndpoint: configuration.uploadEndpoint,
+            uploadConfiguration: configuration.upload
+        )
 
         collectorCore = CollectorCore(
             adapter: adapter,
-            transport: transport
+            transport: transport,
+            uploadConfiguration: configuration.upload
         )
     }
 

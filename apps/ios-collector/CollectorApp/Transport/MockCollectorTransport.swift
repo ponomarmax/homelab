@@ -8,6 +8,7 @@ struct MockCollectorTransport: CollectorTransporting {
     private let shouldSucceedInMockMode: Bool
     private let nowProvider: @Sendable () -> Date
     private let httpDataProvider: HTTPDataProvider
+    private let uploadConfiguration: CollectorUploadConfiguration
 
     var uploadDestinationDescription: String {
         uploadEndpoint?.absoluteString ?? "mock://local-only (no server request)"
@@ -20,6 +21,7 @@ struct MockCollectorTransport: CollectorTransporting {
     init(
         uploadEndpoint: URL? = nil,
         shouldSucceedInMockMode: Bool = true,
+        uploadConfiguration: CollectorUploadConfiguration = .default,
         nowProvider: @escaping @Sendable () -> Date = { Date() },
         httpDataProvider: @escaping HTTPDataProvider = { request in
             try await URLSession.shared.data(for: request)
@@ -27,6 +29,7 @@ struct MockCollectorTransport: CollectorTransporting {
     ) {
         self.uploadEndpoint = uploadEndpoint
         self.shouldSucceedInMockMode = shouldSucceedInMockMode
+        self.uploadConfiguration = uploadConfiguration
         self.nowProvider = nowProvider
         self.httpDataProvider = httpDataProvider
     }
@@ -53,6 +56,7 @@ struct MockCollectorTransport: CollectorTransporting {
         chunkBuilder.buildChunk(
             session: session,
             streamDescriptor: streamDescriptor,
+            streamProfile: uploadConfiguration.streamProfile,
             chunkSequenceNumber: chunkSequenceNumber,
             samples: samples
         )
@@ -99,6 +103,7 @@ struct MockCollectorTransport: CollectorTransporting {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(uploadConfiguration.userIDHeaderValue, forHTTPHeaderField: "X-User-ID")
 
         let encoder = JSONEncoder()
         request.httpBody = try encoder.encode(requestBody)

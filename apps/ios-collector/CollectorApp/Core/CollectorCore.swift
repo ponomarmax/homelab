@@ -2,6 +2,13 @@ import Foundation
 
 @MainActor
 final class CollectorCore: ObservableObject {
+    private enum FlushTrigger: Equatable {
+        case manual
+        case sampleCount
+        case timer
+        case finalOnStop
+    }
+
     private enum CoreLogLevel: String {
         case debug = "DEBUG"
         case info = "INFO"
@@ -35,18 +42,32 @@ final class CollectorCore: ObservableObject {
 
     private let adapter: CollectorDeviceAdapter
     private let transport: CollectorTransporting
+    private let uploadConfiguration: CollectorUploadConfiguration
+    private let nowProvider: @Sendable () -> Date
+    private let sleepProvider: @Sendable (UInt64) async -> Void
     private let debugExporter = HrSampleDebugExporter()
     private let isVerboseLoggingEnabled: Bool
     private var pendingUploadChunks: [UploadChunk] = []
     private var bufferedSamples: [HeartRateSample] = []
     private var nextChunkSequenceNumber: Int = 1
+    private var lastFlushAtUTC: Date?
+    private var autoFlushTask: Task<Void, Never>?
+    private var isAutoFlushing: Bool = false
 
     init(
         adapter: CollectorDeviceAdapter,
-        transport: CollectorTransporting
+        transport: CollectorTransporting,
+        uploadConfiguration: CollectorUploadConfiguration = .default,
+        nowProvider: @escaping @Sendable () -> Date = { Date() },
+        sleepProvider: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
+            try? await Task.sleep(nanoseconds: nanoseconds)
+        }
     ) {
         self.adapter = adapter
         self.transport = transport
+        self.uploadConfiguration = uploadConfiguration
+        self.nowProvider = nowProvider
+        self.sleepProvider = sleepProvider
         let environment = ProcessInfo.processInfo.environment
         self.isVerboseLoggingEnabled = environment["COLLECTOR_VERBOSE_LOGS"] == "1"
             || environment["COLLECTOR_LOG_LEVEL"]?.lowercased() == "debug"
@@ -60,6 +81,10 @@ final class CollectorCore: ObservableObject {
                 category: "transport"
             )
         }
+    }
+
+    deinit {
+        autoFlushTask?.cancel()
     }
 
     var deviceActionTitle: String {
@@ -193,10 +218,13 @@ final class CollectorCore: ObservableObject {
         pendingUploadChunks = []
         pendingUploadChunksCount = 0
         nextChunkSequenceNumber = 1
+        lastFlushAtUTC = nowProvider()
         latestHeartRateSample = nil
         lastPreparedChunk = nil
         debugExportFileURL = nil
         logExportFileURL = nil
+        autoFlushTask?.cancel()
+        startAutoFlushTask()
 
         do {
             try await adapter.connect()
@@ -230,7 +258,7 @@ final class CollectorCore: ObservableObject {
         provider.start { [weak self] sample in
             guard let self else { return }
             Task { @MainActor in
-                self.handle(sample: sample)
+                await self.handle(sample: sample)
             }
         }
 
@@ -241,6 +269,8 @@ final class CollectorCore: ObservableObject {
 
     func stopCollection() {
         log("Stop tapped")
+        autoFlushTask?.cancel()
+        autoFlushTask = nil
         adapter.heartRateStreamProvider()?.stop()
         adapter.disconnect()
         debugExporter.stopSession()
@@ -250,6 +280,15 @@ final class CollectorCore: ObservableObject {
         status = selectedDevice == nil ? .disconnected : .stopped
         activityMessage = "Collection stopped"
         log("Collection stopped")
+        if !bufferedSamples.isEmpty {
+            log(
+                "Final flush requested on stop, buffered samples: \(bufferedSamples.count)",
+                category: "upload"
+            )
+            Task { @MainActor [weak self] in
+                await self?.flushAndUploadBufferedSamples(trigger: .finalOnStop)
+            }
+        }
         if let debugExportFileURL {
             log("Export ready: \(debugExportFileURL.lastPathComponent)")
         }
@@ -257,10 +296,33 @@ final class CollectorCore: ObservableObject {
 
     @discardableResult
     func prepareUploadChunk() -> UploadChunk? {
+        prepareUploadChunk(trigger: .manual)
+    }
+
+    @discardableResult
+    private func prepareUploadChunk(trigger: FlushTrigger) -> UploadChunk? {
         isPreparingChunk = true
         uploadStatus = .idle
-        activityMessage = "Preparing upload chunk..."
-        log("Prepare Chunk tapped")
+        switch trigger {
+        case .manual:
+            activityMessage = "Preparing upload chunk..."
+            log("Prepare Chunk tapped")
+        case .sampleCount:
+            activityMessage = "Auto flush: sample threshold reached"
+            log(
+                "Auto flush triggered by sample count (\(bufferedSamples.count) >= \(uploadConfiguration.autoFlushSampleCount))",
+                category: "upload"
+            )
+        case .timer:
+            activityMessage = "Auto flush: interval reached"
+            log(
+                "Auto flush triggered by timer (\(Int(uploadConfiguration.autoFlushIntervalSeconds))s)",
+                category: "upload"
+            )
+        case .finalOnStop:
+            activityMessage = "Final flush on stop..."
+            log("Final flush on stop triggered", category: "upload")
+        }
         defer {
             isPreparingChunk = false
         }
@@ -285,15 +347,17 @@ final class CollectorCore: ObservableObject {
         if let chunk {
             let firstSampleAt = Self.iso8601(from: chunk.samples.first?.collectorReceivedAtUTC)
             let lastSampleAt = Self.iso8601(from: chunk.samples.last?.collectorReceivedAtUTC)
+            let sessionID = chunk.sessionID.uuidString.lowercased()
             pendingUploadChunks.append(chunk)
             pendingUploadChunksCount = pendingUploadChunks.count
             lastPreparedChunk = pendingUploadChunks.last
             nextChunkSequenceNumber += 1
             bufferedSamples.removeAll()
             bufferedSamplesCount = 0
+            lastFlushAtUTC = nowProvider()
             activityMessage = "Chunk #\(chunk.chunkSequenceNumber) prepared (\(chunk.samples.count) samples)"
             log(
-                "Prepared chunk #\(chunk.chunkSequenceNumber), samples: \(chunk.samples.count), first_sample: \(firstSampleAt), last_sample: \(lastSampleAt), pending queue: \(pendingUploadChunksCount)",
+                "Chunk prepared session_id=\(sessionID) stream_type=\(chunk.streamType) sequence=\(chunk.chunkSequenceNumber) chunk_id=\(chunk.chunkID.uuidString.lowercased()) samples=\(chunk.samples.count) first_sample=\(firstSampleAt) last_sample=\(lastSampleAt) pending=\(pendingUploadChunksCount)",
                 category: "upload"
             )
         } else {
@@ -323,8 +387,9 @@ final class CollectorCore: ObservableObject {
         let firstSampleAt = Self.iso8601(from: firstChunk.samples.first?.collectorReceivedAtUTC)
         let lastSampleAt = Self.iso8601(from: firstChunk.samples.last?.collectorReceivedAtUTC)
         activityMessage = "Uploading chunk #\(firstChunk.chunkSequenceNumber) to server..."
+        let firstSessionID = firstChunk.sessionID.uuidString.lowercased()
         log(
-            "Upload started for chunk #\(firstChunk.chunkSequenceNumber), samples: \(firstChunk.samples.count), first_sample: \(firstSampleAt), last_sample: \(lastSampleAt), destination: \(transport.uploadDestinationDescription), pending queue before upload: \(pendingUploadChunksCount)",
+            "Upload started session_id=\(firstSessionID) stream_type=\(firstChunk.streamType) sequence=\(firstChunk.chunkSequenceNumber) chunk_id=\(firstChunk.chunkID.uuidString.lowercased()) samples=\(firstChunk.samples.count) first_sample=\(firstSampleAt) last_sample=\(lastSampleAt) destination=\(transport.uploadDestinationDescription) pending_before=\(pendingUploadChunksCount)",
             category: "upload"
         )
         if !transport.isNetworkUploadConfigured {
@@ -351,8 +416,9 @@ final class CollectorCore: ObservableObject {
                 activityMessage = "Uploaded \(uploadedCount) chunk(s). Pending: \(pendingUploadChunksCount)"
                 let uploadedFirstSampleAt = Self.iso8601(from: chunk.samples.first?.collectorReceivedAtUTC)
                 let uploadedLastSampleAt = Self.iso8601(from: chunk.samples.last?.collectorReceivedAtUTC)
+                let sessionID = chunk.sessionID.uuidString.lowercased()
                 log(
-                    "Upload success for chunk #\(chunk.chunkSequenceNumber), samples: \(chunk.samples.count), first_sample: \(uploadedFirstSampleAt), last_sample: \(uploadedLastSampleAt), ackStatus: \(ack.status), accepted: \(ack.accepted), pending queue after upload: \(pendingUploadChunksCount), message: \(ack.message ?? "none")",
+                    "Upload succeeded session_id=\(sessionID) stream_type=\(chunk.streamType) sequence=\(chunk.chunkSequenceNumber) chunk_id=\(chunk.chunkID.uuidString.lowercased()) samples=\(chunk.samples.count) first_sample=\(uploadedFirstSampleAt) last_sample=\(uploadedLastSampleAt) ack_status=\(ack.status) accepted=\(ack.accepted) pending_after=\(pendingUploadChunksCount) message=\(ack.message ?? "none")",
                     category: "upload"
                 )
             } catch {
@@ -361,7 +427,7 @@ final class CollectorCore: ObservableObject {
                 reportFailure(
                     userMessage: "Upload failed: \(message)",
                     activity: "Upload failed after \(uploadedCount) success(es). Pending: \(pendingUploadChunksCount)",
-                    technical: "Upload failed for chunk #\(chunk.chunkSequenceNumber): \(message). Chunk kept in pending queue for retry.",
+                    technical: "Upload failed session_id=\(chunk.sessionID.uuidString.lowercased()) stream_type=\(chunk.streamType) sequence=\(chunk.chunkSequenceNumber) chunk_id=\(chunk.chunkID.uuidString.lowercased()) error=\(message). Chunk kept in pending queue for retry.",
                     category: "upload"
                 )
                 return
@@ -369,7 +435,7 @@ final class CollectorCore: ObservableObject {
         }
     }
 
-    private func handle(sample: HeartRateSample) {
+    private func handle(sample: HeartRateSample) async {
         latestHeartRateSample = sample
         totalSamplesReceived += 1
         bufferedSamples.append(sample)
@@ -385,6 +451,50 @@ final class CollectorCore: ObservableObject {
                 sessionID: sessionID,
                 sample: sample
             )
+        }
+
+        if status == .collecting, bufferedSamples.count >= uploadConfiguration.autoFlushSampleCount {
+            await flushAndUploadBufferedSamples(trigger: .sampleCount)
+        }
+    }
+
+    private func startAutoFlushTask() {
+        autoFlushTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                await self.sleepProvider(1_000_000_000)
+                guard !Task.isCancelled else { return }
+                guard self.status == .collecting else { continue }
+                guard !self.bufferedSamples.isEmpty else { continue }
+                guard let lastFlushAtUTC else { continue }
+
+                let elapsed = self.nowProvider().timeIntervalSince(lastFlushAtUTC)
+                if elapsed >= self.uploadConfiguration.autoFlushIntervalSeconds {
+                    await self.flushAndUploadBufferedSamples(trigger: .timer)
+                }
+            }
+        }
+    }
+
+    private func flushAndUploadBufferedSamples(trigger: FlushTrigger) async {
+        guard !isAutoFlushing else { return }
+        guard !bufferedSamples.isEmpty else { return }
+
+        isAutoFlushing = true
+        defer { isAutoFlushing = false }
+
+        var currentTrigger = trigger
+        while !bufferedSamples.isEmpty {
+            if currentTrigger == .sampleCount, bufferedSamples.count < uploadConfiguration.autoFlushSampleCount {
+                return
+            }
+
+            guard prepareUploadChunk(trigger: currentTrigger) != nil else { return }
+            await uploadLastPreparedChunk()
+
+            guard status == .collecting else { return }
+            guard bufferedSamples.count >= uploadConfiguration.autoFlushSampleCount else { return }
+            currentTrigger = .sampleCount
         }
     }
 

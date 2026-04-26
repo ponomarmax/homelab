@@ -202,3 +202,31 @@ This means:
 - dashboards must be safe to recreate together with Grafana
 
 Future dashboard work should extend this structure rather than replace it.
+
+## Wearable Ingestion Baseline V1
+
+### Contract
+
+- UploadChunkContract v1.0
+- stream_type, source, collection are part of transport metadata
+- X-User-ID header used for user separation
+- fallback user_id = "1"
+
+### Storage
+
+- append-only JSONL
+- structured path: user / source / date / session / stream_type
+- one chunks.jsonl per session/stream
+
+### Responsibilities
+
+Ingestion API MUST:
+- accept transport envelope
+- persist raw data
+- add server.received_at_server
+
+Ingestion API MUST NOT:
+- normalize timestamps
+- compute features
+- aggregate data
+- interpret payload

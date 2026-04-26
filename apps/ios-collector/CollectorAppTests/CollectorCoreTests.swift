@@ -42,6 +42,7 @@ final class CollectorCoreTests: XCTestCase {
             chunkBuilder.buildChunk(
                 session: session,
                 streamDescriptor: streamDescriptor,
+                streamProfile: PolarHrStreamProfile.live,
                 chunkSequenceNumber: chunkSequenceNumber,
                 samples: samples
             )
@@ -277,6 +278,160 @@ final class CollectorCoreTests: XCTestCase {
         await core.uploadLastPreparedChunk()
         XCTAssertEqual(core.uploadStatus, .failure)
         XCTAssertEqual(core.pendingUploadChunksCount, 2)
+        core.stopCollection()
+    }
+
+    func testAutoUploadTriggersAtTwentySamples() async {
+        let transport = RecordingTransport()
+        let samples = (0..<20).map { index in
+            makeSample(
+                hr: 60 + index,
+                receivedAt: Date(timeIntervalSince1970: 1_000 + Double(index)),
+                sequence: index
+            )
+        }
+        let core = CollectorCore(
+            adapter: MockDeviceAdapter(
+                hrProvider: ImmediateHeartRateProvider(samples: samples)
+            ),
+            transport: transport
+        )
+
+        core.selectDevice()
+        await core.startCollection()
+
+        let uploaded = await waitUntil { transport.uploadedChunks.count == 1 }
+        XCTAssertTrue(uploaded)
+        XCTAssertEqual(transport.uploadedChunks.first?.samples.count, 20)
+    }
+
+    func testAutoUploadTriggersByFlushIntervalWhenBelowSampleThreshold() async {
+        let transport = RecordingTransport()
+        let samples = (0..<3).map { index in
+            makeSample(
+                hr: 70 + index,
+                receivedAt: Date(timeIntervalSince1970: 2_000 + Double(index)),
+                sequence: index
+            )
+        }
+        let configuration = CollectorUploadConfiguration(
+            autoFlushSampleCount: 20,
+            autoFlushIntervalSeconds: 0.05,
+            userIDHeaderValue: "2",
+            streamProfile: PolarHrStreamProfile.live
+        )
+        let core = CollectorCore(
+            adapter: MockDeviceAdapter(
+                hrProvider: ImmediateHeartRateProvider(samples: samples)
+            ),
+            transport: transport,
+            uploadConfiguration: configuration,
+            sleepProvider: { _ in
+                try? await Task.sleep(nanoseconds: 5_000_000)
+            }
+        )
+
+        core.selectDevice()
+        await core.startCollection()
+
+        let uploaded = await waitUntil(timeoutNanoseconds: 2_000_000_000) {
+            transport.uploadedChunks.count == 1
+        }
+        XCTAssertTrue(uploaded)
+        XCTAssertEqual(transport.uploadedChunks.first?.samples.count, 3)
+    }
+
+    func testStopCollectionFlushesRemainingSamples() async {
+        let transport = RecordingTransport()
+        let samples = (0..<5).map { index in
+            makeSample(
+                hr: 80 + index,
+                receivedAt: Date(timeIntervalSince1970: 3_000 + Double(index)),
+                sequence: index
+            )
+        }
+        let configuration = CollectorUploadConfiguration(
+            autoFlushSampleCount: 20,
+            autoFlushIntervalSeconds: 30,
+            userIDHeaderValue: "2",
+            streamProfile: PolarHrStreamProfile.live
+        )
+        let core = CollectorCore(
+            adapter: MockDeviceAdapter(
+                hrProvider: ImmediateHeartRateProvider(samples: samples)
+            ),
+            transport: transport,
+            uploadConfiguration: configuration
+        )
+
+        core.selectDevice()
+        await core.startCollection()
+        let buffered = await waitUntil { core.bufferedSamplesCount == 5 }
+        XCTAssertTrue(buffered)
+        core.stopCollection()
+
+        let uploaded = await waitUntil { transport.uploadedChunks.count == 1 }
+        XCTAssertTrue(uploaded)
+        XCTAssertEqual(transport.uploadedChunks.first?.samples.count, 5)
+    }
+
+    func testStopCollectionDoesNotUploadEmptyChunk() async {
+        let transport = RecordingTransport()
+        let configuration = CollectorUploadConfiguration(
+            autoFlushSampleCount: 20,
+            autoFlushIntervalSeconds: 30,
+            userIDHeaderValue: "2",
+            streamProfile: PolarHrStreamProfile.live
+        )
+        let core = CollectorCore(
+            adapter: MockDeviceAdapter(
+                hrProvider: ImmediateHeartRateProvider(samples: [])
+            ),
+            transport: transport,
+            uploadConfiguration: configuration
+        )
+
+        core.selectDevice()
+        await core.startCollection()
+        core.stopCollection()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(transport.uploadedChunks.count, 0)
+    }
+
+    func testStreamIDStableSequenceIncrementsAndChunkIDIsUniqueWithinSession() async {
+        let transport = RecordingTransport()
+        let samples = (0..<40).map { index in
+            makeSample(
+                hr: 65 + index,
+                receivedAt: Date(timeIntervalSince1970: 4_000 + Double(index)),
+                sequence: index
+            )
+        }
+        let core = CollectorCore(
+            adapter: MockDeviceAdapter(
+                hrProvider: ImmediateHeartRateProvider(samples: samples)
+            ),
+            transport: transport
+        )
+
+        core.selectDevice()
+        await core.startCollection()
+
+        let uploadedTwoChunks = await waitUntil(timeoutNanoseconds: 2_000_000_000) {
+            transport.uploadedChunks.count == 2
+        }
+        XCTAssertTrue(uploadedTwoChunks)
+
+        let chunks = transport.uploadedChunks
+        let streamIDs = Set(chunks.map(\.streamID))
+        let chunkIDs = Set(chunks.map(\.chunkID))
+        let sequences = chunks.map(\.chunkSequenceNumber).sorted()
+
+        XCTAssertEqual(streamIDs.count, 1)
+        XCTAssertEqual(chunkIDs.count, chunks.count)
+        XCTAssertEqual(sequences, [1, 2])
+        core.stopCollection()
     }
 
     func testPrepareLogExportCreatesShareableFile() {

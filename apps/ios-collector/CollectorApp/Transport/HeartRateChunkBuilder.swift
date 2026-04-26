@@ -4,6 +4,7 @@ struct HeartRateChunkBuilder {
     func buildChunk(
         session: CollectionSession,
         streamDescriptor: StreamDescriptor,
+        streamProfile: StreamMetadataProfile,
         chunkSequenceNumber: Int,
         samples: [HeartRateSample],
         createdAtUTC: Date = Date()
@@ -14,11 +15,14 @@ struct HeartRateChunkBuilder {
             sessionID: session.sessionID,
             streamName: streamDescriptor.streamName,
             streamType: streamDescriptor.streamType,
+            streamID: streamProfile.streamID(for: session.sessionID),
             chunkID: UUID(),
             chunkSequenceNumber: chunkSequenceNumber,
             createdAtUTC: createdAtUTC,
             samples: samples,
-            collectionMode: session.collectionMode
+            collectionMode: session.collectionMode,
+            streamProfile: streamProfile,
+            sourceDeviceID: session.deviceID.isEmpty ? nil : session.deviceID
         )
     }
 }

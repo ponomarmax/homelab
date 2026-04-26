@@ -1,8 +1,95 @@
 import Foundation
 
+struct StreamMetadataProfile: Equatable, Codable, Sendable {
+    struct Source: Equatable, Codable, Sendable {
+        let vendor: String
+        let deviceModel: String
+        let deviceID: String?
+
+        enum CodingKeys: String, CodingKey {
+            case vendor
+            case deviceModel = "device_model"
+            case deviceID = "device_id"
+        }
+    }
+
+    struct Collection: Equatable, Codable, Sendable {
+        let mode: String
+    }
+
+    struct Transport: Equatable, Codable, Sendable {
+        let encoding: String
+        let compression: String
+        let payloadSchema: String
+        let payloadVersion: String
+
+        enum CodingKeys: String, CodingKey {
+            case encoding
+            case compression
+            case payloadSchema = "payload_schema"
+            case payloadVersion = "payload_version"
+        }
+    }
+
+    let schemaVersion: String
+    let streamType: String
+    let source: Source
+    let collection: Collection
+    let deviceTimeReference: String
+    let transport: Transport
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case streamType = "stream_type"
+        case source
+        case collection
+        case deviceTimeReference = "device_time_reference"
+        case transport
+    }
+
+    func streamID(for sessionID: UUID) -> String {
+        "stream-\(streamType)-\(sessionID.uuidString.lowercased())"
+    }
+}
+
+enum PolarHrStreamProfile {
+    static let live = StreamMetadataProfile(
+        schemaVersion: "1.0",
+        streamType: "hr",
+        source: StreamMetadataProfile.Source(
+            vendor: "polar",
+            deviceModel: "verity_sense",
+            deviceID: nil
+        ),
+        collection: StreamMetadataProfile.Collection(mode: "online_live"),
+        deviceTimeReference: "collector:collectorObserved",
+        transport: StreamMetadataProfile.Transport(
+            encoding: "json",
+            compression: "none",
+            payloadSchema: "polar.hr",
+            payloadVersion: "1.0"
+        )
+    )
+}
+
+struct CollectorUploadConfiguration: Equatable, Sendable {
+    let autoFlushSampleCount: Int
+    let autoFlushIntervalSeconds: TimeInterval
+    let userIDHeaderValue: String
+    let streamProfile: StreamMetadataProfile
+
+    static let `default` = CollectorUploadConfiguration(
+        autoFlushSampleCount: 20,
+        autoFlushIntervalSeconds: 30,
+        userIDHeaderValue: "2",
+        streamProfile: PolarHrStreamProfile.live
+    )
+}
+
 struct CollectorRuntimeConfiguration {
     let useMockDevice: Bool
     let uploadEndpoint: URL?
+    let upload: CollectorUploadConfiguration
 
     static func from(
         environment: [String: String],
@@ -29,7 +116,8 @@ struct CollectorRuntimeConfiguration {
 
         return CollectorRuntimeConfiguration(
             useMockDevice: useMockDevice,
-            uploadEndpoint: uploadEndpoint
+            uploadEndpoint: uploadEndpoint,
+            upload: .default
         )
     }
 
