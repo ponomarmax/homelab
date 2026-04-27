@@ -13,6 +13,24 @@ LinkedIn post idea:
 Date: 2026-04-27
 
 What was done:
+- Deployed `wearable-pipeline-api` through the repository `tools/scripts/deploy.sh --confirm wearable-pipeline-api` workflow with Compose rebuild/recreate.
+- Validated deployed multi-stream session summary for a sanitized Polar H10 session containing `hr`, `acc`, `ecg`, and `stream_type=unknown` with `payload_schema=polar.device_battery`.
+- Confirmed generated `session_summary.json` includes session timing fields, `crosses_midnight`, stream presence/missing lists, per-stream summaries, artifact paths, and aggregate status.
+- Confirmed battery stream was summarized via payload schema dispatch even when raw stream type was `unknown`.
+- Confirmed raw JSONL artifacts were not modified by pipeline summary processing (stable SHA-256 before/after rerun).
+- Confirmed pipeline run-state records include `build_session_summary` with per-stream results and traceable artifact paths.
+- Validated cross-date artifact discovery by running a deployed summary-step check across `date=2026-04-26` and `date=2026-04-27` partitions for one session id and confirming a single summary artifact.
+- Recreated `wearable-pipeline-api` and verified summary/state artifacts remained available after recreate.
+
+Key insight:
+The deployed summary flow is robust for Polar H10 multi-stream sessions when dispatch and stream resolution rely on source/device/payload schema metadata instead of stream directory naming alone.
+
+LinkedIn post idea:
+How to validate deterministic multi-stream wearable summaries in production-like Compose deployment, including cross-midnight and persistence checks.
+
+Date: 2026-04-27
+
+What was done:
 - Deployed updated `wearable-pipeline-api` via repository workflow (`tools/scripts/deploy.sh --confirm wearable-pipeline-api`).
 - Ran local pipeline test suite before deploy (`services/wearable-pipeline-api/tests`).
 - Executed post-deployment multi-stream validation using a sanitized session with `hr`, `acc`, `ecg`, `unknown/polar.device_battery`, and unsupported `ppi`.
@@ -164,6 +182,22 @@ Locking down artifact boundaries, timestamp rules, and deterministic pipeline re
 
 LinkedIn post idea:
 Two possible angles: documenting a wearable pipeline as architecture before writing code, and why raw-first plus deterministic nightly artifacts make later AI layers easier to trust.
+
+Date: 2026-04-27
+
+What was done:
+- Extended `build_session_summary` to aggregate deterministic per-stream summaries for Polar H10 `polar.hr`, `polar.acc`, `polar.ecg`, and `polar.device_battery`.
+- Added schema-aware stream discovery so battery summary resolves from `payload_schema=polar.device_battery` even when `stream_type=unknown`.
+- Added cross-midnight-safe session artifact discovery for explicit `session_id`, with date lookup support for requested day plus previous day.
+- Added deterministic top-level session summary fields for timing, midnight crossing, stream presence/missing state, per-stream summaries, artifact traceability, and aggregate status.
+- Added dedicated deterministic ACC, ECG, and device battery summary handlers while keeping existing HR summary behavior available.
+- Added focused tests for multi-stream summary, battery schema recognition, cross-midnight discovery, missing-stream partial behavior, raw JSONL non-interaction, and deterministic JSON structure.
+
+Key insight:
+Session summary can stay lightweight and deterministic while still being robust to multi-stream Polar H10 sessions and cross-midnight partitioning, as long as handler dispatch uses artifact metadata (vendor/device/payload schema) rather than stream directory naming alone.
+
+LinkedIn post idea:
+How to evolve a deterministic wearable pipeline summary from single-stream HR to multi-stream session-level aggregation without adding non-deterministic logic.
 
 Date: 2026-04-23
 

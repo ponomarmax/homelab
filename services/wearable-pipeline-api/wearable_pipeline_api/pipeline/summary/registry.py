@@ -3,6 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
+from .acc import AccSummaryHandler
+from .device_battery import DeviceBatterySummaryHandler
+from .ecg import EcgSummaryHandler
 from .hr import HrSummaryHandler, HrSummaryOutput
 
 
@@ -16,5 +19,8 @@ class SessionSummaryHandler(Protocol):
 
 def session_summary_handler_registry() -> dict[str, SessionSummaryHandler]:
     return {
+        "acc": AccSummaryHandler(),
+        "device_battery": DeviceBatterySummaryHandler(),
+        "ecg": EcgSummaryHandler(),
         "hr": HrSummaryHandler(),
     }
