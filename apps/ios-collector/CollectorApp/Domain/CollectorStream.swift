@@ -40,8 +40,7 @@ enum CollectorStream: String, CaseIterable, Identifiable, Codable, Sendable {
         case .eeg:
             return "eeg"
         case .battery:
-            // Keep current transport enum compatibility by using a fallback type.
-            return "unknown"
+            return "battery"
         }
     }
 

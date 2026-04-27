@@ -4,6 +4,17 @@ import Foundation
 struct PolarStreamSettingsMetadata: Equatable, Sendable {
     let sampleRateHz: UInt32?
     let rangeMg: UInt32?
+    let streamSettings: [String: StreamSettingValue]?
+
+    init(
+        sampleRateHz: UInt32?,
+        rangeMg: UInt32?,
+        streamSettings: [String: StreamSettingValue]? = nil
+    ) {
+        self.sampleRateHz = sampleRateHz
+        self.rangeMg = rangeMg
+        self.streamSettings = streamSettings
+    }
 }
 
 struct PolarCollectorEventMapper {
@@ -47,7 +58,8 @@ struct PolarCollectorEventMapper {
                     ecgUv: sample.voltage,
                     sampleRateHz: settings.sampleRateHz
                 )
-            )
+            ),
+            streamSettings: settings.streamSettings
         )
     }
 
@@ -71,7 +83,8 @@ struct PolarCollectorEventMapper {
                     sampleRateHz: settings.sampleRateHz,
                     rangeMg: settings.rangeMg
                 )
-            )
+            ),
+            streamSettings: settings.streamSettings
         )
     }
 
@@ -185,6 +198,17 @@ final class PolarBatteryStreamProvider: HeartRateStreamProviding {
 struct PolarStreamSettingsMetadata: Equatable, Sendable {
     let sampleRateHz: UInt32?
     let rangeMg: UInt32?
+    let streamSettings: [String: StreamSettingValue]?
+
+    init(
+        sampleRateHz: UInt32?,
+        rangeMg: UInt32?,
+        streamSettings: [String: StreamSettingValue]? = nil
+    ) {
+        self.sampleRateHz = sampleRateHz
+        self.rangeMg = rangeMg
+        self.streamSettings = streamSettings
+    }
 }
 
 struct PolarCollectorEventMapper {
@@ -228,7 +252,8 @@ struct PolarCollectorEventMapper {
                     ecgUv: sample.voltage,
                     sampleRateHz: settings.sampleRateHz
                 )
-            )
+            ),
+            streamSettings: settings.streamSettings
         )
     }
 
@@ -252,7 +277,8 @@ struct PolarCollectorEventMapper {
                     sampleRateHz: settings.sampleRateHz,
                     rangeMg: settings.rangeMg
                 )
-            )
+            ),
+            streamSettings: settings.streamSettings
         )
     }
 
@@ -598,8 +624,29 @@ final class PolarEcgStreamProvider: HeartRateStreamProviding {
     private static func metadata(from settings: PolarSensorSetting) -> PolarStreamSettingsMetadata {
         PolarStreamSettingsMetadata(
             sampleRateHz: settings.settings[.sampleRate]?.max(),
-            rangeMg: settings.settings[.range]?.max()
+            rangeMg: settings.settings[.range]?.max(),
+            streamSettings: streamSettings(from: settings)
         )
+    }
+
+    private static func streamSettings(from settings: PolarSensorSetting) -> [String: StreamSettingValue] {
+        var selectedValues: [String: StreamSettingValue] = [:]
+        var availableValues: [String: StreamSettingValue] = [:]
+
+        for (settingType, values) in settings.settings {
+            let key = String(describing: settingType)
+            let sortedValues = values.sorted()
+            availableValues[key] = .array(sortedValues.map { .number(Double($0)) })
+            if let selectedValue = sortedValues.max() {
+                selectedValues[key] = .number(Double(selectedValue))
+            }
+        }
+
+        return [
+            "sdk_mode": .string("online_live"),
+            "selected": .object(selectedValues),
+            "available": .object(availableValues)
+        ]
     }
 
     private static func describe(settings: PolarSensorSetting) -> String {
@@ -894,8 +941,29 @@ final class PolarAccStreamProvider: HeartRateStreamProviding {
     private static func metadata(from settings: PolarSensorSetting) -> PolarStreamSettingsMetadata {
         PolarStreamSettingsMetadata(
             sampleRateHz: settings.settings[.sampleRate]?.max(),
-            rangeMg: settings.settings[.range]?.max()
+            rangeMg: settings.settings[.range]?.max(),
+            streamSettings: streamSettings(from: settings)
         )
+    }
+
+    private static func streamSettings(from settings: PolarSensorSetting) -> [String: StreamSettingValue] {
+        var selectedValues: [String: StreamSettingValue] = [:]
+        var availableValues: [String: StreamSettingValue] = [:]
+
+        for (settingType, values) in settings.settings {
+            let key = String(describing: settingType)
+            let sortedValues = values.sorted()
+            availableValues[key] = .array(sortedValues.map { .number(Double($0)) })
+            if let selectedValue = sortedValues.max() {
+                selectedValues[key] = .number(Double(selectedValue))
+            }
+        }
+
+        return [
+            "sdk_mode": .string("online_live"),
+            "selected": .object(selectedValues),
+            "available": .object(availableValues)
+        ]
     }
 
     private static func describe(settings: PolarSensorSetting) -> String {

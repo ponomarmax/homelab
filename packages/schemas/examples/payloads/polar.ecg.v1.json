@@ -1,5 +1,20 @@
 {
   "sample_rate_hz": 130,
+  "stream_settings": {
+    "sdk_mode": "online_live",
+    "selected": {
+      "sampleRate": 130,
+      "resolution": 16
+    },
+    "available": {
+      "sampleRate": [
+        130
+      ],
+      "resolution": [
+        16
+      ]
+    }
+  },
   "units": {
     "ecg_uv": "uV",
     "device_time_ns": "ns_since_2000_epoch"

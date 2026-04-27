@@ -84,7 +84,10 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
         }
 
         guard !payloadSamples.isEmpty else { return nil }
-        return CanonicalPolarHrPayload(samples: payloadSamples)
+        return CanonicalPolarHrPayload(
+            streamSettings: resolveStreamSettings(from: samples),
+            samples: payloadSamples
+        )
     }
 
     private func makeEcgPayload(samples: [HeartRateSample]) -> CanonicalPolarEcgPayload? {
@@ -106,6 +109,7 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
 
         return CanonicalPolarEcgPayload(
             sampleRateHz: sampleRateHz,
+            streamSettings: resolveStreamSettings(from: samples),
             units: CanonicalPolarEcgPayload.Units(
                 ecgUv: "uV",
                 deviceTimeNS: "ns_since_2000_epoch"
@@ -141,6 +145,7 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
         return CanonicalPolarAccPayload(
             sampleRateHz: sampleRateHz,
             rangeMg: rangeMg,
+            streamSettings: resolveStreamSettings(from: samples),
             units: CanonicalPolarAccPayload.Units(
                 xMg: "mg",
                 yMg: "mg",
@@ -186,6 +191,10 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
     private static func iso8601(from date: Date) -> String {
         iso8601Formatter.string(from: date)
     }
+
+    private func resolveStreamSettings(from samples: [HeartRateSample]) -> [String: StreamSettingValue]? {
+        samples.compactMap(\.streamSettings).first
+    }
 }
 
 struct CanonicalPolarHrSample: Equatable, Codable, Sendable {
@@ -211,7 +220,13 @@ struct CanonicalPolarHrSample: Equatable, Codable, Sendable {
 }
 
 struct CanonicalPolarHrPayload: Equatable, Codable, Sendable {
+    let streamSettings: [String: StreamSettingValue]?
     let samples: [CanonicalPolarHrSample]
+
+    enum CodingKeys: String, CodingKey {
+        case streamSettings = "stream_settings"
+        case samples
+    }
 }
 
 struct CanonicalPolarEcgSample: Equatable, Codable, Sendable {
@@ -238,11 +253,13 @@ struct CanonicalPolarEcgPayload: Equatable, Codable, Sendable {
     }
 
     let sampleRateHz: UInt32?
+    let streamSettings: [String: StreamSettingValue]?
     let units: Units
     let samples: [CanonicalPolarEcgSample]
 
     enum CodingKeys: String, CodingKey {
         case sampleRateHz = "sample_rate_hz"
+        case streamSettings = "stream_settings"
         case units
         case samples
     }
@@ -281,12 +298,14 @@ struct CanonicalPolarAccPayload: Equatable, Codable, Sendable {
 
     let sampleRateHz: UInt32?
     let rangeMg: UInt32?
+    let streamSettings: [String: StreamSettingValue]?
     let units: Units
     let samples: [CanonicalPolarAccSample]
 
     enum CodingKeys: String, CodingKey {
         case sampleRateHz = "sample_rate_hz"
         case rangeMg = "range_mg"
+        case streamSettings = "stream_settings"
         case units
         case samples
     }

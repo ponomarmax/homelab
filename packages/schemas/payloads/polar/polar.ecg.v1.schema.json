@@ -12,6 +12,10 @@
       "type": "number",
       "exclusiveMinimum": 0
     },
+    "stream_settings": {
+      "type": "object",
+      "additionalProperties": true
+    },
     "units": {
       "type": "object",
       "additionalProperties": false,

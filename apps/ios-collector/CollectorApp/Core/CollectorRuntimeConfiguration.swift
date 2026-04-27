@@ -115,7 +115,7 @@ enum PolarStreamProfile {
 
     static let batteryLive = StreamMetadataProfile(
         schemaVersion: "1.0",
-        streamType: "unknown",
+        streamType: "battery",
         streamIDPrefix: "battery",
         source: StreamMetadataProfile.Source(
             vendor: "polar",
@@ -134,8 +134,29 @@ enum PolarStreamProfile {
 }
 
 struct CollectorUploadConfiguration: Equatable, Sendable {
-    let autoFlushSampleCount: Int
-    let autoFlushIntervalSeconds: TimeInterval
+    struct RetryConfiguration: Equatable, Sendable {
+        let initialDelaySeconds: TimeInterval
+        let maxDelaySeconds: TimeInterval
+        let backoffMultiplier: Double
+
+        func nextDelaySeconds(forAttempt attempt: Int) -> TimeInterval {
+            guard attempt > 0 else { return initialDelaySeconds }
+            let exponent = max(0, attempt - 1)
+            let delay = initialDelaySeconds * pow(backoffMultiplier, Double(exponent))
+            return min(maxDelaySeconds, delay)
+        }
+    }
+
+    struct StreamUploadConfiguration: Equatable, Sendable {
+        let sampleCountThreshold: Int?
+
+        static let `default` = StreamUploadConfiguration(sampleCountThreshold: nil)
+    }
+
+    let uploadFlushIntervalSeconds: TimeInterval
+    let defaultSampleCountThreshold: Int?
+    let retry: RetryConfiguration
+    let streamConfigurations: [CollectorStream: StreamUploadConfiguration]
     let userIDHeaderValue: String
     let streamProfiles: [CollectorStream: StreamMetadataProfile]
 
@@ -147,24 +168,24 @@ struct CollectorUploadConfiguration: Equatable, Sendable {
         streamProfiles[stream] ?? PolarStreamProfile.hrLive
     }
 
-    func sampleFlushCount(for stream: CollectorStream) -> Int {
-        switch stream {
-        case .heartRate:
-            return autoFlushSampleCount
-        case .ecg:
-            return 260
-        case .accelerometer:
-            return 200
-        case .battery:
-            return 1
-        default:
-            return autoFlushSampleCount
-        }
+    func sampleFlushCount(for stream: CollectorStream) -> Int? {
+        streamConfigurations[stream]?.sampleCountThreshold ?? defaultSampleCountThreshold
     }
 
     static let `default` = CollectorUploadConfiguration(
-        autoFlushSampleCount: 20,
-        autoFlushIntervalSeconds: 30,
+        uploadFlushIntervalSeconds: 60,
+        defaultSampleCountThreshold: nil,
+        retry: RetryConfiguration(
+            initialDelaySeconds: 2,
+            maxDelaySeconds: 60,
+            backoffMultiplier: 2
+        ),
+        streamConfigurations: [
+            .heartRate: .default,
+            .ecg: .default,
+            .accelerometer: .default,
+            .battery: .default
+        ],
         userIDHeaderValue: "2",
         streamProfiles: [
             .heartRate: PolarStreamProfile.hrLive,
@@ -173,6 +194,38 @@ struct CollectorUploadConfiguration: Equatable, Sendable {
             .battery: PolarStreamProfile.batteryLive
         ]
     )
+
+    init(
+        uploadFlushIntervalSeconds: TimeInterval,
+        defaultSampleCountThreshold: Int?,
+        retry: RetryConfiguration,
+        streamConfigurations: [CollectorStream: StreamUploadConfiguration],
+        userIDHeaderValue: String,
+        streamProfiles: [CollectorStream: StreamMetadataProfile]
+    ) {
+        self.uploadFlushIntervalSeconds = uploadFlushIntervalSeconds
+        self.defaultSampleCountThreshold = defaultSampleCountThreshold
+        self.retry = retry
+        self.streamConfigurations = streamConfigurations
+        self.userIDHeaderValue = userIDHeaderValue
+        self.streamProfiles = streamProfiles
+    }
+
+    init(
+        autoFlushSampleCount: Int,
+        autoFlushIntervalSeconds: TimeInterval,
+        userIDHeaderValue: String,
+        streamProfiles: [CollectorStream: StreamMetadataProfile]
+    ) {
+        self.init(
+            uploadFlushIntervalSeconds: autoFlushIntervalSeconds,
+            defaultSampleCountThreshold: autoFlushSampleCount,
+            retry: .init(initialDelaySeconds: 2, maxDelaySeconds: 60, backoffMultiplier: 2),
+            streamConfigurations: [:],
+            userIDHeaderValue: userIDHeaderValue,
+            streamProfiles: streamProfiles
+        )
+    }
 }
 
 struct CollectorRuntimeConfiguration {
@@ -203,10 +256,24 @@ struct CollectorRuntimeConfiguration {
             ?? (bundleInfo?["COLLECTOR_UPLOAD_ENDPOINT"] as? String)
         let uploadEndpoint = uploadEndpointRawValue.flatMap(parseUploadEndpoint)
 
+        var uploadConfiguration = CollectorUploadConfiguration.default
+        if let rawFlushInterval = environment["COLLECTOR_UPLOAD_FLUSH_INTERVAL_SECONDS"],
+           let flushInterval = TimeInterval(rawFlushInterval),
+           flushInterval > 0 {
+            uploadConfiguration = CollectorUploadConfiguration(
+                uploadFlushIntervalSeconds: flushInterval,
+                defaultSampleCountThreshold: uploadConfiguration.defaultSampleCountThreshold,
+                retry: uploadConfiguration.retry,
+                streamConfigurations: uploadConfiguration.streamConfigurations,
+                userIDHeaderValue: uploadConfiguration.userIDHeaderValue,
+                streamProfiles: uploadConfiguration.streamProfiles
+            )
+        }
+
         return CollectorRuntimeConfiguration(
             useMockDevice: useMockDevice,
             uploadEndpoint: uploadEndpoint,
-            upload: .default
+            upload: uploadConfiguration
         )
     }
 

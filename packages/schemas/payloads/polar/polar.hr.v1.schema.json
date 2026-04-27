@@ -8,6 +8,10 @@
     "samples"
   ],
   "properties": {
+    "stream_settings": {
+      "type": "object",
+      "additionalProperties": true
+    },
     "samples": {
       "type": "array",
       "minItems": 1,

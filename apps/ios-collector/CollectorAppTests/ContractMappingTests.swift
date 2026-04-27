@@ -115,7 +115,18 @@ final class ContractMappingTests: XCTestCase {
                     ecgUv: 145,
                     sampleRateHz: 130
                 )
-            )
+            ),
+            streamSettings: [
+                "sdk_mode": .string("online_live"),
+                "selected": .object([
+                    "sampleRate": .number(130),
+                    "resolution": .number(16)
+                ]),
+                "available": .object([
+                    "sampleRate": .array([.number(130)]),
+                    "resolution": .array([.number(16)])
+                ])
+            ]
         )
 
         let chunk = UploadChunk(
@@ -142,6 +153,20 @@ final class ContractMappingTests: XCTestCase {
         XCTAssertEqual(mapped.ecgUv, 145)
         XCTAssertEqual(mapped.receivedAtCollector, "1970-01-01T00:33:20.000Z")
         XCTAssertEqual(payload.sampleRateHz, 130)
+        XCTAssertEqual(
+            payload.streamSettings,
+            [
+                "sdk_mode": .string("online_live"),
+                "selected": .object([
+                    "sampleRate": .number(130),
+                    "resolution": .number(16)
+                ]),
+                "available": .object([
+                    "sampleRate": .array([.number(130)]),
+                    "resolution": .array([.number(16)])
+                ])
+            ]
+        )
     }
 
     func testCanonicalAccMappingIncludesDeviceTimeAndCollectorReceiveTime() throws {
@@ -228,7 +253,7 @@ final class ContractMappingTests: XCTestCase {
         let callbackChunk = UploadChunk(
             sessionID: UUID(),
             streamName: "Battery",
-            streamType: "unknown",
+            streamType: "battery",
             streamID: "stream-battery-session",
             chunkID: UUID(),
             chunkSequenceNumber: 1,
@@ -242,7 +267,7 @@ final class ContractMappingTests: XCTestCase {
         let pollChunk = UploadChunk(
             sessionID: UUID(),
             streamName: "Battery",
-            streamType: "unknown",
+            streamType: "battery",
             streamID: "stream-battery-session",
             chunkID: UUID(),
             chunkSequenceNumber: 2,
@@ -256,7 +281,7 @@ final class ContractMappingTests: XCTestCase {
         let unavailableChunk = UploadChunk(
             sessionID: UUID(),
             streamName: "Battery",
-            streamType: "unknown",
+            streamType: "battery",
             streamID: "stream-battery-session",
             chunkID: UUID(),
             chunkSequenceNumber: 3,
@@ -270,6 +295,9 @@ final class ContractMappingTests: XCTestCase {
         let callbackRequest = try XCTUnwrap(callbackChunk.makeCanonicalRequest())
         let pollRequest = try XCTUnwrap(pollChunk.makeCanonicalRequest())
         let unavailableRequest = try XCTUnwrap(unavailableChunk.makeCanonicalRequest())
+        XCTAssertEqual(callbackRequest.streamType, "battery")
+        XCTAssertEqual(pollRequest.streamType, "battery")
+        XCTAssertEqual(unavailableRequest.streamType, "battery")
 
         guard case .battery(let callbackPayload) = callbackRequest.payload else {
             return XCTFail("Expected battery payload")
@@ -304,7 +332,7 @@ final class ContractMappingTests: XCTestCase {
         XCTAssertEqual(PolarStreamProfile.accLive.streamType, "acc")
         XCTAssertEqual(PolarStreamProfile.accLive.transport.payloadSchema, "polar.acc")
 
-        XCTAssertEqual(PolarStreamProfile.batteryLive.streamType, "unknown")
+        XCTAssertEqual(PolarStreamProfile.batteryLive.streamType, "battery")
         XCTAssertEqual(PolarStreamProfile.batteryLive.transport.payloadSchema, "polar.device_battery")
     }
 }

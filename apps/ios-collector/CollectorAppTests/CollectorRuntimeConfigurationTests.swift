@@ -71,4 +71,24 @@ final class CollectorRuntimeConfigurationTests: XCTestCase {
 
         XCTAssertNil(configuration.uploadEndpoint)
     }
+
+    func testUploadFlushIntervalDefaultsToSixtySeconds() {
+        let configuration = CollectorRuntimeConfiguration.from(
+            environment: [:],
+            arguments: [],
+            bundleInfo: nil
+        )
+
+        XCTAssertEqual(configuration.upload.uploadFlushIntervalSeconds, 60)
+    }
+
+    func testUploadFlushIntervalCanBeOverriddenByEnvironment() {
+        let configuration = CollectorRuntimeConfiguration.from(
+            environment: ["COLLECTOR_UPLOAD_FLUSH_INTERVAL_SECONDS": "15"],
+            arguments: [],
+            bundleInfo: nil
+        )
+
+        XCTAssertEqual(configuration.upload.uploadFlushIntervalSeconds, 15)
+    }
 }

@@ -57,6 +57,8 @@ final class CollectorCore: ObservableObject {
 
     private var autoFlushTask: Task<Void, Never>?
     private var isAutoFlushing: Bool = false
+    private var consecutiveUploadFailureCount: Int = 0
+    private var nextUploadRetryAtUTC: Date?
 
     init(
         adapter: CollectorDeviceAdapter,
@@ -223,6 +225,8 @@ final class CollectorCore: ObservableObject {
         pendingUploadChunksCount = 0
         nextChunkSequenceNumberByStream.removeAll()
         lastFlushAtUTCByStream.removeAll()
+        consecutiveUploadFailureCount = 0
+        nextUploadRetryAtUTC = nil
         latestHeartRateSample = nil
         lastPreparedChunk = nil
         debugExportFileURL = nil
@@ -473,6 +477,8 @@ final class CollectorCore: ObservableObject {
                 lastPreparedChunk = pendingUploadChunks.last
                 uploadedCount += 1
                 uploadStatus = .success
+                consecutiveUploadFailureCount = 0
+                nextUploadRetryAtUTC = nil
                 activityMessage = "Uploaded \(uploadedCount) chunk(s). Pending: \(pendingUploadChunksCount)"
                 let uploadedFirstSampleAt = Self.iso8601(from: chunk.samples.first?.collectorReceivedAtUTC)
                 let uploadedLastSampleAt = Self.iso8601(from: chunk.samples.last?.collectorReceivedAtUTC)
@@ -483,6 +489,9 @@ final class CollectorCore: ObservableObject {
                 )
             } catch {
                 uploadStatus = .failure
+                consecutiveUploadFailureCount += 1
+                let retryDelay = uploadConfiguration.retry.nextDelaySeconds(forAttempt: consecutiveUploadFailureCount)
+                nextUploadRetryAtUTC = nowProvider().addingTimeInterval(retryDelay)
                 let message = error.localizedDescription
                 reportFailure(
                     userMessage: "Upload failed: \(message)",
@@ -490,6 +499,13 @@ final class CollectorCore: ObservableObject {
                     technical: "Upload failed session_id=\(chunk.sessionID.uuidString.lowercased()) stream_type=\(chunk.streamType) sequence=\(chunk.chunkSequenceNumber) chunk_id=\(chunk.chunkID.uuidString.lowercased()) error=\(message). Chunk kept in pending queue for retry.",
                     category: "upload"
                 )
+                if let nextUploadRetryAtUTC {
+                    log(
+                        "Retry scheduled in \(Int(retryDelay))s at \(Self.iso8601(from: nextUploadRetryAtUTC))",
+                        level: .warning,
+                        category: "upload"
+                    )
+                }
                 return
             }
         }
@@ -520,8 +536,7 @@ final class CollectorCore: ObservableObject {
             )
         }
 
-        if status == .collecting {
-            let flushCount = uploadConfiguration.sampleFlushCount(for: sample.stream)
+        if status == .collecting, let flushCount = uploadConfiguration.sampleFlushCount(for: sample.stream) {
             if streamSamples.count >= flushCount {
                 await flushAndUploadBufferedSamples(
                     for: sample.stream,
@@ -539,6 +554,14 @@ final class CollectorCore: ObservableObject {
                 await self.sleepProvider(1_000_000_000)
                 guard !Task.isCancelled else { return }
                 guard self.status == .collecting else { continue }
+
+                if !self.pendingUploadChunks.isEmpty,
+                   !self.isUploadingChunk,
+                   self.shouldRetryPendingUploads(now: self.nowProvider()) {
+                    self.log("Retrying pending chunks (\(self.pendingUploadChunks.count))", category: "upload")
+                    await self.uploadLastPreparedChunk()
+                }
+
                 guard self.bufferedSamplesCount > 0 else { continue }
 
                 for stream in self.streamFlushOrder() {
@@ -548,7 +571,7 @@ final class CollectorCore: ObservableObject {
                     guard let lastFlushAtUTC = self.lastFlushAtUTCByStream[stream] else { continue }
 
                     let elapsed = self.nowProvider().timeIntervalSince(lastFlushAtUTC)
-                    if elapsed >= self.uploadConfiguration.autoFlushIntervalSeconds {
+                    if elapsed >= self.uploadConfiguration.uploadFlushIntervalSeconds {
                         await self.flushAndUploadBufferedSamples(
                             for: stream,
                             trigger: .timer,
@@ -585,7 +608,7 @@ final class CollectorCore: ObservableObject {
 
         while let currentBuffered = bufferedSamplesByStream[stream], !currentBuffered.isEmpty {
             let threshold = uploadConfiguration.sampleFlushCount(for: stream)
-            if enforceThreshold && currentBuffered.count < threshold {
+            if enforceThreshold, let threshold, currentBuffered.count < threshold {
                 return
             }
 
@@ -599,6 +622,7 @@ final class CollectorCore: ObservableObject {
             guard let remaining = bufferedSamplesByStream[stream], !remaining.isEmpty else { return }
 
             if trigger == .sampleCount {
+                guard let threshold else { return }
                 guard remaining.count >= threshold else { return }
                 currentTrigger = .sampleCount
                 continue
@@ -680,6 +704,11 @@ final class CollectorCore: ObservableObject {
 
     private func bufferedSampleTotalCount() -> Int {
         bufferedSamplesByStream.values.reduce(0) { $0 + $1.count }
+    }
+
+    private func shouldRetryPendingUploads(now: Date) -> Bool {
+        guard let nextUploadRetryAtUTC else { return true }
+        return now >= nextUploadRetryAtUTC
     }
 
     private func streamFlushOrder() -> [CollectorStream] {

@@ -1,5 +1,63 @@
 import Foundation
 
+enum StreamSettingValue: Equatable, Codable, Sendable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case object([String: StreamSettingValue])
+    case array([StreamSettingValue])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+
+        if container.decodeNil() {
+            self = .null
+            return
+        }
+        if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+            return
+        }
+        if let value = try? container.decode(Double.self) {
+            self = .number(value)
+            return
+        }
+        if let value = try? container.decode(String.self) {
+            self = .string(value)
+            return
+        }
+        if let value = try? container.decode([String: StreamSettingValue].self) {
+            self = .object(value)
+            return
+        }
+        if let value = try? container.decode([StreamSettingValue].self) {
+            self = .array(value)
+            return
+        }
+
+        throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported stream setting value")
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value):
+            try container.encode(value)
+        case .number(let value):
+            try container.encode(value)
+        case .bool(let value):
+            try container.encode(value)
+        case .object(let value):
+            try container.encode(value)
+        case .array(let value):
+            try container.encode(value)
+        case .null:
+            try container.encodeNil()
+        }
+    }
+}
+
 enum SourceTimestampKind: String, Codable, Sendable {
     case deviceReported
     case collectorObserved
@@ -85,6 +143,7 @@ struct HeartRateSample: Equatable, Codable, Sendable {
     let sourceTimestampKind: SourceTimestampKind?
     let sampleSequenceNumber: Int
     let payload: CollectorSamplePayload
+    let streamSettings: [String: StreamSettingValue]?
 
     var hrBPM: Int {
         guard case .hr(let hrData) = payload else { return 0 }
@@ -128,7 +187,8 @@ struct HeartRateSample: Equatable, Codable, Sendable {
         deviceTimestampRaw: Date? = nil,
         sourceTimestampKind: SourceTimestampKind?,
         sampleSequenceNumber: Int,
-        payload: CollectorSamplePayload
+        payload: CollectorSamplePayload,
+        streamSettings: [String: StreamSettingValue]? = nil
     ) {
         self.stream = stream
         self.collectorReceivedAtUTC = collectorReceivedAtUTC
@@ -136,6 +196,7 @@ struct HeartRateSample: Equatable, Codable, Sendable {
         self.sourceTimestampKind = sourceTimestampKind
         self.sampleSequenceNumber = sampleSequenceNumber
         self.payload = payload
+        self.streamSettings = streamSettings
     }
 
     init(
@@ -161,7 +222,8 @@ struct HeartRateSample: Equatable, Codable, Sendable {
             deviceTimestampRaw: deviceTimestampRaw,
             sourceTimestampKind: sourceTimestampKind,
             sampleSequenceNumber: sampleSequenceNumber,
-            payload: .hr(resolvedStreamData)
+            payload: .hr(resolvedStreamData),
+            streamSettings: nil
         )
     }
 }

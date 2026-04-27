@@ -20,7 +20,7 @@ This checkpoint does **not** provide:
 
 Current app structure:
 
-`UI -> Collector Core -> Device Adapter -> Stream Provider -> Transport`
+`UI -> Collector Core -> Device Adapter -> Transport`
 
 Implemented in CP2:
 - `CollectorCore` owns session lifecycle and latest HR state
@@ -30,6 +30,12 @@ Implemented in CP2:
 - `MockCollectorTransport` prepares future session/chunk boundaries without performing upload
 - `CollectionSession`, `StreamDescriptor`, and `UploadChunk` keep the transport-facing model explicit
 - `HeartRateChunkBuilder` turns buffered mock HR samples into transport-ready chunk payloads
+
+Current stream naming and payload schemas:
+- `hr` -> `polar.hr`
+- `ecg` -> `polar.ecg`
+- `acc` -> `polar.acc`
+- `battery` -> `polar.device_battery`
 
 ## Runtime Configuration (Best Practice)
 
@@ -44,6 +50,8 @@ Configured keys:
   Default mock mode when no explicit override is provided.
 - `COLLECTOR_UPLOAD_ENDPOINT` (`String`)  
   Upload destination. If only base URL is provided (for example `http://192.168.0.5:18090/`), collector auto-expands to `/upload-chunk`.
+- `COLLECTOR_UPLOAD_FLUSH_INTERVAL_SECONDS` (`Number`, optional)
+  Time-based upload cadence override. Default is `60` seconds.
 
 Launch overrides:
 - `--mock` forces mock adapter.
@@ -55,6 +63,28 @@ Recommended workflow:
 - Keep `COLLECTOR_USE_MOCK_DEFAULT=false` in `Info.plist`.
 - Keep server URL in `Info.plist` for normal app runs.
 - Use launch args/env only for tests, CI, and temporary local diagnostics.
+
+## Upload Cadence
+
+Upload scheduling is time-based by default:
+- if a stream buffer has data, collector flushes that stream every `upload_flush_interval_seconds` (default: `60`)
+- if a stream buffer is empty, collector does nothing
+- on stop, collector performs a final flush of remaining buffered samples
+
+Sample-count flush is optional and configuration-driven:
+- disabled by default to avoid excessive small uploads for high-frequency streams (for example ACC/ECG)
+- can be enabled per stream via collector upload configuration overrides
+
+## Stream Settings Preservation
+
+When SDK stream settings are negotiated at stream start (for example ECG/ACC sample rate, range, resolution, channels), collector preserves them raw in upload payload:
+
+- `payload.stream_settings`
+
+Notes:
+- values are adapter-captured metadata, not interpreted by ingestion
+- ingestion stores payload as-is (raw-first boundary remains unchanged)
+- downstream pipeline/ML/reporting is responsible for any interpretation
 
 ## Open in Xcode
 

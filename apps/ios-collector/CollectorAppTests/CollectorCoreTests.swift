@@ -5,7 +5,7 @@ import XCTest
 final class CollectorCoreTests: XCTestCase {
     final class RecordingTransport: CollectorTransporting {
         private let chunkBuilder = HeartRateChunkBuilder()
-        private let shouldFailUpload: Bool
+        private var remainingFailures: Int
         let uploadDestinationDescription: String
         let isNetworkUploadConfigured: Bool
 
@@ -14,10 +14,11 @@ final class CollectorCoreTests: XCTestCase {
 
         init(
             shouldFailUpload: Bool = false,
+            failUploadAttempts: Int = 0,
             uploadDestinationDescription: String = "http://localhost:8080/ingest/wearable/chunk",
             isNetworkUploadConfigured: Bool = true
         ) {
-            self.shouldFailUpload = shouldFailUpload
+            self.remainingFailures = shouldFailUpload ? Int.max : failUploadAttempts
             self.uploadDestinationDescription = uploadDestinationDescription
             self.isNetworkUploadConfigured = isNetworkUploadConfigured
         }
@@ -51,7 +52,8 @@ final class CollectorCoreTests: XCTestCase {
 
         func upload(chunk: UploadChunk) async throws -> UploadAck {
             uploadedChunks.append(chunk)
-            if shouldFailUpload {
+            if remainingFailures > 0 {
+                remainingFailures -= 1
                 throw TestUploadError.rejected
             }
 
@@ -369,12 +371,82 @@ final class CollectorCoreTests: XCTestCase {
         core.stopCollection()
     }
 
-    func testAutoUploadTriggersAtTwentySamples() async {
+    func testFailedChunkIsRetriedAndEventuallyUploadedWithoutLoss() async {
+        let transport = RecordingTransport(failUploadAttempts: 1)
+        let retryConfiguration = CollectorUploadConfiguration.RetryConfiguration(
+            initialDelaySeconds: 0.01,
+            maxDelaySeconds: 0.01,
+            backoffMultiplier: 1
+        )
+        let configuration = CollectorUploadConfiguration(
+            uploadFlushIntervalSeconds: 60,
+            defaultSampleCountThreshold: 1,
+            retry: retryConfiguration,
+            streamConfigurations: [:],
+            userIDHeaderValue: "2",
+            streamProfiles: CollectorUploadConfiguration.default.streamProfiles
+        )
+        let core = CollectorCore(
+            adapter: MockDeviceAdapter(
+                hrProvider: ImmediateHeartRateProvider(
+                    samples: [makeSample(hr: 72, receivedAt: Date(timeIntervalSince1970: 999), sequence: 0)]
+                )
+            ),
+            transport: transport,
+            uploadConfiguration: configuration,
+            sleepProvider: { _ in
+                try? await Task.sleep(nanoseconds: 5_000_000)
+            }
+        )
+
+        core.selectDevice()
+        await core.startCollection()
+
+        let retrySucceeded = await waitUntil(timeoutNanoseconds: 2_000_000_000) {
+            core.pendingUploadChunksCount == 0 && core.uploadStatus == .success
+        }
+        XCTAssertTrue(retrySucceeded)
+        XCTAssertGreaterThanOrEqual(transport.uploadedChunks.count, 2)
+        XCTAssertEqual(transport.uploadedChunks.first?.chunkID, transport.uploadedChunks.last?.chunkID)
+    }
+
+    func testAutoUploadCanUseConfiguredSampleThreshold() async {
         let transport = RecordingTransport()
         let samples = (0..<20).map { index in
             makeSample(
                 hr: 60 + index,
                 receivedAt: Date(timeIntervalSince1970: 1_000 + Double(index)),
+                sequence: index
+            )
+        }
+        let configuration = CollectorUploadConfiguration(
+            autoFlushSampleCount: 20,
+            autoFlushIntervalSeconds: 60,
+            userIDHeaderValue: "2",
+            streamProfiles: CollectorUploadConfiguration.default.streamProfiles
+        )
+        let core = CollectorCore(
+            adapter: MockDeviceAdapter(
+                hrProvider: ImmediateHeartRateProvider(samples: samples)
+            ),
+            transport: transport,
+            uploadConfiguration: configuration
+        )
+
+        core.selectDevice()
+        await core.startCollection()
+
+        let uploaded = await waitUntil { transport.uploadedChunks.count == 1 }
+        XCTAssertTrue(uploaded)
+        XCTAssertEqual(transport.uploadedChunks.first?.samples.count, 20)
+    }
+
+    func testDefaultConfigurationDoesNotFlushImmediatelyBySampleCount() async {
+        let transport = RecordingTransport()
+        let samples = (0..<20).map { index in
+            makeSample(
+                hr: 60 + index,
+                receivedAt: Date(timeIntervalSince1970: 1_500 + Double(index)),
                 sequence: index
             )
         }
@@ -388,9 +460,9 @@ final class CollectorCoreTests: XCTestCase {
         core.selectDevice()
         await core.startCollection()
 
-        let uploaded = await waitUntil { transport.uploadedChunks.count == 1 }
-        XCTAssertTrue(uploaded)
-        XCTAssertEqual(transport.uploadedChunks.first?.samples.count, 20)
+        try? await Task.sleep(nanoseconds: 120_000_000)
+        XCTAssertEqual(transport.uploadedChunks.count, 0)
+        XCTAssertEqual(core.bufferedSamplesCount, 20)
     }
 
     func testAutoUploadTriggersByFlushIntervalWhenBelowSampleThreshold() async {
@@ -496,11 +568,18 @@ final class CollectorCoreTests: XCTestCase {
                 sequence: index
             )
         }
+        let configuration = CollectorUploadConfiguration(
+            autoFlushSampleCount: 20,
+            autoFlushIntervalSeconds: 60,
+            userIDHeaderValue: "2",
+            streamProfiles: CollectorUploadConfiguration.default.streamProfiles
+        )
         let core = CollectorCore(
             adapter: MockDeviceAdapter(
                 hrProvider: ImmediateHeartRateProvider(samples: samples)
             ),
-            transport: transport
+            transport: transport,
+            uploadConfiguration: configuration
         )
 
         core.selectDevice()
