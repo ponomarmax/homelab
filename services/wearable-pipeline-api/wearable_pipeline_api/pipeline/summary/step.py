@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from wearable_pipeline_api.pipeline.common import StepRunRecord, StreamRunResult
+from wearable_pipeline_api.pipeline.common import StepRunRecord, StreamRunResult, canonicalize_device_model
 from wearable_pipeline_api.pipeline.state import RunStateStore, utc_now_iso
 
 from .registry import session_summary_handler_registry
@@ -169,7 +169,7 @@ class SessionSummaryStepRunner:
         stream = metadata.stream_type.strip().lower()
         schema = metadata.payload_schema.strip().lower()
         vendor = metadata.source_vendor.strip().lower()
-        device_model = metadata.device_model.strip().lower()
+        device_model = canonicalize_device_model(metadata.device_model)
 
         if vendor == "polar" and schema in STREAM_KEY_BY_PAYLOAD_SCHEMA:
             if schema == "polar.hr":

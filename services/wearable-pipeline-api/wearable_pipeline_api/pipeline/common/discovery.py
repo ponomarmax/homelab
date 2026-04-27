@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .identifiers import canonicalize_device_model
 from .types import StreamContext
 
 
@@ -30,7 +31,7 @@ def _peek_chunk_metadata(raw_path: Path) -> tuple[str, str, str]:
                 continue
             source = chunk.get("source") if isinstance(chunk.get("source"), dict) else {}
             vendor = str(source.get("vendor") or "").strip().lower()
-            device_model = str(source.get("device_model") or "").strip().lower()
+            device_model = canonicalize_device_model(str(source.get("device_model") or ""))
             transport = chunk.get("transport") if isinstance(chunk.get("transport"), dict) else {}
             payload_schema = str(transport.get("payload_schema") or "").strip().lower()
             return vendor, device_model, payload_schema

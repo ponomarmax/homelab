@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from wearable_pipeline_api.pipeline.common import StepRunRecord, StreamContext, StreamRunResult
+from wearable_pipeline_api.pipeline.common import StepRunRecord, StreamContext, StreamRunResult, canonicalize_device_model
 from wearable_pipeline_api.pipeline.state import RunStateStore, utc_now_iso
 from wearable_pipeline_api.storage import derive_artifact_paths
 
@@ -17,7 +17,11 @@ logger = logging.getLogger(__name__)
 def _select_handler(
     registry: dict[tuple[str, str, str], NormalizeHandler], stream: StreamContext
 ) -> NormalizeHandler | None:
-    key = (stream.source_vendor.lower(), stream.device_model.lower(), stream.payload_schema.lower())
+    key = (
+        stream.source_vendor.lower(),
+        canonicalize_device_model(stream.device_model),
+        stream.payload_schema.lower(),
+    )
     return registry.get(key)
 
 

@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from wearable_pipeline_api.pipeline.common import StepRunRecord, StreamRunResult
+from wearable_pipeline_api.pipeline.common import StepRunRecord, StreamRunResult, canonicalize_device_model
 from wearable_pipeline_api.pipeline.state import RunStateStore, utc_now_iso
 from wearable_pipeline_api.storage import derive_window_feature_path
 
@@ -40,7 +40,7 @@ class WindowFeaturesStepRunner:
         self.registry = feature_handler_registry()
 
     def _select_handler(self, vendor: str, device_model: str, payload_schema: str) -> FeatureHandler | None:
-        key = (vendor.lower(), device_model.lower(), payload_schema.lower())
+        key = (vendor.lower(), canonicalize_device_model(device_model), payload_schema.lower())
         return self.registry.get(key)
 
     def run_for_session(self, session_id: str, normalize_step_result: dict[str, Any]) -> dict[str, Any]:
@@ -89,7 +89,7 @@ class WindowFeaturesStepRunner:
 
             first = clean_df.iloc[0]
             vendor = str(first.get("source_vendor") or "").strip().lower()
-            device_model = str(first.get("source_device_model") or "").strip().lower()
+            device_model = canonicalize_device_model(str(first.get("source_device_model") or ""))
             stream_type = str(first.get("stream_type") or stream_type).strip().lower()
             payload_schema = str(first.get("payload_schema") or "").strip().lower()
             if not payload_schema:

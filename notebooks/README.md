@@ -54,8 +54,8 @@ jupyter lab
 ```
 
 Open notebooks in order:
-- `00_session_discovery.ipynb`
-- `01_session_explorer.ipynb`
+- `00_runbook.ipynb`
+- `01_h10_multistream_eda.ipynb`
 
 ## 5. Data Cache
 
@@ -66,10 +66,14 @@ Open notebooks in order:
 
 ## 6. Notebook Flow
 
-- Discovery notebook lists available sessions per user from remote `raw` + `processed`
-- Explorer notebook syncs selected session then loads:
-  - clean streams
-  - window features
-  - session summary
-  - optional raw chunks (preview-friendly limits)
-- Raw debug view compares raw vs processed availability and highlights mismatches
+- `00_runbook.ipynb` is the operator notebook:
+  - discover sessions
+  - select latest/session id
+  - trigger pipeline
+  - sync artifacts
+  - preview summary/raw/clean/window data
+- `01_h10_multistream_eda.ipynb` is exploratory analysis for Polar H10 multi-stream sessions:
+  - HR, ACC, ECG, and battery stream quality/coverage checks
+  - stream-level plots and feature trends
+  - cross-stream exploratory joins and correlations
+  - ML-readiness checklist and optional local report save

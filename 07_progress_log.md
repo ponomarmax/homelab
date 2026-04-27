@@ -13,6 +13,20 @@ LinkedIn post idea:
 Date: 2026-04-27
 
 What was done:
+- Added a new exploratory notebook `notebooks/01_h10_multistream_eda.ipynb` for Polar H10 multi-stream session analysis.
+- Kept `notebooks/00_runbook.ipynb` unchanged and reused its setup/session/pipeline/sync workflow pattern in the new notebook.
+- Added lightweight reusable EDA helpers in `notebooks/lib/eda_helpers.py` for timestamp detection, gap statistics, stream aliasing (including `unknown` + `polar.device_battery`), downsampling, and safe window-feature joining.
+- Updated `notebooks/README.md` notebook list and flow descriptions to include the new EDA notebook.
+
+Key insight:
+Separating operator flow (`00_runbook`) from exploratory multi-stream quality analysis (`01_h10_multistream_eda`) keeps production-facing notebook logic stable while enabling deeper local validation before ML work.
+
+LinkedIn post idea:
+How to design a lightweight notebook pair for wearable pipelines: one deterministic runbook plus one exploratory multi-stream quality notebook.
+
+Date: 2026-04-27
+
+What was done:
 - Deployed `wearable-pipeline-api` through the repository `tools/scripts/deploy.sh --confirm wearable-pipeline-api` workflow with Compose rebuild/recreate.
 - Validated deployed multi-stream session summary for a sanitized Polar H10 session containing `hr`, `acc`, `ecg`, and `stream_type=unknown` with `payload_schema=polar.device_battery`.
 - Confirmed generated `session_summary.json` includes session timing fields, `crosses_midnight`, stream presence/missing lists, per-stream summaries, artifact paths, and aggregate status.

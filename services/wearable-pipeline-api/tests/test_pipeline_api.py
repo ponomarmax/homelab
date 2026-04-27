@@ -227,6 +227,37 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(float(battery_df.iloc[0]["level_percent"]), 87.0)
         self.assertEqual(str(battery_df.iloc[0]["stream_type"]), "unknown")
 
+    def test_battery_normalizer_supports_nested_battery_payload(self) -> None:
+        battery_path = write_raw_stream(
+            self.raw_root,
+            session_id="session-battery-nested",
+            stream_type="unknown",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-battery-nested-1",
+                    sequence=1,
+                    stream_type="unknown",
+                    payload_schema="polar.device_battery",
+                    stream_id="stream-battery-nested-001",
+                    payload={
+                        "received_at_collector": "2026-04-25T10:00:00.300Z",
+                        "battery": {
+                            "level_percent": 86,
+                            "charge_state": "discharging",
+                            "power_sources": ["battery"],
+                        },
+                        "event_type": "poll_snapshot",
+                        "sdk_raw": {"source": "sdk"},
+                    },
+                )
+            ],
+        )
+
+        battery_df = PolarDeviceBatteryNormalizer().handle(battery_path).dataframe
+        self.assertEqual(float(battery_df.iloc[0]["level_percent"]), 86.0)
+        self.assertEqual(str(battery_df.iloc[0]["charge_state"]), "discharging")
+        self.assertEqual(list(battery_df.iloc[0]["power_sources"]), ["battery"])
+
     def test_multi_stream_support_hr_acc_ecg_battery(self) -> None:
         write_raw_stream(
             self.raw_root,
@@ -316,6 +347,106 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(results["acc"]["status"], "success")
         self.assertEqual(results["ecg"]["status"], "success")
         self.assertEqual(results["unknown"]["status"], "success")
+
+    def test_multi_stream_support_with_vendor_prefixed_device_model(self) -> None:
+        write_raw_stream(
+            self.raw_root,
+            session_id="session-prefixed-model",
+            stream_type="hr",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-hr-prefixed-1",
+                    sequence=1,
+                    stream_type="hr",
+                    payload_schema="polar.hr",
+                    device_model="polar h10",
+                    samples=[{"received_at_collector": "2026-04-25T10:00:00.100Z", "hr": 70}],
+                )
+            ],
+        )
+        write_raw_stream(
+            self.raw_root,
+            session_id="session-prefixed-model",
+            stream_type="acc",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-acc-prefixed-1",
+                    sequence=1,
+                    stream_type="acc",
+                    payload_schema="polar.acc",
+                    stream_id="stream-acc-prefixed-001",
+                    device_model="polar h10",
+                    samples=[
+                        {
+                            "received_at_collector": "2026-04-25T10:00:00.100Z",
+                            "device_time_ns": 100,
+                            "x_mg": 1.0,
+                            "y_mg": 2.0,
+                            "z_mg": 3.0,
+                        }
+                    ],
+                )
+            ],
+        )
+        write_raw_stream(
+            self.raw_root,
+            session_id="session-prefixed-model",
+            stream_type="ecg",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-ecg-prefixed-1",
+                    sequence=1,
+                    stream_type="ecg",
+                    payload_schema="polar.ecg",
+                    stream_id="stream-ecg-prefixed-001",
+                    device_model="polar h10",
+                    samples=[
+                        {
+                            "received_at_collector": "2026-04-25T10:00:00.100Z",
+                            "device_time_ns": 200,
+                            "ecg_uv": 120,
+                        }
+                    ],
+                )
+            ],
+        )
+        write_raw_stream(
+            self.raw_root,
+            session_id="session-prefixed-model",
+            stream_type="unknown",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-battery-prefixed-1",
+                    sequence=1,
+                    stream_type="unknown",
+                    payload_schema="polar.device_battery",
+                    stream_id="stream-battery-prefixed-001",
+                    device_model="polar h10",
+                    payload={
+                        "received_at_collector": "2026-04-25T10:00:00.200Z",
+                        "level_percent": 90,
+                        "charge_state": "discharging",
+                        "power_sources": ["battery"],
+                        "event_type": "status",
+                        "sdk_raw": {"source": "sdk"},
+                    },
+                )
+            ],
+        )
+
+        summary = self._runner().run()
+
+        normalize_results = {item["stream_type"]: item for item in summary["normalize_runs"][0]["per_stream_results"]}
+        self.assertEqual(normalize_results["hr"]["status"], "success")
+        self.assertEqual(normalize_results["acc"]["status"], "success")
+        self.assertEqual(normalize_results["ecg"]["status"], "success")
+        self.assertEqual(normalize_results["unknown"]["status"], "success")
+
+        feature_results = {item["stream_type"]: item for item in summary["window_feature_runs"][0]["per_stream_results"]}
+        self.assertEqual(feature_results["hr"]["status"], "success")
+        self.assertEqual(feature_results["acc"]["status"], "success")
+        self.assertEqual(feature_results["ecg"]["status"], "success")
+        self.assertEqual(feature_results["unknown"]["status"], "success")
 
     def test_unsupported_only_stream_marks_partial_without_crash(self) -> None:
         write_raw_stream(

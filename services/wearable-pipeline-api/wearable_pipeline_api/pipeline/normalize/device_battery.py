@@ -44,13 +44,23 @@ class PolarDeviceBatteryNormalizer:
             time_info = chunk.get("time") if isinstance(chunk.get("time"), dict) else {}
             server = chunk.get("server") if isinstance(chunk.get("server"), dict) else {}
             payload = chunk.get("payload") if isinstance(chunk.get("payload"), dict) else {}
+            battery = payload.get("battery") if isinstance(payload.get("battery"), dict) else {}
 
             sample_ts = payload.get("received_at_collector") or chunk.get("received_at_collector")
             level_percent = payload.get("level_percent")
+            if level_percent is None:
+                level_percent = battery.get("level_percent")
             if not sample_ts or level_percent is None:
                 skipped_chunks_count += 1
                 warnings.append(f"line {line_number}: missing required battery fields")
                 continue
+
+            charge_state = payload.get("charge_state")
+            if charge_state is None:
+                charge_state = battery.get("charge_state")
+            power_sources = payload.get("power_sources")
+            if not isinstance(power_sources, list):
+                power_sources = battery.get("power_sources")
 
             rows.append(
                 {
@@ -72,8 +82,8 @@ class PolarDeviceBatteryNormalizer:
                     "source_line_number": line_number,
                     "alignment_confidence": "high",
                     "level_percent": float(level_percent),
-                    "charge_state": payload.get("charge_state"),
-                    "power_sources": payload.get("power_sources") if isinstance(payload.get("power_sources"), list) else [],
+                    "charge_state": charge_state,
+                    "power_sources": power_sources if isinstance(power_sources, list) else [],
                     "event_type": payload.get("event_type"),
                     "sdk_raw": payload.get("sdk_raw"),
                 }
