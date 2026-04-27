@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def _select_handler(
     registry: dict[tuple[str, str, str], NormalizeHandler], stream: StreamContext
 ) -> NormalizeHandler | None:
-    key = (stream.source_vendor.lower(), stream.device_model.lower(), stream.stream_type.lower())
+    key = (stream.source_vendor.lower(), stream.device_model.lower(), stream.payload_schema.lower())
     return registry.get(key)
 
 
@@ -58,6 +58,7 @@ class NormalizeStepRunner:
             if handler is None:
                 warning = (
                     f"unsupported stream: session_id={stream.session_id} stream_type={stream.stream_type} "
+                    f"payload_schema={stream.payload_schema or 'unknown'} "
                     f"vendor={stream.source_vendor or 'unknown'} device_model={stream.device_model or 'unknown'}"
                 )
                 warnings.append(warning)

@@ -4,6 +4,9 @@ from typing import Protocol
 
 import pandas as pd
 
+from .acc_window import AccWindowFeatureBuilder
+from .battery_window import BatteryWindowFeatureBuilder
+from .ecg_window import EcgWindowFeatureBuilder
 from .hr_window import FeatureHandlerOutput, HrWindowFeatureBuilder
 
 
@@ -19,5 +22,9 @@ HandlerKey = tuple[str, str, str]
 
 def feature_handler_registry() -> dict[HandlerKey, FeatureHandler]:
     return {
-        ("polar", "verity_sense", "hr"): HrWindowFeatureBuilder(),
+        ("polar", "h10", "polar.hr"): HrWindowFeatureBuilder(),
+        ("polar", "h10", "polar.acc"): AccWindowFeatureBuilder(),
+        ("polar", "h10", "polar.ecg"): EcgWindowFeatureBuilder(),
+        ("polar", "h10", "polar.device_battery"): BatteryWindowFeatureBuilder(),
+        ("polar", "verity_sense", "polar.hr"): HrWindowFeatureBuilder(),
     }

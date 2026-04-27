@@ -1,48 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
 
-
-WINDOWS = [("30s", "30s"), ("1m", "1min"), ("5m", "5min")]
-
-
-@dataclass
-class FeatureHandlerOutput:
-    dataframe: pd.DataFrame
+from .hr_window import FeatureHandlerOutput, WINDOWS
 
 
-class HrWindowFeatureBuilder:
-    name = "HrWindowFeatureBuilder"
+class EcgWindowFeatureBuilder:
+    name = "EcgWindowFeatureBuilder"
 
     def handle(self, clean_df: pd.DataFrame, run_id: str, input_artifact_reference: str) -> FeatureHandlerOutput:
         if clean_df.empty:
-            empty_columns = [
-                "user_id",
-                "session_id",
-                "stream_id",
-                "stream_type",
-                "payload_schema",
-                "source_vendor",
-                "device_model",
-                "window_size",
-                "window_start_utc",
-                "window_end_utc",
-                "sample_count",
-                "hr_mean",
-                "hr_min",
-                "hr_max",
-                "hr_std",
-                "hr_median",
-                "hr_first",
-                "hr_last",
-                "coverage_ratio",
-                "input_artifact_reference",
-                "run_id",
-            ]
-            return FeatureHandlerOutput(dataframe=pd.DataFrame(columns=empty_columns))
+            return FeatureHandlerOutput(dataframe=pd.DataFrame())
 
         df = clean_df.copy()
         df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True, errors="coerce")
@@ -55,12 +25,9 @@ class HrWindowFeatureBuilder:
                 if pd.isna(window_start):
                     continue
 
-                hr_values = group["hr"].astype(float)
-                first_ts = group["ts_utc"].iloc[0]
-                last_ts = group["ts_utc"].iloc[-1]
-                window_seconds = pd.Timedelta(freq).total_seconds()
-                covered_seconds = max((last_ts - first_ts).total_seconds(), 0.0)
-                coverage_ratio = min(covered_seconds / window_seconds, 1.0) if window_seconds > 0 else 0.0
+                ecg = group["ecg_uv"].astype(float)
+                max_value = float(ecg.max())
+                min_value = float(ecg.min())
 
                 rows.append(
                     {
@@ -75,14 +42,12 @@ class HrWindowFeatureBuilder:
                         "window_start_utc": window_start,
                         "window_end_utc": window_start + pd.Timedelta(freq),
                         "sample_count": int(len(group.index)),
-                        "hr_mean": float(hr_values.mean()),
-                        "hr_min": float(hr_values.min()),
-                        "hr_max": float(hr_values.max()),
-                        "hr_std": float(hr_values.std(ddof=0)),
-                        "hr_median": float(hr_values.median()),
-                        "hr_first": float(hr_values.iloc[0]),
-                        "hr_last": float(hr_values.iloc[-1]),
-                        "coverage_ratio": float(coverage_ratio),
+                        "ecg_mean": float(ecg.mean()),
+                        "ecg_std": float(ecg.std(ddof=0)),
+                        "ecg_min": min_value,
+                        "ecg_max": max_value,
+                        "amplitude_range": max_value - min_value,
+                        "abs_mean": float(ecg.abs().mean()),
                         "input_artifact_reference": input_artifact_reference,
                         "run_id": run_id,
                     }

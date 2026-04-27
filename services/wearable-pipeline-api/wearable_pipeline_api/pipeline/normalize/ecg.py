@@ -5,17 +5,15 @@ from typing import Any
 
 from .base import BASE_COLUMNS, NormalizeHandlerOutput, finalize_rows, parse_jsonl_chunks
 
-HR_COLUMNS = BASE_COLUMNS + [
-    "hr",
-    "rrs_ms",
-    "contact_status",
-    "rr_available",
+ECG_COLUMNS = BASE_COLUMNS + [
+    "device_time_ns",
+    "ecg_uv",
 ]
 
 
-class PolarHrNormalizer:
-    name = "PolarHrNormalizer"
-    payload_schema = "polar.hr"
+class PolarEcgNormalizer:
+    name = "PolarEcgNormalizer"
+    payload_schema = "polar.ecg"
 
     def handle(self, raw_path: Path) -> NormalizeHandlerOutput:
         rows: list[dict[str, Any]] = []
@@ -55,15 +53,10 @@ class PolarHrNormalizer:
                     continue
 
                 sample_ts = sample.get("received_at_collector")
-                if not sample_ts:
+                ecg_uv = sample.get("ecg_uv")
+                if not sample_ts or ecg_uv is None:
                     skipped_samples_count += 1
-                    warnings.append(f"line {line_number}: sample {sample_idx} missing received_at_collector")
-                    continue
-
-                hr_value = sample.get("hr")
-                if hr_value is None:
-                    skipped_samples_count += 1
-                    warnings.append(f"line {line_number}: sample {sample_idx} missing hr")
+                    warnings.append(f"line {line_number}: sample {sample_idx} missing required ecg fields")
                     continue
 
                 rows.append(
@@ -85,18 +78,16 @@ class PolarHrNormalizer:
                         "source_sequence": chunk.get("sequence"),
                         "source_line_number": line_number,
                         "alignment_confidence": "medium",
-                        "hr": int(hr_value),
-                        "rrs_ms": sample.get("rrsMs") if isinstance(sample.get("rrsMs"), list) else [],
-                        "contact_status": sample.get("contactStatus"),
-                        "rr_available": sample.get("rrAvailable"),
+                        "device_time_ns": sample.get("device_time_ns"),
+                        "ecg_uv": float(ecg_uv),
                     }
                 )
 
-        df = finalize_rows(rows, columns=HR_COLUMNS)
+        df = finalize_rows(rows, columns=ECG_COLUMNS)
         report = {
             "session_id": session_id,
             "stream_id": stream_id,
-            "stream_type": "hr",
+            "stream_type": "ecg",
             "payload_schema": self.payload_schema,
             "user_id": user_id,
             "alignment_basis": "payload.samples[].received_at_collector",

@@ -10,6 +10,23 @@ LinkedIn post idea:
 ---
 
 ## Entries
+Date: 2026-04-27
+
+What was done:
+- Deployed updated `wearable-pipeline-api` via repository workflow (`tools/scripts/deploy.sh --confirm wearable-pipeline-api`).
+- Ran local pipeline test suite before deploy (`services/wearable-pipeline-api/tests`).
+- Executed post-deployment multi-stream validation using a sanitized session with `hr`, `acc`, `ecg`, `unknown/polar.device_battery`, and unsupported `ppi`.
+- Confirmed processing dispatch by `transport.payload_schema` (battery with `stream_type=unknown` processed successfully).
+- Verified artifact generation (`clean_timeseries`, `window_features`, `time_alignment_report.json`) and pipeline run state files.
+- Verified raw JSONL immutability with before/after checksums.
+- Recreated `wearable-pipeline-api` container and confirmed persisted artifacts/state remained available.
+
+Key insight:
+Payload-schema-based dispatch is robust against stream-type drift (for example battery delivered as `unknown`) while preserving raw-first ingestion boundaries.
+
+LinkedIn post idea:
+How to validate a multi-stream wearable pipeline deployment end-to-end: dispatch correctness, artifact persistence, and raw-data immutability.
+
 Date: 2026-04-26
 
 What was done:

@@ -39,8 +39,8 @@ class WindowFeaturesStepRunner:
         self.state_store = state_store
         self.registry = feature_handler_registry()
 
-    def _select_handler(self, vendor: str, device_model: str, stream_type: str) -> FeatureHandler | None:
-        key = (vendor.lower(), device_model.lower(), stream_type.lower())
+    def _select_handler(self, vendor: str, device_model: str, payload_schema: str) -> FeatureHandler | None:
+        key = (vendor.lower(), device_model.lower(), payload_schema.lower())
         return self.registry.get(key)
 
     def run_for_session(self, session_id: str, normalize_step_result: dict[str, Any]) -> dict[str, Any]:
@@ -91,10 +91,14 @@ class WindowFeaturesStepRunner:
             vendor = str(first.get("source_vendor") or "").strip().lower()
             device_model = str(first.get("source_device_model") or "").strip().lower()
             stream_type = str(first.get("stream_type") or stream_type).strip().lower()
-            handler = self._select_handler(vendor, device_model, stream_type)
+            payload_schema = str(first.get("payload_schema") or "").strip().lower()
+            if not payload_schema:
+                payload_schema = stream_type
+            handler = self._select_handler(vendor, device_model, payload_schema)
             if handler is None:
                 warning = (
                     f"unsupported feature stream: session_id={session_id} stream_type={stream_type} "
+                    f"payload_schema={payload_schema or 'unknown'} "
                     f"vendor={vendor or 'unknown'} device_model={device_model or 'unknown'}"
                 )
                 warnings.append(warning)

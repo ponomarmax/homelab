@@ -1,21 +1,23 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
 from .base import BASE_COLUMNS, NormalizeHandlerOutput, finalize_rows, parse_jsonl_chunks
 
-HR_COLUMNS = BASE_COLUMNS + [
-    "hr",
-    "rrs_ms",
-    "contact_status",
-    "rr_available",
+ACC_COLUMNS = BASE_COLUMNS + [
+    "device_time_ns",
+    "x_mg",
+    "y_mg",
+    "z_mg",
+    "vector_magnitude_mg",
 ]
 
 
-class PolarHrNormalizer:
-    name = "PolarHrNormalizer"
-    payload_schema = "polar.hr"
+class PolarAccNormalizer:
+    name = "PolarAccNormalizer"
+    payload_schema = "polar.acc"
 
     def handle(self, raw_path: Path) -> NormalizeHandlerOutput:
         rows: list[dict[str, Any]] = []
@@ -55,17 +57,17 @@ class PolarHrNormalizer:
                     continue
 
                 sample_ts = sample.get("received_at_collector")
-                if not sample_ts:
+                x_mg = sample.get("x_mg")
+                y_mg = sample.get("y_mg")
+                z_mg = sample.get("z_mg")
+                if not sample_ts or x_mg is None or y_mg is None or z_mg is None:
                     skipped_samples_count += 1
-                    warnings.append(f"line {line_number}: sample {sample_idx} missing received_at_collector")
+                    warnings.append(f"line {line_number}: sample {sample_idx} missing required acc fields")
                     continue
 
-                hr_value = sample.get("hr")
-                if hr_value is None:
-                    skipped_samples_count += 1
-                    warnings.append(f"line {line_number}: sample {sample_idx} missing hr")
-                    continue
-
+                x = float(x_mg)
+                y = float(y_mg)
+                z = float(z_mg)
                 rows.append(
                     {
                         "ts_utc": sample_ts,
@@ -85,18 +87,19 @@ class PolarHrNormalizer:
                         "source_sequence": chunk.get("sequence"),
                         "source_line_number": line_number,
                         "alignment_confidence": "medium",
-                        "hr": int(hr_value),
-                        "rrs_ms": sample.get("rrsMs") if isinstance(sample.get("rrsMs"), list) else [],
-                        "contact_status": sample.get("contactStatus"),
-                        "rr_available": sample.get("rrAvailable"),
+                        "device_time_ns": sample.get("device_time_ns"),
+                        "x_mg": x,
+                        "y_mg": y,
+                        "z_mg": z,
+                        "vector_magnitude_mg": math.sqrt((x * x) + (y * y) + (z * z)),
                     }
                 )
 
-        df = finalize_rows(rows, columns=HR_COLUMNS)
+        df = finalize_rows(rows, columns=ACC_COLUMNS)
         report = {
             "session_id": session_id,
             "stream_id": stream_id,
-            "stream_type": "hr",
+            "stream_type": "acc",
             "payload_schema": self.payload_schema,
             "user_id": user_id,
             "alignment_basis": "payload.samples[].received_at_collector",

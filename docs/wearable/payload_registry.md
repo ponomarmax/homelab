@@ -18,5 +18,4 @@ This registry lists sensor-specific payload contracts that may be referenced by 
 - Draft payloads must remain clearly marked as draft.
 - Ingestion validates the transport envelope only; payload content remains opaque at ingest boundary.
 - Deep sensor parsing belongs after raw ingestion.
-- `polar.device_battery` is a known device-status stream and is non-analytical by default.
-- Analytical HR/ACC/ECG pipeline steps must skip `device_battery` unless a dedicated battery handler is added.
+- `polar.device_battery` is a known device-status stream and is supported by the wearable processing pipeline via a dedicated battery handler.

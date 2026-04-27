@@ -8,6 +8,7 @@ from typing import Any
 class StreamContext:
     session_id: str
     stream_type: str
+    payload_schema: str
     raw_path: str
     user_id: str
     source: str

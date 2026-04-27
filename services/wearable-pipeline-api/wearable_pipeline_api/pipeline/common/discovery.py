@@ -16,7 +16,7 @@ def _extract_segment(parts: tuple[str, ...], prefix: str) -> str:
     return ""
 
 
-def _peek_source(raw_path: Path) -> tuple[str, str]:
+def _peek_chunk_metadata(raw_path: Path) -> tuple[str, str, str]:
     with raw_path.open("r", encoding="utf-8") as handle:
         for line in handle:
             payload = line.strip()
@@ -31,8 +31,10 @@ def _peek_source(raw_path: Path) -> tuple[str, str]:
             source = chunk.get("source") if isinstance(chunk.get("source"), dict) else {}
             vendor = str(source.get("vendor") or "").strip().lower()
             device_model = str(source.get("device_model") or "").strip().lower()
-            return vendor, device_model
-    return "", ""
+            transport = chunk.get("transport") if isinstance(chunk.get("transport"), dict) else {}
+            payload_schema = str(transport.get("payload_schema") or "").strip().lower()
+            return vendor, device_model, payload_schema
+    return "", "", ""
 
 
 def discover_session_streams(raw_root: Path) -> dict[str, list[StreamContext]]:
@@ -52,7 +54,7 @@ def discover_session_streams(raw_root: Path) -> dict[str, list[StreamContext]]:
         stream_type = raw_path.parent.name
         user_id = _extract_segment(parts, "user_id=")
         source = _extract_segment(parts, "source=")
-        source_vendor, device_model = _peek_source(raw_path)
+        source_vendor, device_model, payload_schema = _peek_chunk_metadata(raw_path)
 
         if not session_id or not stream_type:
             continue
@@ -60,6 +62,7 @@ def discover_session_streams(raw_root: Path) -> dict[str, list[StreamContext]]:
         stream = StreamContext(
             session_id=session_id,
             stream_type=stream_type,
+            payload_schema=payload_schema,
             raw_path=str(raw_path),
             user_id=user_id,
             source=source,
