@@ -1,6 +1,6 @@
 import Foundation
 
-protocol CollectorDeviceAdapter: AnyObject {
+protocol CollectorDeviceAdapter: DeviceStatusProvider {
     var deviceIdentity: CollectorDevice { get }
     var connectionState: ConnectionState { get }
     var availableStreams: [CollectorStream] { get }
@@ -18,5 +18,11 @@ protocol CollectorDeviceAdapter: AnyObject {
 extension CollectorDeviceAdapter {
     func heartRateStreamProvider() -> HeartRateStreamProviding? {
         streamProviders().first(where: { $0.streamType == .heartRate })
+    }
+
+    var deviceStatusCapabilities: [DeviceStatusCapability] { [] }
+
+    func cachedDeviceStatusSnapshot(for deviceID: String) -> DeviceStatusSnapshot? {
+        nil
     }
 }

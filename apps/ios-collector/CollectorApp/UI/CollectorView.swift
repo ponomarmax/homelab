@@ -38,6 +38,7 @@ struct CollectorView: View {
             statusRow(title: "State", value: collectorCore.status.displayName)
             statusRow(title: "Upload", value: collectorCore.uploadStatus.displayName)
             statusRow(title: "Device", value: collectorCore.selectedDevice?.name ?? "None")
+            statusRow(title: "Battery", value: collectorCore.selectedDeviceBatteryDisplayText())
             statusRow(title: "Mode", value: collectorCore.defaultCollectionMode.rawValue)
             statusRow(
                 title: "Session",
@@ -94,6 +95,9 @@ struct CollectorView: View {
                             Text(device.name)
                                 .fontWeight(.medium)
                             Text(device.id)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("Battery: \(collectorCore.batteryDisplayText(for: device.id))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

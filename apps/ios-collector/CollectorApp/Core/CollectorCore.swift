@@ -20,6 +20,8 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var uploadStatus: UploadStatus = .idle
     @Published private(set) var discoveredDevices: [CollectorDevice] = []
     @Published private(set) var selectedDevice: CollectorDevice?
+    @Published private(set) var latestDeviceStatusSnapshot: DeviceStatusSnapshot?
+    @Published private(set) var discoveredDeviceStatusByID: [String: DeviceStatusSnapshot] = [:]
     @Published private(set) var activeSession: CollectionSession?
     @Published private(set) var streamDescriptor: StreamDescriptor?
     @Published private(set) var latestHeartRateSample: HeartRateSample?
@@ -54,6 +56,7 @@ final class CollectorCore: ObservableObject {
     private var nextChunkSequenceNumberByStream: [CollectorStream: Int] = [:]
     private var lastFlushAtUTCByStream: [CollectorStream: Date] = [:]
     private var activeProviders: [HeartRateStreamProviding] = []
+    private var latestStatusByDeviceID: [String: DeviceStatusSnapshot] = [:]
 
     private var autoFlushTask: Task<Void, Never>?
     private var isAutoFlushing: Bool = false
@@ -101,6 +104,29 @@ final class CollectorCore: ObservableObject {
         transport.uploadDestinationDescription
     }
 
+    func selectedDeviceBatteryDisplayText() -> String {
+        guard let selectedDevice else {
+            return "unknown"
+        }
+        return batteryDisplayText(for: selectedDevice.id)
+    }
+
+    func batteryDisplayText(for deviceID: String) -> String {
+        let snapshot = latestStatusByDeviceID[deviceID] ?? adapter.cachedDeviceStatusSnapshot(for: deviceID)
+        if let snapshot {
+            return formatBattery(snapshot.status.battery)
+        }
+
+        if let batteryCapability = adapter.deviceStatusCapabilities.first(where: { $0.kind == .battery }) {
+            guard batteryCapability.isSupported else {
+                return "unsupported"
+            }
+            return batteryCapability.requiresConnection ? "available after connection" : "unknown"
+        }
+
+        return "unknown"
+    }
+
     func appDidBecomeActive() {
         log("App became active", category: "lifecycle")
     }
@@ -116,6 +142,7 @@ final class CollectorCore: ObservableObject {
         do {
             try adapter.selectDevice(adapter.deviceIdentity)
             selectedDevice = adapter.deviceIdentity
+            refreshCachedStatus(for: adapter.deviceIdentity.id)
             if let mockAdapter = adapter as? MockDeviceAdapter {
                 mockAdapter.markSelected()
             }
@@ -125,6 +152,7 @@ final class CollectorCore: ObservableObject {
             log("Device selected: \(selectedDevice?.name ?? "unknown")")
         } catch {
             selectedDevice = nil
+            latestDeviceStatusSnapshot = nil
             status = .disconnected
             uploadStatus = .idle
             reportFailure(
@@ -139,6 +167,7 @@ final class CollectorCore: ObservableObject {
     func scanAndSelectDevice() async {
         clearFailureState()
         selectedDevice = nil
+        latestDeviceStatusSnapshot = nil
         status = .disconnected
         uploadStatus = .idle
         isScanningDevices = true
@@ -151,11 +180,13 @@ final class CollectorCore: ObservableObject {
         do {
             let devices = try await adapter.scanDevices()
             discoveredDevices = devices
+            refreshCachedStatuses(for: devices)
             log("Scan finished: found \(devices.count) device(s)")
 
             if let mockAdapter = adapter as? MockDeviceAdapter, let first = devices.first {
                 try mockAdapter.selectDevice(first)
                 selectedDevice = first
+                refreshCachedStatus(for: first.id)
                 status = .deviceSelected
                 activityMessage = "Mock device selected"
                 log("Mock device auto-selected: \(first.name)")
@@ -172,6 +203,7 @@ final class CollectorCore: ObservableObject {
         } catch {
             discoveredDevices = []
             selectedDevice = nil
+            latestDeviceStatusSnapshot = nil
             status = .disconnected
             uploadStatus = .idle
             reportFailure(
@@ -191,12 +223,14 @@ final class CollectorCore: ObservableObject {
         do {
             try adapter.selectDevice(device)
             selectedDevice = adapter.deviceIdentity
+            refreshCachedStatus(for: adapter.deviceIdentity.id)
             status = .deviceSelected
             uploadStatus = .idle
             activityMessage = "Device selected: \(selectedDevice?.name ?? "Unknown")"
             log("Device selected: \(selectedDevice?.id ?? "unknown")")
         } catch {
             selectedDevice = nil
+            latestDeviceStatusSnapshot = nil
             status = .disconnected
             uploadStatus = .idle
             reportFailure(
@@ -210,7 +244,8 @@ final class CollectorCore: ObservableObject {
 
     func startCollection() async {
         guard status == .deviceSelected || status == .stopped else { return }
-        guard selectedDevice != nil else { return }
+        guard let selectedDevice else { return }
+        refreshCachedStatus(for: selectedDevice.id)
 
         clearFailureState()
         uploadStatus = .idle
@@ -515,6 +550,13 @@ final class CollectorCore: ObservableObject {
         if sample.stream == .heartRate {
             latestHeartRateSample = sample
         }
+        if let batteryData = sample.batteryData {
+            updateBatteryStatus(
+                from: batteryData,
+                deviceID: selectedDevice?.id ?? activeSession?.deviceID,
+                timestamp: sample.collectorReceivedAtUTC
+            )
+        }
 
         totalSamplesReceived += 1
 
@@ -665,6 +707,93 @@ final class CollectorCore: ObservableObject {
                 category: "logging"
             )
         }
+    }
+
+    private func refreshCachedStatuses(for devices: [CollectorDevice]) {
+        for device in devices {
+            refreshCachedStatus(for: device.id)
+        }
+        discoveredDeviceStatusByID = Dictionary(
+            uniqueKeysWithValues: devices.compactMap { device in
+                guard let snapshot = latestStatusByDeviceID[device.id] else { return nil }
+                return (device.id, snapshot)
+            }
+        )
+    }
+
+    private func refreshCachedStatus(for deviceID: String) {
+        guard let adapterSnapshot = adapter.cachedDeviceStatusSnapshot(for: deviceID) else {
+            if selectedDevice?.id == deviceID {
+                latestDeviceStatusSnapshot = latestStatusByDeviceID[deviceID]
+            }
+            return
+        }
+
+        let existing = latestStatusByDeviceID[deviceID]
+        let source = adapterSnapshot.status.battery?.source ?? .cached
+        let mergedBattery = BatteryStatus(
+            levelPercent: adapterSnapshot.status.battery?.levelPercent ?? existing?.status.battery?.levelPercent,
+            chargeState: adapterSnapshot.status.battery?.chargeState ?? existing?.status.battery?.chargeState,
+            lastUpdatedAt: adapterSnapshot.status.battery?.lastUpdatedAt ?? adapterSnapshot.updatedAt,
+            source: source,
+            unavailableReason: adapterSnapshot.status.battery?.unavailableReason
+        )
+        latestStatusByDeviceID[deviceID] = DeviceStatusSnapshot(
+            deviceID: deviceID,
+            status: DeviceStatus(battery: mergedBattery),
+            updatedAt: adapterSnapshot.updatedAt
+        )
+        if selectedDevice?.id == deviceID {
+            latestDeviceStatusSnapshot = latestStatusByDeviceID[deviceID]
+        }
+    }
+
+    private func updateBatteryStatus(from batteryData: PolarBatteryData, deviceID: String?, timestamp: Date) {
+        guard let deviceID else { return }
+
+        let source: BatteryStatusSource?
+        switch batteryData.eventType {
+        case .callbackUpdate:
+            source = .callback
+        case .pollSnapshot:
+            source = .poll
+        case .batteryUnavailable:
+            source = .unavailable
+        }
+
+        let battery = BatteryStatus(
+            levelPercent: batteryData.levelPercent,
+            chargeState: BatteryChargeState(rawOrNil: batteryData.chargeState),
+            lastUpdatedAt: timestamp,
+            source: source,
+            unavailableReason: batteryData.unavailableReason
+        )
+        let snapshot = DeviceStatusSnapshot(
+            deviceID: deviceID,
+            status: DeviceStatus(battery: battery),
+            updatedAt: timestamp
+        )
+        latestStatusByDeviceID[deviceID] = snapshot
+        latestDeviceStatusSnapshot = snapshot
+        if discoveredDevices.contains(where: { $0.id == deviceID }) {
+            discoveredDeviceStatusByID[deviceID] = snapshot
+        }
+    }
+
+    private func formatBattery(_ battery: BatteryStatus?) -> String {
+        guard let battery else {
+            return "unknown"
+        }
+        if let levelPercent = battery.levelPercent {
+            return "\(levelPercent)%"
+        }
+        if let chargeState = battery.chargeState {
+            return chargeState.rawValue.replacingOccurrences(of: "_", with: " ")
+        }
+        if battery.source == .unavailable {
+            return "unavailable"
+        }
+        return "unknown"
     }
 
     private func clearFailureState() {

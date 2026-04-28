@@ -64,6 +64,33 @@ func makeSample(
     )
 }
 
+func makeBatterySample(
+    eventType: PolarBatteryEventType,
+    receivedAt: Date,
+    sequence: Int,
+    levelPercent: Int? = nil,
+    chargeState: String? = nil,
+    unavailableReason: String? = nil
+) -> HeartRateSample {
+    HeartRateSample(
+        stream: .battery,
+        collectorReceivedAtUTC: receivedAt,
+        sourceTimestampKind: .collectorObserved,
+        sampleSequenceNumber: sequence,
+        payload: .battery(
+            PolarBatteryData(
+                eventType: eventType,
+                levelPercent: levelPercent,
+                chargeState: chargeState,
+                powerSources: nil,
+                sdkRaw: nil,
+                unavailableReason: unavailableReason
+            )
+        ),
+        streamSettings: nil
+    )
+}
+
 func waitUntil(
     timeoutNanoseconds: UInt64 = 1_000_000_000,
     pollIntervalNanoseconds: UInt64 = 10_000_000,

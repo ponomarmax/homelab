@@ -26,7 +26,15 @@ final class PolarDeviceAdapter: CollectorDeviceAdapter {
     )
 
     let availableStreams: [CollectorStream] = [.heartRate, .ecg, .accelerometer, .battery]
-
+    let deviceStatusCapabilities: [DeviceStatusCapability] = [
+        DeviceStatusCapability(
+            kind: .battery,
+            isSupported: false,
+            supportsCallbacks: false,
+            supportsPolling: false,
+            requiresConnection: true
+        )
+    ]
     func scanDevices() async throws -> [CollectorDevice] {
         throw PolarAdapterError.unsupportedEnvironment
     }
@@ -48,6 +56,10 @@ final class PolarDeviceAdapter: CollectorDeviceAdapter {
     }
 
     func heartRateStreamProvider() -> HeartRateStreamProviding? {
+        nil
+    }
+
+    func cachedDeviceStatusSnapshot(for deviceID: String) -> DeviceStatusSnapshot? {
         nil
     }
 }
@@ -141,6 +153,19 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
     private var latestBatteryLevelPercent: Int?
     private var latestChargeState: String?
     private var latestPowerSources: [String]?
+    private var cachedStatusByDeviceID: [String: DeviceStatusSnapshot] = [:]
+
+    var deviceStatusCapabilities: [DeviceStatusCapability] {
+        [
+            DeviceStatusCapability(
+                kind: .battery,
+                isSupported: true,
+                supportsCallbacks: true,
+                supportsPolling: true,
+                requiresConnection: true
+            )
+        ]
+    }
 
     private var isLikelyH10: Bool {
         let name = selectedDevice?.name.lowercased() ?? ""
@@ -385,6 +410,10 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         return providers
     }
 
+    func cachedDeviceStatusSnapshot(for deviceID: String) -> DeviceStatusSnapshot? {
+        cachedStatusByDeviceID[deviceID]
+    }
+
     private func tryResumeConnectIfReady(forceAfterReadinessTimeout: Bool = false) {
         guard isSelectedDeviceConnected, isSelectedDeviceHrFeatureReady else { return }
         let onlineReady = isSelectedDeviceOnlineStreamingFeatureReady || isSelectedDeviceOnlineStreamingUnavailable
@@ -509,6 +538,12 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             let reason = "battery feature not ready"
             log("Battery unavailable: \(reason)")
             batteryProvider.publishUnavailable(reason: reason, sdkRaw: "trigger=\(trigger)")
+            cacheBatteryStatus(
+                levelPercent: nil,
+                chargeStateRaw: nil,
+                source: .unavailable,
+                unavailableReason: reason
+            )
             return
         }
 
@@ -539,6 +574,12 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             let reason = "no battery values available"
             batteryProvider.publishUnavailable(reason: reason, sdkRaw: "trigger=\(trigger)")
             log("Battery unavailable: \(reason)")
+            cacheBatteryStatus(
+                levelPercent: nil,
+                chargeStateRaw: nil,
+                source: .unavailable,
+                unavailableReason: reason
+            )
             return
         }
 
@@ -547,6 +588,11 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             chargeState: chargeState,
             powerSources: powerSources,
             sdkRaw: "trigger=\(trigger)"
+        )
+        cacheBatteryStatus(
+            levelPercent: levelPercent ?? latestBatteryLevelPercent,
+            chargeStateRaw: chargeState ?? latestChargeState,
+            source: .poll
         )
         log("Battery poll snapshot: level=\(levelPercent.map(String.init) ?? "n/a") charge=\(chargeState ?? "n/a")")
     }
@@ -607,6 +653,28 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         latestBatteryLevelPercent = nil
         latestChargeState = nil
         latestPowerSources = nil
+    }
+
+    private func cacheBatteryStatus(
+        levelPercent: Int?,
+        chargeStateRaw: String?,
+        source: BatteryStatusSource?,
+        unavailableReason: String? = nil
+    ) {
+        guard let selectedPolarIdentifier else { return }
+        let updatedAt = Date()
+        let battery = BatteryStatus(
+            levelPercent: levelPercent,
+            chargeState: BatteryChargeState(rawOrNil: chargeStateRaw),
+            lastUpdatedAt: updatedAt,
+            source: source,
+            unavailableReason: unavailableReason
+        )
+        cachedStatusByDeviceID[selectedPolarIdentifier] = DeviceStatusSnapshot(
+            deviceID: selectedPolarIdentifier,
+            status: DeviceStatus(battery: battery),
+            updatedAt: updatedAt
+        )
     }
 
     private func serialize(chargeState: BleBasClient.ChargeState) -> String {
@@ -763,6 +831,12 @@ extension PolarDeviceAdapter: PolarBleApiDeviceFeaturesObserver {
 
         if unavailable.contains(.feature_battery_info) {
             batteryProvider.publishUnavailable(reason: "battery feature unavailable")
+            cacheBatteryStatus(
+                levelPercent: nil,
+                chargeStateRaw: nil,
+                source: .unavailable,
+                unavailableReason: "battery feature unavailable"
+            )
             log("Battery feature unavailable for selected device")
         }
     }
@@ -781,6 +855,11 @@ extension PolarDeviceAdapter: PolarBleApiDeviceInfoObserver {
             powerSources: latestPowerSources,
             sdkRaw: "battery_level_callback"
         )
+        cacheBatteryStatus(
+            levelPercent: level,
+            chargeStateRaw: latestChargeState,
+            source: .callback
+        )
         log("Battery callback level=\(level)")
     }
 
@@ -796,6 +875,11 @@ extension PolarDeviceAdapter: PolarBleApiDeviceInfoObserver {
             powerSources: latestPowerSources,
             sdkRaw: "battery_charge_state_callback"
         )
+        cacheBatteryStatus(
+            levelPercent: latestBatteryLevelPercent,
+            chargeStateRaw: chargeState,
+            source: .callback
+        )
         log("Battery callback charge_state=\(chargeState)")
     }
 
@@ -810,6 +894,11 @@ extension PolarDeviceAdapter: PolarBleApiDeviceInfoObserver {
             chargeState: latestChargeState,
             powerSources: powerSources,
             sdkRaw: "battery_power_sources_callback"
+        )
+        cacheBatteryStatus(
+            levelPercent: latestBatteryLevelPercent,
+            chargeStateRaw: latestChargeState,
+            source: .callback
         )
         log("Battery callback power_sources=\(powerSources.joined(separator: ","))")
     }
@@ -843,6 +932,15 @@ final class PolarDeviceAdapter: CollectorDeviceAdapter {
     )
 
     let availableStreams: [CollectorStream] = [.heartRate, .ecg, .accelerometer, .battery]
+    let deviceStatusCapabilities: [DeviceStatusCapability] = [
+        DeviceStatusCapability(
+            kind: .battery,
+            isSupported: false,
+            supportsCallbacks: false,
+            supportsPolling: false,
+            requiresConnection: true
+        )
+    ]
 
     func scanDevices() async throws -> [CollectorDevice] {
         throw PolarAdapterError.unsupportedEnvironment
@@ -865,6 +963,10 @@ final class PolarDeviceAdapter: CollectorDeviceAdapter {
     }
 
     func heartRateStreamProvider() -> HeartRateStreamProviding? {
+        nil
+    }
+
+    func cachedDeviceStatusSnapshot(for deviceID: String) -> DeviceStatusSnapshot? {
         nil
     }
 }

@@ -9,6 +9,7 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
     let deviceSelectionActionTitle: String = "Select Mock Device"
 
     private let providers: [HeartRateStreamProviding]
+    private var cachedStatusByDeviceID: [String: DeviceStatusSnapshot]
 
     init(
         deviceIdentity: CollectorDevice = CollectorDevice(
@@ -19,11 +20,17 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
         ),
         availableStreams: [CollectorStream] = [.heartRate],
         hrProvider: HeartRateStreamProviding = MockHeartRateStreamProvider(),
-        additionalProviders: [HeartRateStreamProviding] = []
+        additionalProviders: [HeartRateStreamProviding] = [],
+        initialDeviceStatusSnapshot: DeviceStatusSnapshot? = nil
     ) {
         self.deviceIdentity = deviceIdentity
         self.availableStreams = availableStreams
         self.providers = [hrProvider] + additionalProviders
+        if let initialDeviceStatusSnapshot {
+            self.cachedStatusByDeviceID = [initialDeviceStatusSnapshot.deviceID: initialDeviceStatusSnapshot]
+        } else {
+            self.cachedStatusByDeviceID = [:]
+        }
     }
 
     func scanDevices() async throws -> [CollectorDevice] {
@@ -52,6 +59,22 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
 
     func heartRateStreamProvider() -> HeartRateStreamProviding? {
         streamProviders().first(where: { $0.streamType == .heartRate })
+    }
+
+    var deviceStatusCapabilities: [DeviceStatusCapability] {
+        [
+            DeviceStatusCapability(
+                kind: .battery,
+                isSupported: availableStreams.contains(.battery),
+                supportsCallbacks: false,
+                supportsPolling: false,
+                requiresConnection: true
+            )
+        ]
+    }
+
+    func cachedDeviceStatusSnapshot(for deviceID: String) -> DeviceStatusSnapshot? {
+        cachedStatusByDeviceID[deviceID]
     }
 
     func markSelected() {

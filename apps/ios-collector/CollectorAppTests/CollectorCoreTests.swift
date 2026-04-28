@@ -188,6 +188,23 @@ final class CollectorCoreTests: XCTestCase {
         }
     }
 
+    final class ImmediateBatteryProvider: HeartRateStreamProviding {
+        let streamType: CollectorStream = .battery
+        private let samples: [HeartRateSample]
+
+        init(samples: [HeartRateSample]) {
+            self.samples = samples
+        }
+
+        func start(onSample: @escaping @Sendable (HeartRateSample) -> Void) {
+            for sample in samples {
+                onSample(sample)
+            }
+        }
+
+        func stop() {}
+    }
+
     func testCoreStartsAndStopsSession() async {
         let core = CollectorCore(
             adapter: MockDeviceAdapter(
@@ -610,5 +627,143 @@ final class CollectorCoreTests: XCTestCase {
         core.prepareLogExportFile()
 
         XCTAssertNotNil(core.logExportFileURL)
+    }
+
+    func testInitialBatteryStateShowsAvailableAfterConnectionWhenCapabilityNeedsConnect() {
+        let adapter = MockDeviceAdapter(availableStreams: [.heartRate, .battery])
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+
+        XCTAssertEqual(core.selectedDeviceBatteryDisplayText(), "available after connection")
+    }
+
+    func testDiscoveredDevicesUseCachedBatteryStatusWhenAvailable() async {
+        let device = CollectorDevice(
+            id: "mock-status-device",
+            name: "Mock Polar H10",
+            vendor: "Polar",
+            model: "H10"
+        )
+        let snapshot = DeviceStatusSnapshot(
+            deviceID: device.id,
+            status: DeviceStatus(
+                battery: BatteryStatus(
+                    levelPercent: 77,
+                    chargeState: .charging,
+                    lastUpdatedAt: Date(timeIntervalSince1970: 100),
+                    source: .cached,
+                    unavailableReason: nil
+                )
+            ),
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let adapter = MockDeviceAdapter(
+            deviceIdentity: device,
+            availableStreams: [.heartRate, .battery],
+            initialDeviceStatusSnapshot: snapshot
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        await core.scanAndSelectDevice()
+
+        XCTAssertEqual(core.batteryDisplayText(for: device.id), "77%")
+        XCTAssertEqual(core.discoveredDeviceStatusByID[device.id]?.status.battery?.source, .cached)
+    }
+
+    func testDiscoveredDevicesShowUnavailableBatteryCleanly() async {
+        let device = CollectorDevice(
+            id: "mock-unavailable-device",
+            name: "Mock Polar Verity Sense",
+            vendor: "Polar",
+            model: "Verity Sense"
+        )
+        let snapshot = DeviceStatusSnapshot(
+            deviceID: device.id,
+            status: DeviceStatus(
+                battery: BatteryStatus(
+                    levelPercent: nil,
+                    chargeState: nil,
+                    lastUpdatedAt: Date(timeIntervalSince1970: 101),
+                    source: .unavailable,
+                    unavailableReason: "not ready"
+                )
+            ),
+            updatedAt: Date(timeIntervalSince1970: 101)
+        )
+        let adapter = MockDeviceAdapter(
+            deviceIdentity: device,
+            availableStreams: [.heartRate, .battery],
+            initialDeviceStatusSnapshot: snapshot
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        await core.scanAndSelectDevice()
+
+        XCTAssertEqual(core.batteryDisplayText(for: device.id), "unavailable")
+    }
+
+    func testActiveCollectionMapsCallbackAndPollBatteryIntoGenericStatus() async {
+        let callback = makeBatterySample(
+            eventType: .callbackUpdate,
+            receivedAt: Date(timeIntervalSince1970: 200),
+            sequence: 0,
+            levelPercent: 88,
+            chargeState: "charging"
+        )
+        let poll = makeBatterySample(
+            eventType: .pollSnapshot,
+            receivedAt: Date(timeIntervalSince1970: 201),
+            sequence: 1,
+            levelPercent: 87,
+            chargeState: "discharging_active"
+        )
+        let adapter = MockDeviceAdapter(
+            availableStreams: [.heartRate, .battery],
+            hrProvider: ImmediateHeartRateProvider(samples: []),
+            additionalProviders: [ImmediateBatteryProvider(samples: [callback, poll])]
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.startCollection()
+
+        let updated = await waitUntil {
+            core.latestDeviceStatusSnapshot?.status.battery?.levelPercent == 87
+        }
+        XCTAssertTrue(updated)
+        XCTAssertEqual(core.latestDeviceStatusSnapshot?.status.battery?.source, .poll)
+        XCTAssertEqual(core.selectedDeviceBatteryDisplayText(), "87%")
+    }
+
+    func testUnsupportedBatteryCapabilityReturnsFallbackWithoutCrash() {
+        let adapter = MockDeviceAdapter(availableStreams: [.heartRate])
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        XCTAssertEqual(core.batteryDisplayText(for: "unknown-device"), "unsupported")
+    }
+
+    func testCoreExposesGenericDeviceStatusSnapshotType() async {
+        let callback = makeBatterySample(
+            eventType: .callbackUpdate,
+            receivedAt: Date(timeIntervalSince1970: 220),
+            sequence: 0,
+            levelPercent: 64,
+            chargeState: "charging"
+        )
+        let adapter = MockDeviceAdapter(
+            availableStreams: [.heartRate, .battery],
+            hrProvider: ImmediateHeartRateProvider(samples: []),
+            additionalProviders: [ImmediateBatteryProvider(samples: [callback])]
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.startCollection()
+
+        let snapshot = core.latestDeviceStatusSnapshot
+        XCTAssertNotNil(snapshot)
+        XCTAssertEqual(snapshot?.status.battery?.levelPercent, 64)
+        XCTAssertEqual(snapshot?.status.battery?.chargeState, .charging)
     }
 }

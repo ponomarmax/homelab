@@ -25,6 +25,7 @@ Current app structure:
 Implemented in CP2:
 - `CollectorCore` owns session lifecycle and latest HR state
 - `CollectorDeviceAdapter` defines future device integration boundary
+- `DeviceStatus` / `BatteryStatus` provide a vendor-agnostic latest-status model for UI
 - `HeartRateStreamProviding` defines future stream integration boundary
 - `MockDeviceAdapter` and `MockHeartRateStreamProvider` make the app runnable in simulator
 - `MockCollectorTransport` prepares future session/chunk boundaries without performing upload
@@ -36,6 +37,13 @@ Current stream naming and payload schemas:
 - `ecg` -> `polar.ecg`
 - `acc` -> `polar.acc`
 - `battery` -> `polar.device_battery`
+
+## Device Status (Latest Known, In-Memory)
+
+- UI reads generic `DeviceStatusSnapshot` state from `CollectorCore` only.
+- Device list shows battery when cached/known; otherwise falls back to clean capability-aware text (for example `available after connection`).
+- Active session status shows latest known battery level when callback or poll updates arrive.
+- Battery status is in-memory only (no backend fetch, no persistence/history).
 
 ## Runtime Configuration (Best Practice)
 
