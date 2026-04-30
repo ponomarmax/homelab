@@ -136,7 +136,7 @@ enum CollectorSamplePayload: Equatable, Codable, Sendable {
     case battery(PolarBatteryData)
 }
 
-struct HeartRateSample: Equatable, Codable, Sendable {
+struct CollectorSample: Equatable, Codable, Sendable {
     let stream: CollectorStream
     let collectorReceivedAtUTC: Date
     let deviceTimestampRaw: Date?
@@ -227,3 +227,5 @@ struct HeartRateSample: Equatable, Codable, Sendable {
         )
     }
 }
+
+typealias HeartRateSample = CollectorSample

@@ -150,4 +150,52 @@ final class DeviceAdapterTests: XCTestCase {
         XCTAssertEqual(unavailable.batteryData?.eventType, .batteryUnavailable)
         XCTAssertEqual(unavailable.batteryData?.unavailableReason, "battery feature unavailable")
     }
+
+    func testPolarCapabilitiesVeritySenseIncludesOfflineCandidates() {
+        let device = CollectorDevice(
+            id: "polar-vs",
+            name: "Polar Verity Sense 12345",
+            vendor: "Polar",
+            model: "Verity Sense"
+        )
+        let caps = PolarDeviceProfile.from(
+            device: device,
+            availableOnlineStreams: [.heartRate, .accelerometer]
+        )
+
+        XCTAssertEqual(caps.family, .veritySense)
+        XCTAssertEqual(
+            caps.availableOfflineStreams,
+            [.hr, .ppi, .acc, .ppg, .mag, .gyr]
+        )
+    }
+
+    func testPolarCapabilitiesH10OfflineUnavailable() {
+        let device = CollectorDevice(
+            id: "polar-h10",
+            name: "Polar H10 A1B2",
+            vendor: "Polar",
+            model: "H10"
+        )
+        let caps = PolarDeviceProfile.from(
+            device: device,
+            availableOnlineStreams: [.heartRate, .ecg, .accelerometer]
+        )
+
+        XCTAssertEqual(caps.family, .h10)
+        XCTAssertTrue(caps.availableOfflineStreams.isEmpty)
+    }
+
+    func testPolarCapabilitiesUnknownPolarDoesNotCrashAndHasNoOffline() {
+        let device = CollectorDevice(
+            id: "polar-x",
+            name: "Polar Something",
+            vendor: "Polar",
+            model: "Unknown"
+        )
+        let caps = PolarDeviceProfile.from(device: device, availableOnlineStreams: [])
+
+        XCTAssertEqual(caps.family, .unknownPolar)
+        XCTAssertTrue(caps.availableOfflineStreams.isEmpty)
+    }
 }

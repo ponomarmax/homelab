@@ -55,84 +55,6 @@ struct StreamMetadataProfile: Equatable, Codable, Sendable {
     }
 }
 
-enum PolarStreamProfile {
-    static let hrLive = StreamMetadataProfile(
-        schemaVersion: "1.0",
-        streamType: "hr",
-        streamIDPrefix: "hr",
-        source: StreamMetadataProfile.Source(
-            vendor: "polar",
-            deviceModel: "Polar H10",
-            deviceID: nil
-        ),
-        collection: StreamMetadataProfile.Collection(mode: "online_live"),
-        deviceTimeReference: "collector:collectorObserved",
-        transport: StreamMetadataProfile.Transport(
-            encoding: "json",
-            compression: "none",
-            payloadSchema: "polar.hr",
-            payloadVersion: "1.0"
-        )
-    )
-
-    static let ecgLive = StreamMetadataProfile(
-        schemaVersion: "1.0",
-        streamType: "ecg",
-        streamIDPrefix: "ecg",
-        source: StreamMetadataProfile.Source(
-            vendor: "polar",
-            deviceModel: "Polar H10",
-            deviceID: nil
-        ),
-        collection: StreamMetadataProfile.Collection(mode: "online_live"),
-        deviceTimeReference: "polar:ns_since_2000_epoch",
-        transport: StreamMetadataProfile.Transport(
-            encoding: "json",
-            compression: "none",
-            payloadSchema: "polar.ecg",
-            payloadVersion: "1.0"
-        )
-    )
-
-    static let accLive = StreamMetadataProfile(
-        schemaVersion: "1.0",
-        streamType: "acc",
-        streamIDPrefix: "acc",
-        source: StreamMetadataProfile.Source(
-            vendor: "polar",
-            deviceModel: "Polar H10",
-            deviceID: nil
-        ),
-        collection: StreamMetadataProfile.Collection(mode: "online_live"),
-        deviceTimeReference: "polar:ns_since_2000_epoch",
-        transport: StreamMetadataProfile.Transport(
-            encoding: "json",
-            compression: "none",
-            payloadSchema: "polar.acc",
-            payloadVersion: "1.0"
-        )
-    )
-
-    static let batteryLive = StreamMetadataProfile(
-        schemaVersion: "1.0",
-        streamType: "battery",
-        streamIDPrefix: "battery",
-        source: StreamMetadataProfile.Source(
-            vendor: "polar",
-            deviceModel: "Polar H10",
-            deviceID: nil
-        ),
-        collection: StreamMetadataProfile.Collection(mode: "online_live"),
-        deviceTimeReference: "collector:collectorObserved",
-        transport: StreamMetadataProfile.Transport(
-            encoding: "json",
-            compression: "none",
-            payloadSchema: "polar.device_battery",
-            payloadVersion: "1.0"
-        )
-    )
-}
-
 struct CollectorUploadConfiguration: Equatable, Sendable {
     struct RetryConfiguration: Equatable, Sendable {
         let initialDelaySeconds: TimeInterval
@@ -229,7 +151,6 @@ struct CollectorUploadConfiguration: Equatable, Sendable {
 }
 
 struct CollectorRuntimeConfiguration {
-    let useMockDevice: Bool
     let uploadEndpoint: URL?
     let upload: CollectorUploadConfiguration
 
@@ -238,20 +159,6 @@ struct CollectorRuntimeConfiguration {
         arguments: [String],
         bundleInfo: [String: Any]? = nil
     ) -> CollectorRuntimeConfiguration {
-        let defaultUseMockDevice = (bundleInfo?["COLLECTOR_USE_MOCK_DEFAULT"] as? Bool) ?? false
-        let useMockDeviceFromEnvironment = environment["COLLECTOR_USE_MOCK"].flatMap(parseBoolean)
-
-        let useMockDevice: Bool
-        if arguments.contains("--mock") {
-            useMockDevice = true
-        } else if arguments.contains("--real") {
-            useMockDevice = false
-        } else if let useMockDeviceFromEnvironment {
-            useMockDevice = useMockDeviceFromEnvironment
-        } else {
-            useMockDevice = defaultUseMockDevice
-        }
-
         let uploadEndpointRawValue = environment["COLLECTOR_UPLOAD_ENDPOINT"]
             ?? (bundleInfo?["COLLECTOR_UPLOAD_ENDPOINT"] as? String)
         let uploadEndpoint = uploadEndpointRawValue.flatMap(parseUploadEndpoint)
@@ -271,21 +178,9 @@ struct CollectorRuntimeConfiguration {
         }
 
         return CollectorRuntimeConfiguration(
-            useMockDevice: useMockDevice,
             uploadEndpoint: uploadEndpoint,
             upload: uploadConfiguration
         )
-    }
-
-    private static func parseBoolean(_ rawValue: String) -> Bool? {
-        switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "1", "true", "yes", "on":
-            return true
-        case "0", "false", "no", "off":
-            return false
-        default:
-            return nil
-        }
     }
 
     private static func parseUploadEndpoint(_ rawValue: String) -> URL? {

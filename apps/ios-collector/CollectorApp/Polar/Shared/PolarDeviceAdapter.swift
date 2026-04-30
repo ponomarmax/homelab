@@ -39,6 +39,12 @@ final class PolarDeviceAdapter: CollectorDeviceAdapter {
         throw PolarAdapterError.unsupportedEnvironment
     }
 
+    func scanDevices(onDiscovered: @escaping @Sendable ([CollectorDevice]) -> Void) async throws -> [CollectorDevice] {
+        let devices = try await scanDevices()
+        onDiscovered(devices)
+        return devices
+    }
+
     func selectDevice(_ device: CollectorDevice) throws {
         throw PolarAdapterError.unsupportedEnvironment
     }
@@ -175,12 +181,16 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
 
     private var shouldEnableEcgStream: Bool {
         discoveredOnlineDataTypes.contains(.ecg)
-            || (isLikelyH10 && isSelectedDeviceOnlineStreamingFeatureReady)
+            || (isLikelyH10
+                && isSelectedDeviceOnlineStreamingFeatureReady
+                && PolarH10OnlineDefaults.streams.contains(.ecg))
     }
 
     private var shouldEnableAccStream: Bool {
         discoveredOnlineDataTypes.contains(.acc)
-            || (isLikelyH10 && isSelectedDeviceOnlineStreamingFeatureReady)
+            || ((isLikelyH10 && PolarH10OnlineDefaults.streams.contains(.accelerometer))
+                || (!isLikelyH10 && PolarVeritySenseOnlineDefaults.streams.contains(.accelerometer)))
+                && isSelectedDeviceOnlineStreamingFeatureReady
     }
 
     init(
@@ -235,6 +245,10 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
     }
 
     func scanDevices() async throws -> [CollectorDevice] {
+        try await scanDevices { _ in }
+    }
+
+    func scanDevices(onDiscovered: @escaping @Sendable ([CollectorDevice]) -> Void) async throws -> [CollectorDevice] {
         try await withCheckedThrowingContinuation { continuation in
             var isResumed = false
 
@@ -259,8 +273,20 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
                 .observe(on: MainScheduler.asyncInstance)
                 .subscribe(
                     onNext: { [weak self] info in
-                        self?.discoveredDeviceMap[info.deviceId] = info
-                        self?.log("Device discovered: \(info.deviceId) (\(info.name))")
+                        guard let self else { return }
+                        self.discoveredDeviceMap[info.deviceId] = info
+                        self.log("Device discovered: \(info.deviceId) (\(info.name))")
+                        let devices = self.discoveredDeviceMap.values
+                            .sorted { $0.rssi > $1.rssi }
+                            .map { discovered in
+                                CollectorDevice(
+                                    id: discovered.deviceId,
+                                    name: discovered.name,
+                                    vendor: "Polar",
+                                    model: self.resolveModel(from: discovered.name)
+                                )
+                            }
+                        onDiscovered(devices)
                     },
                     onError: { [weak self] error in
                         self?.scanDisposable = nil
@@ -944,6 +970,12 @@ final class PolarDeviceAdapter: CollectorDeviceAdapter {
 
     func scanDevices() async throws -> [CollectorDevice] {
         throw PolarAdapterError.unsupportedEnvironment
+    }
+
+    func scanDevices(onDiscovered: @escaping @Sendable ([CollectorDevice]) -> Void) async throws -> [CollectorDevice] {
+        let devices = try await scanDevices()
+        onDiscovered(devices)
+        return devices
     }
 
     func selectDevice(_ device: CollectorDevice) throws {

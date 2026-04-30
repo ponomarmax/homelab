@@ -8,6 +8,7 @@ protocol CollectorDeviceAdapter: DeviceStatusProvider {
     var deviceSelectionActionTitle: String { get }
 
     func scanDevices() async throws -> [CollectorDevice]
+    func scanDevices(onDiscovered: @escaping @Sendable ([CollectorDevice]) -> Void) async throws -> [CollectorDevice]
     func selectDevice(_ device: CollectorDevice) throws
     func connect() async throws
     func disconnect()
@@ -16,6 +17,12 @@ protocol CollectorDeviceAdapter: DeviceStatusProvider {
 }
 
 extension CollectorDeviceAdapter {
+    func scanDevices(onDiscovered: @escaping @Sendable ([CollectorDevice]) -> Void) async throws -> [CollectorDevice] {
+        let devices = try await scanDevices()
+        onDiscovered(devices)
+        return devices
+    }
+
     func heartRateStreamProvider() -> HeartRateStreamProviding? {
         streamProviders().first(where: { $0.streamType == .heartRate })
     }

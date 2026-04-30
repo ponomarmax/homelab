@@ -1,6 +1,6 @@
 import Foundation
 
-struct HeartRateChunkBuilder {
+struct CollectorChunkBuilder {
     func buildChunk(
         session: CollectionSession,
         streamDescriptor: StreamDescriptor,
@@ -26,3 +26,5 @@ struct HeartRateChunkBuilder {
         )
     }
 }
+
+typealias HeartRateChunkBuilder = CollectorChunkBuilder

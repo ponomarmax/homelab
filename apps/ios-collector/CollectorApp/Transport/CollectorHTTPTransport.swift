@@ -1,6 +1,6 @@
 import Foundation
 
-struct MockCollectorTransport: CollectorTransporting {
+struct CollectorHTTPTransport: CollectorTransporting {
     typealias HTTPDataProvider = @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
     private let chunkBuilder = HeartRateChunkBuilder()
@@ -137,3 +137,5 @@ struct MockCollectorTransport: CollectorTransporting {
         )
     }
 }
+
+typealias MockCollectorTransport = CollectorHTTPTransport

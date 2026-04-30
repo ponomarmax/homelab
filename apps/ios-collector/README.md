@@ -4,8 +4,8 @@ Initial iOS collector skeleton for the wearable HR MVP.
 
 This checkpoint provides:
 - a runnable SwiftUI app foundation
-- a mock device adapter
-- a mock HR stream provider
+- test-only mock device adapter
+- test-only mock HR stream provider
 - collector core session lifecycle
 - testable domain models for collection mode and timestamp metadata
 - mock session metadata, stream descriptor, and upload chunk preparation
@@ -26,11 +26,11 @@ Implemented in CP2:
 - `CollectorCore` owns session lifecycle and latest HR state
 - `CollectorDeviceAdapter` defines future device integration boundary
 - `DeviceStatus` / `BatteryStatus` provide a vendor-agnostic latest-status model for UI
-- `HeartRateStreamProviding` defines future stream integration boundary
-- `MockDeviceAdapter` and `MockHeartRateStreamProvider` make the app runnable in simulator
-- `MockCollectorTransport` prepares future session/chunk boundaries without performing upload
+- `CollectorStreamProviding` defines stream integration boundary
+- `MockDeviceAdapter` and `MockHeartRateStreamProvider` are test doubles under `CollectorAppTests/TestDoubles`
+- `CollectorHTTPTransport` prepares and uploads chunks (or runs local-only mode when endpoint is absent)
 - `CollectionSession`, `StreamDescriptor`, and `UploadChunk` keep the transport-facing model explicit
-- `HeartRateChunkBuilder` turns buffered mock HR samples into transport-ready chunk payloads
+- `CollectorChunkBuilder` turns buffered samples into transport-ready chunk payloads
 
 Current stream naming and payload schemas:
 - `hr` -> `polar.hr`
@@ -54,23 +54,17 @@ Collector uses a layered configuration strategy:
 3. Launch arguments (highest priority for explicit mode switches).
 
 Configured keys:
-- `COLLECTOR_USE_MOCK_DEFAULT` (`Bool`)  
-  Default mock mode when no explicit override is provided.
 - `COLLECTOR_UPLOAD_ENDPOINT` (`String`)  
   Upload destination. If only base URL is provided (for example `http://192.168.0.5:18090/`), collector auto-expands to `/upload-chunk`.
 - `COLLECTOR_UPLOAD_FLUSH_INTERVAL_SECONDS` (`Number`, optional)
   Time-based upload cadence override. Default is `60` seconds.
 
 Launch overrides:
-- `--mock` forces mock adapter.
-- `--real` forces real adapter.
-- `COLLECTOR_USE_MOCK=1|0` forces adapter mode.
 - `COLLECTOR_UPLOAD_ENDPOINT=http://host:port/...` overrides upload URL.
 
 Recommended workflow:
-- Keep `COLLECTOR_USE_MOCK_DEFAULT=false` in `Info.plist`.
 - Keep server URL in `Info.plist` for normal app runs.
-- Use launch args/env only for tests, CI, and temporary local diagnostics.
+- Use launch env overrides for tests, CI, and temporary local diagnostics.
 
 ## Upload Cadence
 

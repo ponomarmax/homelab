@@ -39,6 +39,7 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var isUploadingChunk: Bool = false
     @Published private(set) var activityMessage: String = "Idle"
     @Published private(set) var eventLogs: [String] = []
+    @Published private(set) var selectedOnlineStreams: Set<CollectorStream> = []
 
     let defaultCollectionMode: CollectionMode = .live
 
@@ -104,6 +105,13 @@ final class CollectorCore: ObservableObject {
         transport.uploadDestinationDescription
     }
 
+    var polarCapabilities: PolarDeviceProfile {
+        PolarDeviceProfile.from(
+            device: selectedDevice,
+            availableOnlineStreams: adapter.availableStreams
+        )
+    }
+
     func selectedDeviceBatteryDisplayText() -> String {
         guard let selectedDevice else {
             return "unknown"
@@ -143,10 +151,8 @@ final class CollectorCore: ObservableObject {
             try adapter.selectDevice(adapter.deviceIdentity)
             selectedDevice = adapter.deviceIdentity
             refreshCachedStatus(for: adapter.deviceIdentity.id)
-            if let mockAdapter = adapter as? MockDeviceAdapter {
-                mockAdapter.markSelected()
-            }
             status = .deviceSelected
+            selectedOnlineStreams = Set(adapter.availableStreams)
             uploadStatus = .idle
             activityMessage = "Device selected"
             log("Device selected: \(selectedDevice?.name ?? "unknown")")
@@ -178,20 +184,15 @@ final class CollectorCore: ObservableObject {
         }
 
         do {
-            let devices = try await adapter.scanDevices()
+            let devices = try await adapter.scanDevices { [weak self] progressive in
+                Task { @MainActor in
+                    self?.discoveredDevices = progressive
+                    self?.refreshCachedStatuses(for: progressive)
+                }
+            }
             discoveredDevices = devices
             refreshCachedStatuses(for: devices)
             log("Scan finished: found \(devices.count) device(s)")
-
-            if let mockAdapter = adapter as? MockDeviceAdapter, let first = devices.first {
-                try mockAdapter.selectDevice(first)
-                selectedDevice = first
-                refreshCachedStatus(for: first.id)
-                status = .deviceSelected
-                activityMessage = "Mock device selected"
-                log("Mock device auto-selected: \(first.name)")
-                return
-            }
 
             if devices.isEmpty {
                 lastErrorMessage = "No Polar devices found"
@@ -225,6 +226,7 @@ final class CollectorCore: ObservableObject {
             selectedDevice = adapter.deviceIdentity
             refreshCachedStatus(for: adapter.deviceIdentity.id)
             status = .deviceSelected
+            selectedOnlineStreams = Set(adapter.availableStreams)
             uploadStatus = .idle
             activityMessage = "Device selected: \(selectedDevice?.name ?? "Unknown")"
             log("Device selected: \(selectedDevice?.id ?? "unknown")")
@@ -286,11 +288,11 @@ final class CollectorCore: ObservableObject {
         }
         isConnectingDevice = false
 
-        let providers = adapter.streamProviders()
+        let providers = adapter.streamProviders().filter { selectedOnlineStreams.contains($0.streamType) }
         guard !providers.isEmpty else {
             status = .deviceSelected
             reportFailure(
-                userMessage: "No stream providers available for selected device",
+                userMessage: "No online streams selected or available for selected device",
                 activity: "Cannot start collection",
                 technical: "Start blocked after connect: streamProviders() returned empty",
                 category: "core"
@@ -344,6 +346,16 @@ final class CollectorCore: ObservableObject {
         status = .collecting
         activityMessage = "Collecting live streams..."
         log("Collection started. Session: \(session.sessionID.uuidString)", category: "core")
+    }
+
+    func toggleOnlineStream(_ stream: CollectorStream) {
+        guard status != .collecting else { return }
+        guard adapter.availableStreams.contains(stream) else { return }
+        if selectedOnlineStreams.contains(stream) {
+            selectedOnlineStreams.remove(stream)
+        } else {
+            selectedOnlineStreams.insert(stream)
+        }
     }
 
     func stopCollection() {

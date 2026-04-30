@@ -1,6 +1,6 @@
 import Foundation
 
-final class HrSampleDebugExporter {
+final class CollectorSampleDebugExporter {
     private struct SampleLine: Codable {
         let session_id: String
         let stream: String
@@ -89,3 +89,5 @@ final class HrSampleDebugExporter {
         fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
 }
+
+typealias HrSampleDebugExporter = CollectorSampleDebugExporter

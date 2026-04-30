@@ -12,11 +12,9 @@ struct WearableCollectorApp: App {
             arguments: ProcessInfo.processInfo.arguments,
             bundleInfo: Bundle.main.infoDictionary
         )
-        let adapter: CollectorDeviceAdapter = configuration.useMockDevice
-            ? MockDeviceAdapter()
-            : PolarDeviceAdapter()
+        let adapter: CollectorDeviceAdapter = PolarDeviceAdapter()
 
-        let transport = MockCollectorTransport(
+        let transport = CollectorHTTPTransport(
             uploadEndpoint: configuration.uploadEndpoint,
             uploadConfiguration: configuration.upload
         )
