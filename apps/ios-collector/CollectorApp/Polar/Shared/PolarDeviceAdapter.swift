@@ -91,6 +91,16 @@ final class PolarDeviceAdapter: CollectorDeviceAdapter {
         }
     }
 
+    func offlineRecordingSettings(for stream: PolarOfflineStream) async -> Result<OfflineStreamSettings, OfflineSettingsFailure> {
+        .failure(OfflineSettingsFailure(message: "Offline recording unavailable in this build environment"))
+    }
+
+    func updateOfflineRecordingSettingsSelection(_ selection: OfflineStreamSettingsSelection, for stream: PolarOfflineStream) {}
+
+    func startOfflineRecordings(requests: [OfflineRecordingStartRequest]) async -> [OfflineStreamOperationResult] {
+        await startOfflineRecordings(streams: requests.map(\.stream))
+    }
+
     func stopOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {
         streams.map {
             OfflineStreamOperationResult(
@@ -209,6 +219,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
     private var discoveredDeviceMap: [String: PolarDeviceInfo] = [:]
 
     private var discoveredOnlineDataTypes: Set<PolarDeviceDataType> = []
+    private var offlineSelectedSettingsByStream: [PolarOfflineStream: OfflineStreamSettingsSelection] = [:]
     private var hrProvider: PolarHrStreamProvider
     private var ecgProvider: PolarEcgStreamProvider
     private var accProvider: PolarAccStreamProvider
@@ -621,13 +632,58 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
     }
 
     func startOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {
+        let requests = streams.map { stream in
+            OfflineRecordingStartRequest(stream: stream, selectedSettings: offlineSelectedSettingsByStream[stream])
+        }
+        return await startOfflineRecordings(requests: requests)
+    }
+
+    func offlineRecordingSettings(for stream: PolarOfflineStream) async -> Result<OfflineStreamSettings, OfflineSettingsFailure> {
         guard let selectedPolarIdentifier else {
-            return streams.map { OfflineStreamOperationResult(stream: $0, success: false, message: "No selected device") }
+            return .failure(OfflineSettingsFailure(message: "No selected device"))
+        }
+        do {
+            let rawSettings = try await withCheckedThrowingContinuation { continuation in
+                streamCapabilitiesDisposable?.dispose()
+                streamCapabilitiesDisposable = api.requestOfflineRecordingSettings(selectedPolarIdentifier, feature: dataType(for: stream))
+                    .observe(on: MainScheduler.asyncInstance)
+                    .subscribe(
+                        onSuccess: { settings in continuation.resume(returning: settings) },
+                        onFailure: { error in continuation.resume(throwing: error) }
+                    )
+            }
+            let options = Self.mapSettingsOptions(from: rawSettings)
+            let selected = offlineSelectedSettingsByStream[stream] ?? Self.defaultSelection(from: rawSettings)
+            offlineSelectedSettingsByStream[stream] = selected
+            return .success(OfflineStreamSettings(stream: stream, options: options, selected: selected))
+        } catch {
+            if stream == .hr || stream == .ppi {
+                let selected = offlineSelectedSettingsByStream[stream] ?? OfflineStreamSettingsSelection(sampleRate: nil, resolution: nil, range: nil, channels: nil)
+                return .success(
+                    OfflineStreamSettings(
+                        stream: stream,
+                        options: OfflineStreamSettingsOptions(sampleRates: [], resolutions: [], ranges: [], channels: []),
+                        selected: selected
+                    )
+                )
+            }
+            return .failure(OfflineSettingsFailure(message: error.localizedDescription))
+        }
+    }
+
+    func updateOfflineRecordingSettingsSelection(_ selection: OfflineStreamSettingsSelection, for stream: PolarOfflineStream) {
+        offlineSelectedSettingsByStream[stream] = selection
+    }
+
+    func startOfflineRecordings(requests: [OfflineRecordingStartRequest]) async -> [OfflineStreamOperationResult] {
+        guard let selectedPolarIdentifier else {
+            return requests.map { OfflineStreamOperationResult(stream: $0.stream, success: false, message: "No selected device") }
         }
         let capabilities = await offlineCapabilities()
         let capabilitiesByStream = Dictionary(uniqueKeysWithValues: capabilities.map { ($0.stream, $0) })
         var results: [OfflineStreamOperationResult] = []
-        for stream in streams {
+        for request in requests {
+            let stream = request.stream
             if let capability = capabilitiesByStream[stream], !capability.isSupported {
                 results.append(
                     OfflineStreamOperationResult(
@@ -639,13 +695,14 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
                 continue
             }
             do {
+                let polarSettings = Self.makePolarSensorSetting(from: request.selectedSettings)
                 try await retryOfflineGattOperation {
                     try await withCheckedThrowingContinuation { continuation in
                         timeSetupDisposable?.dispose()
                         timeSetupDisposable = api.startOfflineRecording(
                             selectedPolarIdentifier,
                             feature: dataType(for: stream),
-                            settings: nil,
+                            settings: polarSettings,
                             secret: nil
                         )
                         .observe(on: MainScheduler.asyncInstance)
@@ -661,7 +718,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
                     OfflineStreamOperationResult(
                         stream: stream,
                         success: false,
-                        message: Self.offlineOperationErrorMessage(error, action: "start")
+                        message: Self.offlineOperationErrorMessage(error, action: "start", stream: stream, settings: request.selectedSettings)
                     )
                 )
             }
@@ -900,23 +957,65 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         return nsError.code == 1 || nsError.code == 8 || nsError.code == 12
     }
 
-    private static func offlineOperationErrorMessage(_ error: Error, action: String) -> String {
+    private static func offlineOperationErrorMessage(
+        _ error: Error,
+        action: String,
+        stream: PolarOfflineStream? = nil,
+        settings: OfflineStreamSettingsSelection? = nil
+    ) -> String {
+        let context = [
+            stream.map { "stream=\($0.rawValue)" },
+            settings.map { "settings=[\($0.summary())]" }
+        ]
+        .compactMap { $0 }
+        .joined(separator: " ")
+        let suffix = context.isEmpty ? "" : " (\(context))"
         if let bleError = error as? BleGattException {
             switch bleError {
             case let .gattAttributeError(errorCode, _):
                 if errorCode == 1 {
-                    return "Failed to \(action): GATT attribute error 1 (likely busy/not ready/already recording)."
+                    return "Failed to \(action): GATT attribute error 1 (likely busy/not ready/already recording).\((suffix))"
                 }
-                return "Failed to \(action): GATT attribute error \(errorCode)."
+                return "Failed to \(action): GATT attribute error \(errorCode).\((suffix))"
             default:
-                return "Failed to \(action): \(bleError.localizedDescription)"
+                return "Failed to \(action): \(bleError.localizedDescription)\((suffix))"
             }
         }
         let nsError = error as NSError
         if nsError.code == 1 {
-            return "Failed to \(action): GATT error 1 (likely busy/not ready/already recording)."
+            return "Failed to \(action): GATT error 1 (likely busy/not ready/already recording).\((suffix))"
         }
-        return "Failed to \(action): \(error.localizedDescription)"
+        return "Failed to \(action): \(error.localizedDescription)\((suffix))"
+    }
+
+    private static func mapSettingsOptions(from settings: PolarSensorSetting) -> OfflineStreamSettingsOptions {
+        OfflineStreamSettingsOptions(
+            sampleRates: settings.settings[.sampleRate]?.sorted() ?? [],
+            resolutions: settings.settings[.resolution]?.sorted() ?? [],
+            ranges: settings.settings[.range]?.sorted() ?? [],
+            channels: settings.settings[.channels]?.sorted() ?? []
+        )
+    }
+
+    private static func defaultSelection(from settings: PolarSensorSetting) -> OfflineStreamSettingsSelection {
+        let maxSettings = settings.maxSettings()
+        return OfflineStreamSettingsSelection(
+            sampleRate: maxSettings.settings[.sampleRate]?.first,
+            resolution: maxSettings.settings[.resolution]?.first,
+            range: maxSettings.settings[.range]?.first,
+            channels: maxSettings.settings[.channels]?.first
+        )
+    }
+
+    private static func makePolarSensorSetting(from selection: OfflineStreamSettingsSelection?) -> PolarSensorSetting? {
+        guard let selection else { return nil }
+        var raw: [PolarSensorSetting.SettingType: UInt32] = [:]
+        if let sampleRate = selection.sampleRate { raw[.sampleRate] = sampleRate }
+        if let resolution = selection.resolution { raw[.resolution] = resolution }
+        if let range = selection.range { raw[.range] = range }
+        if let channels = selection.channels { raw[.channels] = channels }
+        if raw.isEmpty { return nil }
+        return try? PolarSensorSetting(raw)
     }
 
     private func beginCapabilityProbe() {

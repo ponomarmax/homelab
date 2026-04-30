@@ -4,6 +4,7 @@ struct CollectorView: View {
     @StateObject private var collectorCore: CollectorCore
     @State private var selectedTab: PolarScreenTab = .online
     @State private var pendingDeleteEntry: OfflineRecordingEntry?
+    @State private var settingsStream: PolarOfflineStream?
 
     init(collectorCore: CollectorCore) {
         _collectorCore = StateObject(wrappedValue: collectorCore)
@@ -167,7 +168,14 @@ struct CollectorView: View {
                         selected: collectorCore.selectedOfflineStreams.contains(stream),
                         runState: collectorCore.offlineStreamRunStates[stream] ?? .ready,
                         runMessage: collectorCore.offlineStreamRunMessages[stream],
+                        settingsSummary: collectorCore.offlineSettingsSummary(for: stream),
+                        canConfigure: collectorCore.canConfigureOfflineStream(stream),
                         onToggle: { collectorCore.toggleOfflineStream(stream) }
+                        ,
+                        onConfigure: {
+                            Task { await collectorCore.loadOfflineSettings(for: stream) }
+                            settingsStream = stream
+                        }
                     )
                 }
 
@@ -261,6 +269,9 @@ struct CollectorView: View {
             }
         } message: {
             Text(pendingDeleteEntry?.path ?? "")
+        }
+        .sheet(item: $settingsStream) { stream in
+            OfflineSettingsEditorSheet(stream: stream, collectorCore: collectorCore)
         }
     }
 
@@ -406,7 +417,10 @@ private struct OfflineStreamRow: View {
     let selected: Bool
     let runState: OfflineStreamRunState
     let runMessage: String?
+    let settingsSummary: String
+    let canConfigure: Bool
     let onToggle: () -> Void
+    let onConfigure: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -427,8 +441,123 @@ private struct OfflineStreamRow: View {
                     .font(.caption2)
                     .foregroundStyle(runState == .failed ? Color.red : Color.secondary)
             }
+            Text("Settings: \(settingsSummary)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if canConfigure {
+                Button("Configure") {
+                    onConfigure()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!capability.isSupported)
+            }
         }
         .opacity(capability.isSupported ? 1 : 0.5)
+    }
+}
+
+private struct OfflineSettingsEditorSheet: View {
+    let stream: PolarOfflineStream
+    @ObservedObject var collectorCore: CollectorCore
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let settings = collectorCore.offlineSettingsByStream[stream] {
+                    Form {
+                        if !settings.options.sampleRates.isEmpty {
+                            Picker("Sample rate", selection: Binding(
+                                get: { settings.selected.sampleRate ?? settings.options.sampleRates.first ?? 0 },
+                                set: { value in
+                                    collectorCore.updateOfflineSettingsSelection(
+                                        for: stream,
+                                        sampleRate: value,
+                                        resolution: settings.selected.resolution,
+                                        range: settings.selected.range,
+                                        channels: settings.selected.channels
+                                    )
+                                }
+                            )) {
+                                ForEach(settings.options.sampleRates, id: \.self) { value in
+                                    Text("\(value)").tag(value)
+                                }
+                            }
+                        }
+                        if !settings.options.resolutions.isEmpty {
+                            Picker("Resolution", selection: Binding(
+                                get: { settings.selected.resolution ?? settings.options.resolutions.first ?? 0 },
+                                set: { value in
+                                    collectorCore.updateOfflineSettingsSelection(
+                                        for: stream,
+                                        sampleRate: settings.selected.sampleRate,
+                                        resolution: value,
+                                        range: settings.selected.range,
+                                        channels: settings.selected.channels
+                                    )
+                                }
+                            )) {
+                                ForEach(settings.options.resolutions, id: \.self) { value in
+                                    Text("\(value)").tag(value)
+                                }
+                            }
+                        }
+                        if !settings.options.ranges.isEmpty {
+                            Picker("Range", selection: Binding(
+                                get: { settings.selected.range ?? settings.options.ranges.first ?? 0 },
+                                set: { value in
+                                    collectorCore.updateOfflineSettingsSelection(
+                                        for: stream,
+                                        sampleRate: settings.selected.sampleRate,
+                                        resolution: settings.selected.resolution,
+                                        range: value,
+                                        channels: settings.selected.channels
+                                    )
+                                }
+                            )) {
+                                ForEach(settings.options.ranges, id: \.self) { value in
+                                    Text("\(value)").tag(value)
+                                }
+                            }
+                        }
+                        if !settings.options.channels.isEmpty {
+                            Picker("Channels", selection: Binding(
+                                get: { settings.selected.channels ?? settings.options.channels.first ?? 0 },
+                                set: { value in
+                                    collectorCore.updateOfflineSettingsSelection(
+                                        for: stream,
+                                        sampleRate: settings.selected.sampleRate,
+                                        resolution: settings.selected.resolution,
+                                        range: settings.selected.range,
+                                        channels: value
+                                    )
+                                }
+                            )) {
+                                ForEach(settings.options.channels, id: \.self) { value in
+                                    Text("\(value)").tag(value)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Loading settings...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .task {
+                        await collectorCore.loadOfflineSettings(for: stream)
+                    }
+                }
+            }
+            .navigationTitle("\(stream.rawValue) Settings")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }
 

@@ -315,7 +315,7 @@ final class CollectorCoreTests: XCTestCase {
 
         XCTAssertEqual(core.deviceTimeSyncState, .success)
         XCTAssertEqual(core.deviceTimeStatusMessage, "Device time synced")
-        XCTAssertEqual(core.lastDeviceTimeDeltaSeconds, 0.4, accuracy: 0.001)
+        XCTAssertEqual(core.lastDeviceTimeDeltaSeconds ?? -1, 0.4, accuracy: 0.001)
     }
 
     func testDeviceTimeSyncUnavailableMapping() async {
@@ -1182,5 +1182,86 @@ final class CollectorCoreTests: XCTestCase {
         XCTAssertEqual(core.offlineStreamRunStates[.acc], .recording)
         XCTAssertEqual(core.offlineStreamRunStates[.hr], .failed)
         XCTAssertEqual(core.offlineLastErrorMessage, "Failed to start: GATT attribute error 1")
+    }
+
+    func testStartAllLoadsMissingSettingsBeforeStart() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = Dictionary(
+            uniqueKeysWithValues: PolarOfflineStream.allCases.map { ($0, OfflineStreamCapability(stream: $0, isSupported: true, reason: nil)) }
+        )
+        adapter.offlineSettingsByStream[.acc] = .success(
+            OfflineStreamSettings(
+                stream: .acc,
+                options: OfflineStreamSettingsOptions(sampleRates: [25, 50], resolutions: [16], ranges: [2000], channels: [3]),
+                selected: OfflineStreamSettingsSelection(sampleRate: 50, resolution: 16, range: 2000, channels: 3)
+            )
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        await core.startOfflineAllSupported()
+
+        XCTAssertFalse(adapter.lastStartedOfflineRequests.isEmpty)
+        XCTAssertEqual(core.offlineSettingsLoadStateByStream[.acc], .ready)
+    }
+
+    func testSettingsFailureDoesNotBlockOtherStreams() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = [
+            .hr: OfflineStreamCapability(stream: .hr, isSupported: true, reason: nil),
+            .acc: OfflineStreamCapability(stream: .acc, isSupported: true, reason: nil),
+            .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
+            .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
+            .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
+            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+        ]
+        adapter.offlineSettingsByStream[.acc] = .failure(OfflineSettingsFailure(message: "settings query failed"))
+        adapter.offlineSettingsByStream[.hr] = .success(
+            OfflineStreamSettings(
+                stream: .hr,
+                options: OfflineStreamSettingsOptions(sampleRates: [], resolutions: [], ranges: [], channels: []),
+                selected: OfflineStreamSettingsSelection(sampleRate: nil, resolution: nil, range: nil, channels: nil)
+            )
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        await core.startOfflineAllSupported()
+
+        XCTAssertEqual(adapter.lastStartedOfflineRequests.map(\.stream), [.hr])
+        XCTAssertEqual(core.offlineStreamRunStates[.acc], .failed)
+        XCTAssertEqual(core.offlineStreamRunStates[.hr], .recording)
+    }
+
+    func testStartUsesSelectedSettingsFromCoreState() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = [
+            .hr: OfflineStreamCapability(stream: .hr, isSupported: true, reason: nil),
+            .acc: OfflineStreamCapability(stream: .acc, isSupported: true, reason: nil),
+            .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
+            .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
+            .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
+            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+        ]
+        adapter.offlineSettingsByStream[.acc] = .success(
+            OfflineStreamSettings(
+                stream: .acc,
+                options: OfflineStreamSettingsOptions(sampleRates: [25, 50], resolutions: [16], ranges: [2000, 4000], channels: [3]),
+                selected: OfflineStreamSettingsSelection(sampleRate: 50, resolution: 16, range: 2000, channels: 3)
+            )
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+        await core.loadOfflineSettings(for: .acc)
+        core.updateOfflineSettingsSelection(for: .acc, sampleRate: 25, resolution: 16, range: 4000, channels: 3)
+
+        await core.startOfflineAllSupported()
+
+        let accRequest = adapter.lastStartedOfflineRequests.first(where: { $0.stream == .acc })
+        XCTAssertEqual(accRequest?.selectedSettings?.sampleRate, 25)
+        XCTAssertEqual(accRequest?.selectedSettings?.range, 4000)
     }
 }

@@ -17,7 +17,10 @@ protocol CollectorDeviceAdapter: DeviceStatusProvider {
     func streamProviders() -> [HeartRateStreamProviding]
 
     func offlineCapabilities() async -> [OfflineStreamCapability]
+    func offlineRecordingSettings(for stream: PolarOfflineStream) async -> Result<OfflineStreamSettings, OfflineSettingsFailure>
+    func updateOfflineRecordingSettingsSelection(_ selection: OfflineStreamSettingsSelection, for stream: PolarOfflineStream)
     func startOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult]
+    func startOfflineRecordings(requests: [OfflineRecordingStartRequest]) async -> [OfflineStreamOperationResult]
     func stopOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult]
     func listOfflineRecordings() async throws -> [OfflineRecordingEntry]
     func removeOfflineRecording(path: String) async throws
@@ -51,6 +54,16 @@ extension CollectorDeviceAdapter {
 
     func startOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {
         streams.map { OfflineStreamOperationResult(stream: $0, success: false, message: "Offline recording is unavailable") }
+    }
+
+    func offlineRecordingSettings(for stream: PolarOfflineStream) async -> Result<OfflineStreamSettings, OfflineSettingsFailure> {
+        .failure(OfflineSettingsFailure(message: "Offline recording settings are unavailable"))
+    }
+
+    func updateOfflineRecordingSettingsSelection(_ selection: OfflineStreamSettingsSelection, for stream: PolarOfflineStream) {}
+
+    func startOfflineRecordings(requests: [OfflineRecordingStartRequest]) async -> [OfflineStreamOperationResult] {
+        await startOfflineRecordings(streams: requests.map(\.stream))
     }
 
     func stopOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {

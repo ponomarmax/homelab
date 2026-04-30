@@ -1,4 +1,5 @@
 import Foundation
+@testable import CollectorApp
 
 final class MockDeviceAdapter: CollectorDeviceAdapter {
     private(set) var connectionState: ConnectionState = .disconnected
@@ -22,11 +23,13 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
     )
     var nextStartOfflineResults: [PolarOfflineStream: OfflineStreamOperationResult] = [:]
     var nextStopOfflineResults: [PolarOfflineStream: OfflineStreamOperationResult] = [:]
+    var offlineSettingsByStream: [PolarOfflineStream: Result<OfflineStreamSettings, OfflineSettingsFailure>] = [:]
     var nextOfflineRecordings: [OfflineRecordingEntry] = []
     var nextOfflinePreparationResult: OfflineUploadPreparationResult = OfflineUploadPreparationResult(batches: [], messagesByStream: [:])
     var offlineListShouldThrowError: Error?
     var offlineDeleteErrorsByPath: [String: Error] = [:]
     private(set) var lastStartedOfflineStreams: [PolarOfflineStream] = []
+    private(set) var lastStartedOfflineRequests: [OfflineRecordingStartRequest] = []
     private(set) var lastStoppedOfflineStreams: [PolarOfflineStream] = []
     private(set) var removedOfflineRecordingPaths: [String] = []
 
@@ -113,6 +116,31 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
     func startOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {
         lastStartedOfflineStreams = streams
         return streams.map { nextStartOfflineResults[$0] ?? OfflineStreamOperationResult(stream: $0, success: true, message: "started") }
+    }
+
+    func offlineRecordingSettings(for stream: PolarOfflineStream) async -> Result<OfflineStreamSettings, OfflineSettingsFailure> {
+        if let configured = offlineSettingsByStream[stream] {
+            return configured
+        }
+        return .success(
+            OfflineStreamSettings(
+                stream: stream,
+                options: OfflineStreamSettingsOptions(sampleRates: [], resolutions: [], ranges: [], channels: []),
+                selected: OfflineStreamSettingsSelection(sampleRate: nil, resolution: nil, range: nil, channels: nil)
+            )
+        )
+    }
+
+    func updateOfflineRecordingSettingsSelection(_ selection: OfflineStreamSettingsSelection, for stream: PolarOfflineStream) {
+        guard case .success(let settings) = offlineSettingsByStream[stream] else { return }
+        offlineSettingsByStream[stream] = .success(
+            OfflineStreamSettings(stream: stream, options: settings.options, selected: selection)
+        )
+    }
+
+    func startOfflineRecordings(requests: [OfflineRecordingStartRequest]) async -> [OfflineStreamOperationResult] {
+        lastStartedOfflineRequests = requests
+        return await startOfflineRecordings(streams: requests.map(\.stream))
     }
 
     func stopOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {

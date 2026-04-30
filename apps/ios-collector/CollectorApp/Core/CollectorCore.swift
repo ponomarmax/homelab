@@ -44,6 +44,8 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var offlineLifecycleState: OfflineLifecycleState = .disconnected
     @Published private(set) var offlineStatusMessage: String = "Disconnected"
     @Published private(set) var offlineStreamCapabilities: [PolarOfflineStream: OfflineStreamCapability] = [:]
+    @Published private(set) var offlineSettingsByStream: [PolarOfflineStream: OfflineStreamSettings] = [:]
+    @Published private(set) var offlineSettingsLoadStateByStream: [PolarOfflineStream: OfflineSettingsLoadState] = [:]
     @Published private(set) var offlineStreamRunMessages: [PolarOfflineStream: String] = [:]
     @Published private(set) var offlineStreamRunStates: [PolarOfflineStream: OfflineStreamRunState] = [:]
     @Published private(set) var offlineRecordings: [OfflineRecordingEntry] = []
@@ -206,10 +208,14 @@ final class CollectorCore: ObservableObject {
             selectedOnlineStreams = Set(adapter.availableStreams)
             selectedOfflineStreams = Set(polarCapabilities.availableOfflineStreams)
             offlineStreamCapabilities = [:]
+            offlineSettingsByStream = [:]
+            offlineSettingsLoadStateByStream = [:]
             offlineStreamRunMessages = [:]
             offlineRecordings = []
             offlineLifecycleState = .disconnected
             offlineStatusMessage = "Connect to use offline recording"
+            offlineSettingsByStream = [:]
+            offlineSettingsLoadStateByStream = [:]
             uploadStatus = .idle
             activityMessage = "Device selected"
             log("Device selected: \(selectedDevice?.name ?? "unknown")")
@@ -509,8 +515,74 @@ final class CollectorCore: ObservableObject {
                 if offlineStreamRunStates[stream] == nil {
                     offlineStreamRunStates[stream] = .ready
                 }
+                if offlineSettingsLoadStateByStream[stream] == nil {
+                    offlineSettingsLoadStateByStream[stream] = .notLoaded
+                }
             }
         }
+    }
+
+    func offlineSettingsSummary(for stream: PolarOfflineStream) -> String {
+        if let settings = offlineSettingsByStream[stream] {
+            return settings.selected.summary()
+        }
+        switch offlineSettingsLoadStateByStream[stream] ?? .notLoaded {
+        case .notLoaded:
+            return "Not loaded"
+        case .loading:
+            return "Loading..."
+        case .ready:
+            return "Ready"
+        case .failed(let message):
+            return "Failed: \(message)"
+        }
+    }
+
+    func canConfigureOfflineStream(_ stream: PolarOfflineStream) -> Bool {
+        guard let capability = offlineStreamCapabilities[stream], capability.isSupported else { return false }
+        if let settings = offlineSettingsByStream[stream] {
+            return settings.options.isConfigurable
+        }
+        return true
+    }
+
+    func loadOfflineSettings(for stream: PolarOfflineStream) async {
+        guard let capability = offlineStreamCapabilities[stream], capability.isSupported else { return }
+        offlineSettingsLoadStateByStream[stream] = .loading
+        offlineStreamRunStates[stream] = .loadingSettings
+        offlineStreamRunMessages[stream] = "Loading settings..."
+        let result = await adapter.offlineRecordingSettings(for: stream)
+        switch result {
+        case .success(let settings):
+            offlineSettingsByStream[stream] = settings
+            offlineSettingsLoadStateByStream[stream] = .ready
+            offlineStreamRunStates[stream] = .ready
+            offlineStreamRunMessages[stream] = settings.options.isConfigurable ? "Settings ready" : "No configurable settings"
+        case .failure(let failure):
+            let message = failure.message
+            offlineSettingsLoadStateByStream[stream] = .failed(message: message)
+            offlineStreamRunStates[stream] = .failed
+            offlineStreamRunMessages[stream] = "Settings failed: \(message)"
+        }
+    }
+
+    func updateOfflineSettingsSelection(
+        for stream: PolarOfflineStream,
+        sampleRate: UInt32?,
+        resolution: UInt32?,
+        range: UInt32?,
+        channels: UInt32?
+    ) {
+        guard let existing = offlineSettingsByStream[stream] else { return }
+        let selection = OfflineStreamSettingsSelection(
+            sampleRate: sampleRate,
+            resolution: resolution,
+            range: range,
+            channels: channels
+        )
+        let updated = OfflineStreamSettings(stream: stream, options: existing.options, selected: selection)
+        offlineSettingsByStream[stream] = updated
+        adapter.updateOfflineRecordingSettingsSelection(selection, for: stream)
     }
 
     var offlineProgressSummary: String {
@@ -1155,8 +1227,30 @@ final class CollectorCore: ObservableObject {
         }
 
         _ = await runPreOfflineSyncTimeCheck()
-        streams.forEach { offlineStreamRunStates[$0] = .ready }
-        let results = await adapter.startOfflineRecordings(streams: streams)
+        for stream in streams {
+            let state = offlineSettingsLoadStateByStream[stream] ?? .notLoaded
+            if case .notLoaded = state {
+                await loadOfflineSettings(for: stream)
+            }
+        }
+        let startableStreams = streams.filter { stream in
+            if case .failed = (offlineSettingsLoadStateByStream[stream] ?? .notLoaded) {
+                return false
+            }
+            return true
+        }
+        for stream in startableStreams {
+            offlineStreamRunStates[stream] = .starting
+            offlineStreamRunMessages[stream] = "Starting..."
+        }
+        let requests = startableStreams.map { stream in
+            OfflineRecordingStartRequest(stream: stream, selectedSettings: offlineSettingsByStream[stream]?.selected)
+        }
+        let adapterResults = await adapter.startOfflineRecordings(requests: requests)
+        let failedSettingsResults = streams.filter { !startableStreams.contains($0) }.map {
+            OfflineStreamOperationResult(stream: $0, success: false, message: "Settings unavailable for stream")
+        }
+        let results = adapterResults + failedSettingsResults
         offlineStreamRunMessages.merge(
             Dictionary(uniqueKeysWithValues: results.map { ($0.stream, $0.message) }),
             uniquingKeysWith: { _, new in new }

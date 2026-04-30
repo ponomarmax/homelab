@@ -1,4 +1,5 @@
 import Foundation
+@testable import CollectorApp
 
 final class MockHeartRateStreamProvider: HeartRateStreamProviding {
     let streamType: CollectorStream = .heartRate

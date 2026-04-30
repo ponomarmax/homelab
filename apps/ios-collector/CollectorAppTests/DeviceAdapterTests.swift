@@ -220,4 +220,34 @@ final class DeviceAdapterTests: XCTestCase {
 
         XCTAssertFalse(caps.supportsManualTimeSync)
     }
+
+    func testMockAdapterOfflineSettingsSelectionRoundTrip() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineSettingsByStream[.acc] = .success(
+            OfflineStreamSettings(
+                stream: .acc,
+                options: OfflineStreamSettingsOptions(sampleRates: [25, 50], resolutions: [16], ranges: [2000], channels: [3]),
+                selected: OfflineStreamSettingsSelection(sampleRate: 50, resolution: 16, range: 2000, channels: 3)
+            )
+        )
+
+        let before = await adapter.offlineRecordingSettings(for: .acc)
+        if case .success(let settings) = before {
+            XCTAssertEqual(settings.selected.sampleRate, 50)
+        } else {
+            XCTFail("Expected success")
+        }
+
+        adapter.updateOfflineRecordingSettingsSelection(
+            OfflineStreamSettingsSelection(sampleRate: 25, resolution: 16, range: 2000, channels: 3),
+            for: .acc
+        )
+
+        let after = await adapter.offlineRecordingSettings(for: .acc)
+        if case .success(let settings) = after {
+            XCTAssertEqual(settings.selected.sampleRate, 25)
+        } else {
+            XCTFail("Expected success")
+        }
+    }
 }

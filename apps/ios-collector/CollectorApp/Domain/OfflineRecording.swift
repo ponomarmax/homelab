@@ -33,13 +33,65 @@ enum OfflineOperation: String, Equatable, Sendable {
 }
 
 enum OfflineStreamRunState: String, Equatable, Sendable {
+    case loadingSettings
     case ready
+    case starting
     case recording
     case stopping
     case fetching
     case uploading
     case uploaded
     case failed
+}
+
+enum OfflineSettingsLoadState: Equatable, Sendable {
+    case notLoaded
+    case loading
+    case ready
+    case failed(message: String)
+}
+
+struct OfflineStreamSettingsOptions: Equatable, Sendable {
+    let sampleRates: [UInt32]
+    let resolutions: [UInt32]
+    let ranges: [UInt32]
+    let channels: [UInt32]
+
+    var isConfigurable: Bool {
+        !sampleRates.isEmpty || !resolutions.isEmpty || !ranges.isEmpty || !channels.isEmpty
+    }
+}
+
+struct OfflineStreamSettingsSelection: Equatable, Sendable {
+    let sampleRate: UInt32?
+    let resolution: UInt32?
+    let range: UInt32?
+    let channels: UInt32?
+
+    func summary() -> String {
+        let parts: [String] = [
+            sampleRate.map { "sample_rate=\($0)" },
+            resolution.map { "resolution=\($0)" },
+            range.map { "range=\($0)" },
+            channels.map { "channels=\($0)" }
+        ].compactMap { $0 }
+        return parts.isEmpty ? "default" : parts.joined(separator: ", ")
+    }
+}
+
+struct OfflineStreamSettings: Equatable, Sendable {
+    let stream: PolarOfflineStream
+    let options: OfflineStreamSettingsOptions
+    let selected: OfflineStreamSettingsSelection
+}
+
+struct OfflineSettingsFailure: Error, Equatable, Sendable {
+    let message: String
+}
+
+struct OfflineRecordingStartRequest: Equatable, Sendable {
+    let stream: PolarOfflineStream
+    let selectedSettings: OfflineStreamSettingsSelection?
 }
 
 struct OfflineStreamCapability: Equatable, Sendable {
