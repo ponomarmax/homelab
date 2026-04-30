@@ -6,6 +6,7 @@ protocol CollectorDeviceAdapter: DeviceStatusProvider {
     var availableStreams: [CollectorStream] { get }
     var sourceIdentifier: String { get }
     var deviceSelectionActionTitle: String { get }
+    var deviceTimeAvailability: DeviceTimeActionAvailability { get }
 
     func scanDevices() async throws -> [CollectorDevice]
     func scanDevices(onDiscovered: @escaping @Sendable ([CollectorDevice]) -> Void) async throws -> [CollectorDevice]
@@ -14,6 +15,9 @@ protocol CollectorDeviceAdapter: DeviceStatusProvider {
     func disconnect()
     func streamProviders() -> [HeartRateStreamProviding]
     func heartRateStreamProvider() -> HeartRateStreamProviding?
+    func readDeviceTime(mode: CollectionMode) async -> DeviceTimeActionResult
+    func syncDeviceTimeToPhone(mode: CollectionMode) async -> DeviceTimeActionResult
+    func prepareDeviceTimeForOfflineSync() async -> DeviceTimeActionResult
 }
 
 extension CollectorDeviceAdapter {
@@ -28,6 +32,35 @@ extension CollectorDeviceAdapter {
     }
 
     var deviceStatusCapabilities: [DeviceStatusCapability] { [] }
+    var deviceTimeAvailability: DeviceTimeActionAvailability { .unavailable }
+
+    func readDeviceTime(mode: CollectionMode) async -> DeviceTimeActionResult {
+        DeviceTimeActionResult(
+            state: .unavailable,
+            message: "Read-back unavailable",
+            debugDetails: "Device adapter does not support get device time",
+            readbackDeviceTime: nil,
+            readbackTimeZoneID: nil,
+            verificationDeltaSeconds: nil,
+            operationalEvents: []
+        )
+    }
+
+    func syncDeviceTimeToPhone(mode: CollectionMode) async -> DeviceTimeActionResult {
+        DeviceTimeActionResult(
+            state: .unavailable,
+            message: "Read-back unavailable",
+            debugDetails: "Device adapter does not support time sync",
+            readbackDeviceTime: nil,
+            readbackTimeZoneID: nil,
+            verificationDeltaSeconds: nil,
+            operationalEvents: []
+        )
+    }
+
+    func prepareDeviceTimeForOfflineSync() async -> DeviceTimeActionResult {
+        await syncDeviceTimeToPhone(mode: .offlineRecording)
+    }
 
     func cachedDeviceStatusSnapshot(for deviceID: String) -> DeviceStatusSnapshot? {
         nil

@@ -264,6 +264,68 @@ final class CollectorCoreTests: XCTestCase {
         XCTAssertEqual(accProvider.startCount, 1)
     }
 
+    func testDeviceTimeSyncSuccessMapping() async {
+        let adapter = MockDeviceAdapter()
+        adapter.nextSyncDeviceTimeResult = DeviceTimeActionResult(
+            state: .success,
+            message: "Device time synced",
+            debugDetails: "Stream timestamp verification not performed",
+            readbackDeviceTime: Date(timeIntervalSince1970: 200),
+            readbackTimeZoneID: "Europe/Kyiv",
+            verificationDeltaSeconds: 0.4,
+            operationalEvents: []
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.syncDeviceTimeToPhoneNow()
+
+        XCTAssertEqual(core.deviceTimeSyncState, .success)
+        XCTAssertEqual(core.deviceTimeStatusMessage, "Device time synced")
+        XCTAssertEqual(core.lastDeviceTimeDeltaSeconds, 0.4, accuracy: 0.001)
+    }
+
+    func testDeviceTimeSyncUnavailableMapping() async {
+        let adapter = MockDeviceAdapter()
+        adapter.nextSyncDeviceTimeResult = DeviceTimeActionResult(
+            state: .unavailable,
+            message: "Read-back unavailable",
+            debugDetails: "feature not ready",
+            readbackDeviceTime: nil,
+            readbackTimeZoneID: nil,
+            verificationDeltaSeconds: nil,
+            operationalEvents: []
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.syncDeviceTimeToPhoneNow()
+
+        XCTAssertEqual(core.deviceTimeSyncState, .unavailable)
+        XCTAssertEqual(core.deviceTimeStatusMessage, "Read-back unavailable")
+        XCTAssertEqual(core.lastDeviceTimeReadResult, "Read-back unavailable")
+    }
+
+    func testPreOfflineSyncHookReturnsStructuredResult() async {
+        let adapter = MockDeviceAdapter()
+        adapter.nextSyncDeviceTimeResult = DeviceTimeActionResult(
+            state: .failed,
+            message: "Time sync failed",
+            debugDetails: "setLocalTime failed",
+            readbackDeviceTime: nil,
+            readbackTimeZoneID: nil,
+            verificationDeltaSeconds: nil,
+            operationalEvents: []
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        let result = await core.runPreOfflineSyncTimeCheck()
+
+        XCTAssertEqual(result.state, .failed)
+        XCTAssertEqual(result.message, "Time sync failed")
+        XCTAssertEqual(core.deviceTimeSyncState, .failed)
+    }
+
     func testCoreBuffersSamplesAndPreparesChunk() async throws {
         let firstTimestamp = Date(timeIntervalSince1970: 200)
         let secondTimestamp = Date(timeIntervalSince1970: 201)

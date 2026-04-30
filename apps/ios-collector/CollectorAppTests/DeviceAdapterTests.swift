@@ -160,7 +160,8 @@ final class DeviceAdapterTests: XCTestCase {
         )
         let caps = PolarDeviceProfile.from(
             device: device,
-            availableOnlineStreams: [.heartRate, .accelerometer]
+            availableOnlineStreams: [.heartRate, .accelerometer],
+            supportsManualTimeSync: true
         )
 
         XCTAssertEqual(caps.family, .veritySense)
@@ -179,7 +180,8 @@ final class DeviceAdapterTests: XCTestCase {
         )
         let caps = PolarDeviceProfile.from(
             device: device,
-            availableOnlineStreams: [.heartRate, .ecg, .accelerometer]
+            availableOnlineStreams: [.heartRate, .ecg, .accelerometer],
+            supportsManualTimeSync: true
         )
 
         XCTAssertEqual(caps.family, .h10)
@@ -193,9 +195,29 @@ final class DeviceAdapterTests: XCTestCase {
             vendor: "Polar",
             model: "Unknown"
         )
-        let caps = PolarDeviceProfile.from(device: device, availableOnlineStreams: [])
+        let caps = PolarDeviceProfile.from(
+            device: device,
+            availableOnlineStreams: [],
+            supportsManualTimeSync: true
+        )
 
         XCTAssertEqual(caps.family, .unknownPolar)
         XCTAssertTrue(caps.availableOfflineStreams.isEmpty)
+    }
+
+    func testPolarCapabilitiesManualTimeSyncFlagPassesThrough() {
+        let device = CollectorDevice(
+            id: "polar-vs",
+            name: "Polar Verity Sense",
+            vendor: "Polar",
+            model: "Verity Sense"
+        )
+        let caps = PolarDeviceProfile.from(
+            device: device,
+            availableOnlineStreams: [.heartRate],
+            supportsManualTimeSync: false
+        )
+
+        XCTAssertFalse(caps.supportsManualTimeSync)
     }
 }

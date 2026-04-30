@@ -10,6 +10,9 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
 
     private let providers: [HeartRateStreamProviding]
     private var cachedStatusByDeviceID: [String: DeviceStatusSnapshot]
+    var deviceTimeAvailability: DeviceTimeActionAvailability
+    var nextReadDeviceTimeResult: DeviceTimeActionResult
+    var nextSyncDeviceTimeResult: DeviceTimeActionResult
 
     init(
         deviceIdentity: CollectorDevice = CollectorDevice(
@@ -31,6 +34,29 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
         } else {
             self.cachedStatusByDeviceID = [:]
         }
+        self.deviceTimeAvailability = DeviceTimeActionAvailability(
+            canReadDeviceTime: true,
+            canSyncDeviceTime: true,
+            reason: nil
+        )
+        self.nextReadDeviceTimeResult = DeviceTimeActionResult(
+            state: .success,
+            message: "Device time synced",
+            debugDetails: nil,
+            readbackDeviceTime: Date(timeIntervalSince1970: 100),
+            readbackTimeZoneID: TimeZone.current.identifier,
+            verificationDeltaSeconds: nil,
+            operationalEvents: []
+        )
+        self.nextSyncDeviceTimeResult = DeviceTimeActionResult(
+            state: .success,
+            message: "Device time synced",
+            debugDetails: "Stream timestamp verification not performed",
+            readbackDeviceTime: Date(timeIntervalSince1970: 100),
+            readbackTimeZoneID: TimeZone.current.identifier,
+            verificationDeltaSeconds: 0.8,
+            operationalEvents: []
+        )
     }
 
     func scanDevices() async throws -> [CollectorDevice] {
@@ -75,6 +101,18 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
 
     func cachedDeviceStatusSnapshot(for deviceID: String) -> DeviceStatusSnapshot? {
         cachedStatusByDeviceID[deviceID]
+    }
+
+    func readDeviceTime(mode: CollectionMode) async -> DeviceTimeActionResult {
+        nextReadDeviceTimeResult
+    }
+
+    func syncDeviceTimeToPhone(mode: CollectionMode) async -> DeviceTimeActionResult {
+        nextSyncDeviceTimeResult
+    }
+
+    func prepareDeviceTimeForOfflineSync() async -> DeviceTimeActionResult {
+        nextSyncDeviceTimeResult
     }
 
     func markSelected() {

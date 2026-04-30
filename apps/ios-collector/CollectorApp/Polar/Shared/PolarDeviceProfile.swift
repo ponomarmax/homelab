@@ -23,7 +23,11 @@ struct PolarDeviceProfile: Equatable, Sendable {
     let availableOfflineStreams: [PolarOfflineStream]
     let supportsManualTimeSync: Bool
 
-    static func from(device: CollectorDevice?, availableOnlineStreams: [CollectorStream]) -> PolarDeviceProfile {
+    static func from(
+        device: CollectorDevice?,
+        availableOnlineStreams: [CollectorStream],
+        supportsManualTimeSync: Bool
+    ) -> PolarDeviceProfile {
         let family = classifyFamily(device: device)
         let offlineStreams: [PolarOfflineStream]
         switch family {
@@ -37,7 +41,7 @@ struct PolarDeviceProfile: Equatable, Sendable {
             family: family,
             availableOnlineStreams: availableOnlineStreams,
             availableOfflineStreams: offlineStreams,
-            supportsManualTimeSync: true
+            supportsManualTimeSync: supportsManualTimeSync
         )
     }
 

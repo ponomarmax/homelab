@@ -35,6 +35,9 @@ final class PolarDeviceAdapter: CollectorDeviceAdapter {
             requiresConnection: true
         )
     ]
+    var deviceTimeAvailability: DeviceTimeActionAvailability {
+        .unavailable
+    }
     func scanDevices() async throws -> [CollectorDevice] {
         throw PolarAdapterError.unsupportedEnvironment
     }
@@ -67,6 +70,34 @@ final class PolarDeviceAdapter: CollectorDeviceAdapter {
 
     func cachedDeviceStatusSnapshot(for deviceID: String) -> DeviceStatusSnapshot? {
         nil
+    }
+
+    func readDeviceTime(mode: CollectionMode) async -> DeviceTimeActionResult {
+        DeviceTimeActionResult(
+            state: .unavailable,
+            message: "Read-back unavailable",
+            debugDetails: "Polar SDK unavailable in simulator build",
+            readbackDeviceTime: nil,
+            readbackTimeZoneID: nil,
+            verificationDeltaSeconds: nil,
+            operationalEvents: []
+        )
+    }
+
+    func syncDeviceTimeToPhone(mode: CollectionMode) async -> DeviceTimeActionResult {
+        DeviceTimeActionResult(
+            state: .unavailable,
+            message: "Read-back unavailable",
+            debugDetails: "Polar SDK unavailable in simulator build",
+            readbackDeviceTime: nil,
+            readbackTimeZoneID: nil,
+            verificationDeltaSeconds: nil,
+            operationalEvents: []
+        )
+    }
+
+    func prepareDeviceTimeForOfflineSync() async -> DeviceTimeActionResult {
+        await syncDeviceTimeToPhone(mode: .offlineRecording)
     }
 }
 #else
@@ -160,6 +191,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
     private var latestChargeState: String?
     private var latestPowerSources: [String]?
     private var cachedStatusByDeviceID: [String: DeviceStatusSnapshot] = [:]
+    private var lastKnownTimeFeatureUnavailable = false
 
     var deviceStatusCapabilities: [DeviceStatusCapability] {
         [
@@ -171,6 +203,39 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
                 requiresConnection: true
             )
         ]
+    }
+
+    var deviceTimeAvailability: DeviceTimeActionAvailability {
+        guard selectedPolarIdentifier != nil else {
+            return DeviceTimeActionAvailability(
+                canReadDeviceTime: false,
+                canSyncDeviceTime: false,
+                reason: "Select and connect a device first"
+            )
+        }
+        guard connectionState == .connected else {
+            return DeviceTimeActionAvailability(
+                canReadDeviceTime: false,
+                canSyncDeviceTime: false,
+                reason: "Device disconnected"
+            )
+        }
+        guard !lastKnownTimeFeatureUnavailable else {
+            return DeviceTimeActionAvailability(
+                canReadDeviceTime: false,
+                canSyncDeviceTime: false,
+                reason: "Time setup feature unavailable on selected device"
+            )
+        }
+        guard let selectedPolarIdentifier,
+              api.isFeatureReady(selectedPolarIdentifier, feature: .feature_polar_device_time_setup) else {
+            return DeviceTimeActionAvailability(
+                canReadDeviceTime: false,
+                canSyncDeviceTime: false,
+                reason: "Time setup feature not ready"
+            )
+        }
+        return DeviceTimeActionAvailability(canReadDeviceTime: true, canSyncDeviceTime: true, reason: nil)
     }
 
     private var isLikelyH10: Bool {
@@ -338,6 +403,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         isSelectedDeviceOnlineStreamingFeatureReady = false
         isSelectedDeviceOnlineStreamingUnavailable = false
         didReceiveFeaturesReadinessSnapshot = false
+        lastKnownTimeFeatureUnavailable = false
         connectStartedAt = nil
         resetBatteryState()
         log("Device selected: \(info.deviceId)")
@@ -358,6 +424,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         isSelectedDeviceConnected = false
         connectStartedAt = Date()
         didReceiveFeaturesReadinessSnapshot = false
+        lastKnownTimeFeatureUnavailable = false
         didRunPostConnectSetup = false
         capabilityProbeInFlight = false
         capabilityProbeCompleted = false
@@ -420,6 +487,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         capabilityProbeAttempt = 0
         connectStartedAt = nil
         didReceiveFeaturesReadinessSnapshot = false
+        lastKnownTimeFeatureUnavailable = false
         connectContinuation = nil
         connectionState = selectedDevice == nil ? .disconnected : .deviceSelected
     }
@@ -624,43 +692,286 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
     }
 
     private func attemptTimeSync() {
-        guard let selectedPolarIdentifier else { return }
-
-        guard api.isFeatureReady(selectedPolarIdentifier, feature: .feature_polar_device_time_setup) else {
-            log("Time sync skipped: feature not ready")
-            return
+        Task { [weak self] in
+            _ = await self?.syncDeviceTimeToPhone(mode: .live)
         }
-
-        log("Time sync attempt started")
-
-        timeSetupDisposable?.dispose()
-        timeSetupDisposable = api.setLocalTime(selectedPolarIdentifier, time: Date(), zone: TimeZone.current)
-            .observe(on: MainScheduler.asyncInstance)
-            .subscribe(
-                onCompleted: { [weak self] in
-                    self?.log("Time sync setLocalTime succeeded")
-                    self?.verifyDeviceTimeReadback()
-                },
-                onError: { [weak self] error in
-                    self?.log("Time sync failed: \(error.localizedDescription)")
-                }
-            )
     }
 
-    private func verifyDeviceTimeReadback() {
-        guard let selectedPolarIdentifier else { return }
+    func readDeviceTime(mode: CollectionMode) async -> DeviceTimeActionResult {
+        let context = mode.transportValue
+        guard let selectedDevice else {
+            return resultUnavailable(message: "Read-back unavailable", detail: "No selected device", context: context, eventType: .deviceTimeRead)
+        }
+        guard let selectedPolarIdentifier else {
+            return resultUnavailable(message: "Read-back unavailable", detail: "No selected Polar identifier", context: context, eventType: .deviceTimeRead, device: selectedDevice)
+        }
+        guard connectionState == .connected else {
+            return resultUnavailable(message: "Read-back unavailable", detail: "Device disconnected", context: context, eventType: .deviceTimeRead, device: selectedDevice)
+        }
+        guard api.isFeatureReady(selectedPolarIdentifier, feature: .feature_polar_device_time_setup) else {
+            return resultUnavailable(message: "Read-back unavailable", detail: "feature_polar_device_time_setup is not ready", context: context, eventType: .deviceTimeRead, device: selectedDevice)
+        }
 
-        timeReadbackDisposable?.dispose()
-        timeReadbackDisposable = api.getLocalTimeWithZone(selectedPolarIdentifier)
-            .observe(on: MainScheduler.asyncInstance)
-            .subscribe(
-                onSuccess: { [weak self] deviceDate, deviceZone in
-                    self?.log("Time sync readback succeeded: date=\(deviceDate) zone=\(deviceZone.identifier)")
-                },
-                onFailure: { [weak self] error in
-                    self?.log("Time sync readback unavailable: \(error.localizedDescription)")
-                }
+        do {
+            let (deviceDate, deviceZone) = try await getLocalTimeWithZone(identifier: selectedPolarIdentifier)
+            let event = makeOperationalEvent(
+                eventType: .deviceTimeRead,
+                device: selectedDevice,
+                context: context,
+                requestedLocalTime: nil,
+                requestedTimeZone: nil,
+                readbackDate: deviceDate,
+                readbackZone: deviceZone,
+                delta: nil,
+                result: .success,
+                detail: "getLocalTimeWithZone success"
             )
+            return DeviceTimeActionResult(
+                state: .success,
+                message: "Device time synced",
+                debugDetails: "Stream timestamp verification not performed",
+                readbackDeviceTime: deviceDate,
+                readbackTimeZoneID: deviceZone.identifier,
+                verificationDeltaSeconds: nil,
+                operationalEvents: [event]
+            )
+        } catch {
+            return resultUnavailable(
+                message: "Read-back unavailable",
+                detail: "getLocalTimeWithZone failed: \(error.localizedDescription)",
+                context: context,
+                eventType: .deviceTimeRead,
+                device: selectedDevice
+            )
+        }
+    }
+
+    func syncDeviceTimeToPhone(mode: CollectionMode) async -> DeviceTimeActionResult {
+        let context = mode.transportValue
+        guard let selectedDevice else {
+            return resultUnavailable(message: "Read-back unavailable", detail: "No selected device", context: context, eventType: .deviceTimeSet)
+        }
+        guard let selectedPolarIdentifier else {
+            return resultUnavailable(message: "Read-back unavailable", detail: "No selected Polar identifier", context: context, eventType: .deviceTimeSet, device: selectedDevice)
+        }
+        guard connectionState == .connected else {
+            return resultUnavailable(message: "Read-back unavailable", detail: "Device disconnected", context: context, eventType: .deviceTimeSet, device: selectedDevice)
+        }
+        guard api.isFeatureReady(selectedPolarIdentifier, feature: .feature_polar_device_time_setup) else {
+            return resultUnavailable(message: "Read-back unavailable", detail: "feature_polar_device_time_setup is not ready", context: context, eventType: .deviceTimeSet, device: selectedDevice)
+        }
+
+        let requestedDate = Date()
+        let requestedZone = TimeZone.current
+        var events: [DeviceTimeOperationalEvent] = []
+
+        do {
+            try await setLocalTime(identifier: selectedPolarIdentifier, date: requestedDate, zone: requestedZone)
+            events.append(
+                makeOperationalEvent(
+                    eventType: .deviceTimeSet,
+                    device: selectedDevice,
+                    context: context,
+                    requestedLocalTime: requestedDate,
+                    requestedTimeZone: requestedZone,
+                    readbackDate: nil,
+                    readbackZone: nil,
+                    delta: nil,
+                    result: .success,
+                    detail: "setLocalTime success"
+                )
+            )
+        } catch {
+            events.append(
+                makeOperationalEvent(
+                    eventType: .deviceTimeSet,
+                    device: selectedDevice,
+                    context: context,
+                    requestedLocalTime: requestedDate,
+                    requestedTimeZone: requestedZone,
+                    readbackDate: nil,
+                    readbackZone: nil,
+                    delta: nil,
+                    result: .failed,
+                    detail: "setLocalTime failed: \(error.localizedDescription)"
+                )
+            )
+            return DeviceTimeActionResult(
+                state: .failed,
+                message: "Time sync failed",
+                debugDetails: "setLocalTime failed: \(error.localizedDescription)",
+                readbackDeviceTime: nil,
+                readbackTimeZoneID: nil,
+                verificationDeltaSeconds: nil,
+                operationalEvents: events
+            )
+        }
+
+        do {
+            let (readbackDate, readbackZone) = try await getLocalTimeWithZone(identifier: selectedPolarIdentifier)
+            let delta = abs(readbackDate.timeIntervalSince(Date()))
+            events.append(
+                makeOperationalEvent(
+                    eventType: .deviceTimeRead,
+                    device: selectedDevice,
+                    context: context,
+                    requestedLocalTime: requestedDate,
+                    requestedTimeZone: requestedZone,
+                    readbackDate: readbackDate,
+                    readbackZone: readbackZone,
+                    delta: nil,
+                    result: .success,
+                    detail: "getLocalTimeWithZone after set success"
+                )
+            )
+            events.append(
+                makeOperationalEvent(
+                    eventType: .deviceTimeVerification,
+                    device: selectedDevice,
+                    context: context,
+                    requestedLocalTime: requestedDate,
+                    requestedTimeZone: requestedZone,
+                    readbackDate: readbackDate,
+                    readbackZone: readbackZone,
+                    delta: delta,
+                    result: .success,
+                    detail: "Read-back verification complete"
+                )
+            )
+            return DeviceTimeActionResult(
+                state: .success,
+                message: "Device time synced",
+                debugDetails: "Stream timestamp verification not performed",
+                readbackDeviceTime: readbackDate,
+                readbackTimeZoneID: readbackZone.identifier,
+                verificationDeltaSeconds: delta,
+                operationalEvents: events
+            )
+        } catch {
+            events.append(
+                makeOperationalEvent(
+                    eventType: .deviceTimeVerification,
+                    device: selectedDevice,
+                    context: context,
+                    requestedLocalTime: requestedDate,
+                    requestedTimeZone: requestedZone,
+                    readbackDate: nil,
+                    readbackZone: nil,
+                    delta: nil,
+                    result: .unavailable,
+                    detail: "Read-back unavailable: \(error.localizedDescription)"
+                )
+            )
+            return DeviceTimeActionResult(
+                state: .unavailable,
+                message: "Read-back unavailable",
+                debugDetails: "setLocalTime succeeded, read-back unavailable: \(error.localizedDescription)",
+                readbackDeviceTime: nil,
+                readbackTimeZoneID: nil,
+                verificationDeltaSeconds: nil,
+                operationalEvents: events
+            )
+        }
+    }
+
+    func prepareDeviceTimeForOfflineSync() async -> DeviceTimeActionResult {
+        await syncDeviceTimeToPhone(mode: .offlineRecording)
+    }
+
+    private func setLocalTime(identifier: String, date: Date, zone: TimeZone) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            timeSetupDisposable?.dispose()
+            timeSetupDisposable = api.setLocalTime(identifier, time: date, zone: zone)
+                .observe(on: MainScheduler.asyncInstance)
+                .subscribe(
+                    onCompleted: {
+                        continuation.resume()
+                    },
+                    onError: { error in
+                        continuation.resume(throwing: error)
+                    }
+                )
+        }
+    }
+
+    private func getLocalTimeWithZone(identifier: String) async throws -> (Date, TimeZone) {
+        try await withCheckedThrowingContinuation { continuation in
+            timeReadbackDisposable?.dispose()
+            timeReadbackDisposable = api.getLocalTimeWithZone(identifier)
+                .observe(on: MainScheduler.asyncInstance)
+                .subscribe(
+                    onSuccess: { date, zone in
+                        continuation.resume(returning: (date, zone))
+                    },
+                    onFailure: { error in
+                        continuation.resume(throwing: error)
+                    }
+                )
+        }
+    }
+
+    private func makeOperationalEvent(
+        eventType: DeviceTimeOperationalEventType,
+        device: CollectorDevice,
+        context: String,
+        requestedLocalTime: Date?,
+        requestedTimeZone: TimeZone?,
+        readbackDate: Date?,
+        readbackZone: TimeZone?,
+        delta: TimeInterval?,
+        result: DeviceTimeOperationResult,
+        detail: String
+    ) -> DeviceTimeOperationalEvent {
+        DeviceTimeOperationalEvent(
+            eventType: eventType,
+            vendor: device.vendor,
+            model: device.model,
+            deviceID: device.id,
+            collectionModeContext: context,
+            requestedLocalTime: requestedLocalTime,
+            requestedTimeZoneID: requestedTimeZone?.identifier,
+            deviceReadbackLocalTime: readbackDate,
+            deviceReadbackTimeZoneID: readbackZone?.identifier,
+            deltaSeconds: delta,
+            result: result,
+            collectorTimestamp: Date(),
+            detail: detail
+        )
+    }
+
+    private func resultUnavailable(
+        message: String,
+        detail: String,
+        context: String,
+        eventType: DeviceTimeOperationalEventType,
+        device: CollectorDevice? = nil
+    ) -> DeviceTimeActionResult {
+        var events: [DeviceTimeOperationalEvent] = []
+        if let device {
+            events.append(
+                makeOperationalEvent(
+                    eventType: eventType,
+                    device: device,
+                    context: context,
+                    requestedLocalTime: nil,
+                    requestedTimeZone: nil,
+                    readbackDate: nil,
+                    readbackZone: nil,
+                    delta: nil,
+                    result: .unavailable,
+                    detail: detail
+                )
+            )
+        }
+        return DeviceTimeActionResult(
+            state: .unavailable,
+            message: message,
+            debugDetails: detail,
+            readbackDeviceTime: nil,
+            readbackTimeZoneID: nil,
+            verificationDeltaSeconds: nil,
+            operationalEvents: events
+        )
     }
 
     private func resolveModel(from deviceName: String) -> String {
@@ -793,6 +1104,7 @@ extension PolarDeviceAdapter: PolarBleApiObserver {
         capabilityProbeAttempt = 0
         connectStartedAt = nil
         didReceiveFeaturesReadinessSnapshot = false
+        lastKnownTimeFeatureUnavailable = false
         connectionState = .deviceSelected
 
         batteryPollingTask?.cancel()
@@ -852,6 +1164,12 @@ extension PolarDeviceAdapter: PolarBleApiDeviceFeaturesObserver {
         }
         if unavailable.contains(.feature_polar_online_streaming) {
             isSelectedDeviceOnlineStreamingUnavailable = true
+        }
+        if unavailable.contains(.feature_polar_device_time_setup) {
+            lastKnownTimeFeatureUnavailable = true
+        }
+        if ready.contains(.feature_polar_device_time_setup) {
+            lastKnownTimeFeatureUnavailable = false
         }
         tryResumeConnectIfReady(forceAfterReadinessTimeout: false)
 

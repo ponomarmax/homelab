@@ -42,6 +42,7 @@
 		A10000010000000000000024 /* PolarVeritySenseOnlineDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000024 /* PolarVeritySenseOnlineDefaults.swift */; };
 		A10000010000000000000025 /* PolarVeritySenseOfflineCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000025 /* PolarVeritySenseOfflineCatalog.swift */; };
 		A10000010000000000000026 /* PolarStreamProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000026 /* PolarStreamProfiles.swift */; };
+		A10000010000000000000027 /* DeviceTimeSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000027 /* DeviceTimeSync.swift */; };
 		A73B1BAE82178FC109A9A2CD /* libPods-CollectorApp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 194AC702E05B377D67F9B776 /* libPods-CollectorApp.a */; };
 /* End PBXBuildFile section */
 
@@ -99,6 +100,7 @@
 		B10000010000000000000024 /* PolarVeritySenseOnlineDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Polar/PolarVeritySense/Online/PolarVeritySenseOnlineDefaults.swift; sourceTree = "<group>"; };
 		B10000010000000000000025 /* PolarVeritySenseOfflineCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Polar/PolarVeritySense/Offline/PolarVeritySenseOfflineCatalog.swift; sourceTree = "<group>"; };
 		B10000010000000000000026 /* PolarStreamProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Polar/Shared/PolarStreamProfiles.swift; sourceTree = "<group>"; };
+		B10000010000000000000027 /* DeviceTimeSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceTimeSync.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -194,6 +196,7 @@
 				B10000010000000000000017 /* UploadChunk.swift */,
 				B1000001000000000000000B /* CollectorDeviceAdapter.swift */,
 				B1000001000000000000000C /* CollectorStreamProviding.swift */,
+				B10000010000000000000027 /* DeviceTimeSync.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -429,6 +432,7 @@
 				A10000010000000000000014 /* UploadChunk.swift in Sources */,
 				A1000001000000000000000B /* CollectorDeviceAdapter.swift in Sources */,
 				A1000001000000000000000C /* CollectorStreamProviding.swift in Sources */,
+				A10000010000000000000027 /* DeviceTimeSync.swift in Sources */,
 				A1000001000000000000000D /* CollectorTransporting.swift in Sources */,
 				A10000010000000000000015 /* CollectorChunkBuilder.swift in Sources */,
 				A1000001000000000000000E /* CollectorHTTPTransport.swift in Sources */,

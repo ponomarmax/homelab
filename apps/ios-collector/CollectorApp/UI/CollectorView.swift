@@ -186,10 +186,42 @@ struct CollectorView: View {
             statusRow(title: "State", value: collectorCore.status.displayName)
             statusRow(title: "Battery", value: collectorCore.selectedDeviceBatteryDisplayText())
             statusRow(title: "Upload", value: collectorCore.uploadStatus.displayName)
+            statusRow(title: "Last sync status", value: collectorCore.deviceTimeStatusMessage)
+            statusRow(title: "Last time read", value: collectorCore.lastDeviceTimeReadResult)
+            statusRow(title: "Last sync result", value: collectorCore.lastDeviceTimeSyncResult)
+            statusRow(
+                title: "Verification delta",
+                value: collectorCore.lastDeviceTimeDeltaSeconds.map { String(format: "%.2fs", $0) } ?? "n/a"
+            )
+            Text(collectorCore.deviceTimeDebugDetails)
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-            Button("Sync Time (placeholder)") {}
+            HStack(spacing: 8) {
+                Button("Get device time") {
+                    Task { await collectorCore.readDeviceTime() }
+                }
                 .buttonStyle(.bordered)
-                .disabled(!collectorCore.polarCapabilities.supportsManualTimeSync)
+                .disabled(!collectorCore.deviceTimeAvailability.canReadDeviceTime)
+
+                Button("Sync time to phone") {
+                    Task { await collectorCore.syncDeviceTimeToPhoneNow() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!collectorCore.deviceTimeAvailability.canSyncDeviceTime)
+            }
+
+            Button("Run pre-offline time check") {
+                Task { _ = await collectorCore.runPreOfflineSyncTimeCheck() }
+            }
+            .buttonStyle(.bordered)
+            .disabled(!collectorCore.deviceTimeAvailability.canSyncDeviceTime)
+
+            if let reason = collectorCore.deviceTimeAvailability.reason {
+                Text(reason)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

@@ -40,6 +40,13 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var activityMessage: String = "Idle"
     @Published private(set) var eventLogs: [String] = []
     @Published private(set) var selectedOnlineStreams: Set<CollectorStream> = []
+    @Published private(set) var deviceTimeSyncState: DeviceTimeSyncState = .idle
+    @Published private(set) var deviceTimeStatusMessage: String = "Not synced"
+    @Published private(set) var deviceTimeDebugDetails: String = "Stream timestamp verification not performed"
+    @Published private(set) var lastDeviceTimeReadResult: String = "Not synced"
+    @Published private(set) var lastDeviceTimeSyncResult: String = "Not synced"
+    @Published private(set) var lastDeviceTimeDeltaSeconds: TimeInterval?
+    @Published private(set) var operationalTimeEvents: [DeviceTimeOperationalEvent] = []
 
     let defaultCollectionMode: CollectionMode = .live
 
@@ -108,8 +115,13 @@ final class CollectorCore: ObservableObject {
     var polarCapabilities: PolarDeviceProfile {
         PolarDeviceProfile.from(
             device: selectedDevice,
-            availableOnlineStreams: adapter.availableStreams
+            availableOnlineStreams: adapter.availableStreams,
+            supportsManualTimeSync: adapter.deviceTimeAvailability.canSyncDeviceTime
         )
+    }
+
+    var deviceTimeAvailability: DeviceTimeActionAvailability {
+        adapter.deviceTimeAvailability
     }
 
     func selectedDeviceBatteryDisplayText() -> String {
@@ -141,6 +153,28 @@ final class CollectorCore: ObservableObject {
 
     func appDidEnterBackground() {
         log("App moved to background", category: "lifecycle")
+    }
+
+    func readDeviceTime() async {
+        deviceTimeSyncState = .running
+        deviceTimeStatusMessage = "Syncing device time..."
+        let result = await adapter.readDeviceTime(mode: .live)
+        applyDeviceTimeActionResult(result, isSyncAction: false)
+    }
+
+    func syncDeviceTimeToPhoneNow() async {
+        deviceTimeSyncState = .running
+        deviceTimeStatusMessage = "Syncing device time..."
+        let result = await adapter.syncDeviceTimeToPhone(mode: .live)
+        applyDeviceTimeActionResult(result, isSyncAction: true)
+    }
+
+    func runPreOfflineSyncTimeCheck() async -> DeviceTimeActionResult {
+        deviceTimeSyncState = .running
+        deviceTimeStatusMessage = "Syncing device time..."
+        let result = await adapter.prepareDeviceTimeForOfflineSync()
+        applyDeviceTimeActionResult(result, isSyncAction: true)
+        return result
     }
 
     func selectDevice() {
@@ -811,6 +845,28 @@ final class CollectorCore: ObservableObject {
     private func clearFailureState() {
         lastErrorMessage = nil
         shouldSuggestLogExport = false
+    }
+
+    private func applyDeviceTimeActionResult(_ result: DeviceTimeActionResult, isSyncAction: Bool) {
+        deviceTimeSyncState = result.state
+        deviceTimeStatusMessage = result.message
+        deviceTimeDebugDetails = result.debugDetails ?? "Stream timestamp verification not performed"
+        lastDeviceTimeDeltaSeconds = result.verificationDeltaSeconds
+        operationalTimeEvents.append(contentsOf: result.operationalEvents)
+        if operationalTimeEvents.count > 100 {
+            operationalTimeEvents.removeFirst(operationalTimeEvents.count - 100)
+        }
+
+        if let readback = result.readbackDeviceTime {
+            lastDeviceTimeReadResult = Self.iso8601(from: readback)
+        } else if result.state == .unavailable {
+            lastDeviceTimeReadResult = "Read-back unavailable"
+        }
+
+        if isSyncAction {
+            lastDeviceTimeSyncResult = result.message
+        }
+        log("Device time action result: state=\(result.state.rawValue) message=\(result.message)", category: "device-time")
     }
 
     private func reportFailure(
