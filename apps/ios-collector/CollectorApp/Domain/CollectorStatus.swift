@@ -3,6 +3,7 @@ import Foundation
 enum CollectorStatus: String, Equatable, Sendable {
     case disconnected
     case deviceSelected
+    case connected
     case collecting
     case stopped
 
@@ -12,6 +13,8 @@ enum CollectorStatus: String, Equatable, Sendable {
             return "Disconnected"
         case .deviceSelected:
             return "Device Selected"
+        case .connected:
+            return "Connected"
         case .collecting:
             return "Collecting"
         case .stopped:

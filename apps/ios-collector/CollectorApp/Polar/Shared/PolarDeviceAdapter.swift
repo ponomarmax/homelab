@@ -60,8 +60,53 @@ final class PolarDeviceAdapter: CollectorDeviceAdapter {
         connectionState = .disconnected
     }
 
+    func connectability(for device: CollectorDevice) -> DeviceConnectability {
+        DeviceConnectability(
+            isConnectable: false,
+            reason: "Polar BLE SDK is unavailable in this build environment"
+        )
+    }
+
     func streamProviders() -> [HeartRateStreamProviding] {
         []
+    }
+
+    func offlineCapabilities() async -> [OfflineStreamCapability] {
+        PolarOfflineStream.allCases.map {
+            OfflineStreamCapability(
+                stream: $0,
+                isSupported: false,
+                reason: "Offline recording unavailable in this build environment"
+            )
+        }
+    }
+
+    func startOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {
+        streams.map {
+            OfflineStreamOperationResult(
+                stream: $0,
+                success: false,
+                message: "Offline recording unavailable in this build environment"
+            )
+        }
+    }
+
+    func stopOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {
+        streams.map {
+            OfflineStreamOperationResult(
+                stream: $0,
+                success: false,
+                message: "Offline recording unavailable in this build environment"
+            )
+        }
+    }
+
+    func listOfflineRecordings() async throws -> [OfflineRecordingEntry] {
+        []
+    }
+
+    func prepareOfflineUploadBatches() async -> OfflineUploadPreparationResult {
+        OfflineUploadPreparationResult(batches: [], messagesByStream: [:])
     }
 
     func heartRateStreamProvider() -> HeartRateStreamProviding? {
@@ -267,6 +312,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             features: [
                 .feature_hr,
                 .feature_polar_online_streaming,
+                .feature_polar_offline_recording,
                 .feature_battery_info,
                 .feature_device_info,
                 .feature_polar_device_time_setup
@@ -492,6 +538,25 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         connectionState = selectedDevice == nil ? .disconnected : .deviceSelected
     }
 
+    func connectability(for device: CollectorDevice) -> DeviceConnectability {
+        guard isBluetoothOn else {
+            return DeviceConnectability(isConnectable: false, reason: "Bluetooth is off")
+        }
+        guard let discovered = discoveredDeviceMap[device.id] else {
+            return DeviceConnectability(
+                isConnectable: false,
+                reason: "Device is no longer in current scan results"
+            )
+        }
+        guard discovered.connectable else {
+            return DeviceConnectability(
+                isConnectable: false,
+                reason: "Device advertisement is not connectable yet"
+            )
+        }
+        return .connectable
+    }
+
     func streamProviders() -> [HeartRateStreamProviding] {
         var providers: [HeartRateStreamProviding] = [hrProvider]
         if shouldEnableEcgStream {
@@ -506,6 +571,238 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
 
     func cachedDeviceStatusSnapshot(for deviceID: String) -> DeviceStatusSnapshot? {
         cachedStatusByDeviceID[deviceID]
+    }
+
+    func offlineCapabilities() async -> [OfflineStreamCapability] {
+        guard let selectedPolarIdentifier else {
+            return PolarOfflineStream.allCases.map {
+                OfflineStreamCapability(stream: $0, isSupported: false, reason: "Select a device first")
+            }
+        }
+        guard connectionState == .connected else {
+            return PolarOfflineStream.allCases.map {
+                OfflineStreamCapability(stream: $0, isSupported: false, reason: "Device disconnected")
+            }
+        }
+        guard api.isFeatureReady(selectedPolarIdentifier, feature: .feature_polar_offline_recording) else {
+            return PolarOfflineStream.allCases.map {
+                OfflineStreamCapability(stream: $0, isSupported: false, reason: "Offline recording feature not ready")
+            }
+        }
+
+        do {
+            let available = try await withCheckedThrowingContinuation { continuation in
+                streamCapabilitiesDisposable?.dispose()
+                streamCapabilitiesDisposable = api.getAvailableOfflineRecordingDataTypes(selectedPolarIdentifier)
+                    .observe(on: MainScheduler.asyncInstance)
+                    .subscribe(
+                        onSuccess: { types in continuation.resume(returning: types) },
+                        onFailure: { error in continuation.resume(throwing: error) }
+                    )
+            }
+            return PolarOfflineStream.allCases.map { stream in
+                let dataType = self.dataType(for: stream)
+                let supported = available.contains(dataType)
+                return OfflineStreamCapability(
+                    stream: stream,
+                    isSupported: supported,
+                    reason: supported ? nil : "Stream unsupported by selected device"
+                )
+            }
+        } catch {
+            return PolarOfflineStream.allCases.map {
+                OfflineStreamCapability(stream: $0, isSupported: false, reason: "Offline capability query failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func startOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {
+        guard let selectedPolarIdentifier else {
+            return streams.map { OfflineStreamOperationResult(stream: $0, success: false, message: "No selected device") }
+        }
+        var results: [OfflineStreamOperationResult] = []
+        for stream in streams {
+            do {
+                try await retryOfflineGattOperation {
+                    try await withCheckedThrowingContinuation { continuation in
+                        timeSetupDisposable?.dispose()
+                        timeSetupDisposable = api.startOfflineRecording(
+                            selectedPolarIdentifier,
+                            feature: dataType(for: stream),
+                            settings: nil,
+                            secret: nil
+                        )
+                        .observe(on: MainScheduler.asyncInstance)
+                        .subscribe(
+                            onCompleted: { continuation.resume() },
+                            onError: { error in continuation.resume(throwing: error) }
+                        )
+                    }
+                }
+                results.append(OfflineStreamOperationResult(stream: stream, success: true, message: "Started"))
+            } catch {
+                results.append(
+                    OfflineStreamOperationResult(
+                        stream: stream,
+                        success: false,
+                        message: "Failed: \(error.localizedDescription)"
+                    )
+                )
+            }
+            await sleepMilliseconds(250)
+        }
+        return results
+    }
+
+    func stopOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {
+        guard let selectedPolarIdentifier else {
+            return streams.map { OfflineStreamOperationResult(stream: $0, success: false, message: "No selected device") }
+        }
+        var results: [OfflineStreamOperationResult] = []
+        for stream in streams {
+            do {
+                try await retryOfflineGattOperation {
+                    try await withCheckedThrowingContinuation { continuation in
+                        timeReadbackDisposable?.dispose()
+                        timeReadbackDisposable = api.stopOfflineRecording(
+                            selectedPolarIdentifier,
+                            feature: dataType(for: stream)
+                        )
+                        .observe(on: MainScheduler.asyncInstance)
+                        .subscribe(
+                            onCompleted: { continuation.resume() },
+                            onError: { error in continuation.resume(throwing: error) }
+                        )
+                    }
+                }
+                results.append(OfflineStreamOperationResult(stream: stream, success: true, message: "Stopped"))
+            } catch {
+                results.append(
+                    OfflineStreamOperationResult(
+                        stream: stream,
+                        success: false,
+                        message: "Failed: \(error.localizedDescription)"
+                    )
+                )
+            }
+            await sleepMilliseconds(250)
+        }
+        return results
+    }
+
+    func listOfflineRecordings() async throws -> [OfflineRecordingEntry] {
+        guard let selectedPolarIdentifier else {
+            return []
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            var entries: [OfflineRecordingEntry] = []
+            streamCapabilitiesDisposable?.dispose()
+            streamCapabilitiesDisposable = api.listOfflineRecordings(selectedPolarIdentifier)
+                .observe(on: MainScheduler.asyncInstance)
+                .subscribe(
+                    onNext: { entry in
+                        entries.append(
+                            OfflineRecordingEntry(
+                                id: entry.path,
+                                path: entry.path,
+                                stream: Self.offlineStream(from: entry.type),
+                                sizeBytes: entry.size,
+                                startedAt: entry.date,
+                                status: "available"
+                            )
+                        )
+                    },
+                    onError: { error in continuation.resume(throwing: error) },
+                    onCompleted: { continuation.resume(returning: entries) }
+                )
+        }
+    }
+
+    func prepareOfflineUploadBatches() async -> OfflineUploadPreparationResult {
+        guard let selectedPolarIdentifier else {
+            return OfflineUploadPreparationResult(
+                batches: [],
+                messagesByStream: [.acc: "Failed: No selected device"]
+            )
+        }
+
+        let entries: [PolarOfflineRecordingEntry]
+        do {
+            entries = try await withCheckedThrowingContinuation { continuation in
+                var listedEntries: [PolarOfflineRecordingEntry] = []
+                streamCapabilitiesDisposable?.dispose()
+                streamCapabilitiesDisposable = api.listOfflineRecordings(selectedPolarIdentifier)
+                    .observe(on: MainScheduler.asyncInstance)
+                    .subscribe(
+                        onNext: { entry in listedEntries.append(entry) },
+                        onError: { error in continuation.resume(throwing: error) },
+                        onCompleted: { continuation.resume(returning: listedEntries) }
+                    )
+            }
+        } catch {
+            return OfflineUploadPreparationResult(
+                batches: [],
+                messagesByStream: [.acc: "Failed to list offline recordings: \(error.localizedDescription)"]
+            )
+        }
+
+        var batches: [OfflineUploadBatch] = []
+        var messagesByStream: [PolarOfflineStream: String] = [:]
+
+        for entry in entries {
+            switch entry.type {
+            case .acc:
+                do {
+                    let offlineData = try await fetchOfflineRecord(
+                        identifier: selectedPolarIdentifier,
+                        entry: entry
+                    )
+                    guard case .accOfflineRecordingData(let accData, let startTime, let settings) = offlineData else {
+                        messagesByStream[.acc] = "Skipped: Unsupported ACC payload format"
+                        continue
+                    }
+                    let samples = Self.makeAccSamples(from: accData, startTime: startTime, settings: settings)
+                    if !samples.isEmpty {
+                        batches.append(
+                            OfflineUploadBatch(stream: .accelerometer, sourcePath: entry.path, samples: samples)
+                        )
+                        messagesByStream[.acc] = "Prepared \(samples.count) ACC sample(s)"
+                    } else {
+                        messagesByStream[.acc] = "Skipped: ACC recording contains no samples"
+                    }
+                } catch {
+                    messagesByStream[.acc] = "Failed: \(error.localizedDescription)"
+                }
+            case .hr:
+                do {
+                    let offlineData = try await fetchOfflineRecord(
+                        identifier: selectedPolarIdentifier,
+                        entry: entry
+                    )
+                    guard case .hrOfflineRecordingData(let hrData, let startTime) = offlineData else {
+                        messagesByStream[.hr] = "Skipped: Unsupported HR payload format"
+                        continue
+                    }
+                    let samples = Self.makeHrSamples(from: hrData, startTime: startTime)
+                    if !samples.isEmpty {
+                        batches.append(
+                            OfflineUploadBatch(stream: .heartRate, sourcePath: entry.path, samples: samples)
+                        )
+                        messagesByStream[.hr] = "Prepared \(samples.count) HR sample(s)"
+                    } else {
+                        messagesByStream[.hr] = "Skipped: HR recording contains no samples"
+                    }
+                } catch {
+                    messagesByStream[.hr] = "Failed: \(error.localizedDescription)"
+                }
+            default:
+                if let stream = Self.offlineStream(from: entry.type) {
+                    messagesByStream[stream] = "Skipped: Stream is not supported by current upload contract"
+                }
+            }
+        }
+
+        return OfflineUploadPreparationResult(batches: batches, messagesByStream: messagesByStream)
     }
 
     private func tryResumeConnectIfReady(forceAfterReadinessTimeout: Bool = false) {
@@ -540,6 +837,52 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         self.connectContinuation = nil
         connectStartedAt = nil
         log("Connect succeeded")
+    }
+
+    private func retryOfflineGattOperation(
+        maxAttempts: Int = 3,
+        operation: () async throws -> Void
+    ) async throws {
+        var attempt = 1
+        while true {
+            do {
+                try await operation()
+                return
+            } catch {
+                guard attempt < maxAttempts, Self.isRetryableOfflineGattError(error) else {
+                    throw error
+                }
+                attempt += 1
+                await sleepMilliseconds(350)
+            }
+        }
+    }
+
+    private func sleepMilliseconds(_ milliseconds: UInt64) async {
+        try? await Task.sleep(nanoseconds: milliseconds * 1_000_000)
+    }
+
+    private static func isRetryableOfflineGattError(_ error: Error) -> Bool {
+        if let polarError = error as? PolarErrors {
+            switch polarError {
+            case .unableToStartStreaming, .serviceNotFound, .notificationNotEnabled, .deviceNotConnected:
+                return true
+            default:
+                break
+            }
+        }
+        if let bleError = error as? BleGattException {
+            switch bleError {
+            case .gattDisconnected, .gattServiceNotFound, .gattCharacteristicNotifyNotEnabled:
+                return true
+            case let .gattAttributeError(errorCode, _):
+                return errorCode == 1 || errorCode == 8 || errorCode == 12
+            default:
+                break
+            }
+        }
+        let nsError = error as NSError
+        return nsError.code == 1 || nsError.code == 8 || nsError.code == 12
     }
 
     private func beginCapabilityProbe() {
@@ -984,6 +1327,118 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             .replacingOccurrences(of: "Polar", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Unknown" : trimmed
+    }
+
+    private func dataType(for stream: PolarOfflineStream) -> PolarDeviceDataType {
+        switch stream {
+        case .hr: return .hr
+        case .ppi: return .ppi
+        case .acc: return .acc
+        case .ppg: return .ppg
+        case .mag: return .magnetometer
+        case .gyr: return .gyro
+        }
+    }
+
+    private static func offlineStream(from type: PolarDeviceDataType) -> PolarOfflineStream? {
+        switch type {
+        case .hr: return .hr
+        case .ppi: return .ppi
+        case .acc: return .acc
+        case .ppg: return .ppg
+        case .magnetometer: return .mag
+        case .gyro: return .gyr
+        default: return nil
+        }
+    }
+
+    private func fetchOfflineRecord(
+        identifier: String,
+        entry: PolarOfflineRecordingEntry
+    ) async throws -> PolarOfflineRecordingData {
+        try await withCheckedThrowingContinuation { continuation in
+            timeReadbackDisposable?.dispose()
+            timeReadbackDisposable = api.getOfflineRecord(
+                identifier,
+                entry: entry,
+                secret: nil
+            )
+            .observe(on: MainScheduler.asyncInstance)
+            .subscribe(
+                onSuccess: { data in continuation.resume(returning: data) },
+                onFailure: { error in continuation.resume(throwing: error) }
+            )
+        }
+    }
+
+    private static func makeAccSamples(
+        from data: PolarAccData,
+        startTime: Date,
+        settings: PolarSensorSetting
+    ) -> [HeartRateSample] {
+        guard let firstTimestamp = data.first?.timeStamp else { return [] }
+        let sampleRate = settings.settings[.sampleRate]?.first.map { UInt32($0) }
+        let range = settings.settings[.range]?.first.map { UInt32($0) }
+        let streamSettings = mapStreamSettings(from: settings)
+
+        return data.enumerated().map { index, sample in
+            let deltaNs = sample.timeStamp >= firstTimestamp ? (sample.timeStamp - firstTimestamp) : 0
+            let collectorTime = startTime.addingTimeInterval(Double(deltaNs) / 1_000_000_000.0)
+            return HeartRateSample(
+                stream: .accelerometer,
+                collectorReceivedAtUTC: collectorTime,
+                deviceTimestampRaw: collectorTime,
+                sourceTimestampKind: .deviceReported,
+                sampleSequenceNumber: index + 1,
+                payload: .acc(
+                    PolarAccSampleData(
+                        deviceTimeNS: sample.timeStamp,
+                        xMg: sample.x,
+                        yMg: sample.y,
+                        zMg: sample.z,
+                        sampleRateHz: sampleRate,
+                        rangeMg: range
+                    )
+                ),
+                streamSettings: streamSettings
+            )
+        }
+    }
+
+    private static func makeHrSamples(
+        from data: PolarHrData,
+        startTime: Date
+    ) -> [HeartRateSample] {
+        data.enumerated().map { index, sample in
+            let sampleTime = startTime.addingTimeInterval(Double(index))
+            return HeartRateSample(
+                stream: .heartRate,
+                collectorReceivedAtUTC: sampleTime,
+                deviceTimestampRaw: nil,
+                sourceTimestampKind: .deviceReported,
+                sampleSequenceNumber: index + 1,
+                payload: .hr(
+                    PolarHrStreamData(
+                        hr: Int(sample.hr),
+                        ppgQuality: Int(sample.ppgQuality),
+                        correctedHr: Int(sample.correctedHr),
+                        rrsMs: sample.rrsMs,
+                        rrAvailable: sample.rrAvailable,
+                        contactStatus: sample.contactStatus,
+                        contactStatusSupported: sample.contactStatusSupported
+                    )
+                ),
+                streamSettings: nil
+            )
+        }
+    }
+
+    private static func mapStreamSettings(from settings: PolarSensorSetting) -> [String: StreamSettingValue] {
+        var mapped: [String: StreamSettingValue] = [:]
+        for (key, values) in settings.settings {
+            mapped[String(describing: key)] = .array(values.map { .number(Double($0)) })
+        }
+        return mapped
     }
 
     private func resetBatteryState() {

@@ -14,6 +14,19 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
     var nextReadDeviceTimeResult: DeviceTimeActionResult
     var nextSyncDeviceTimeResult: DeviceTimeActionResult
 
+    var connectabilityByDeviceID: [String: DeviceConnectability] = [:]
+    var offlineCapabilityByStream: [PolarOfflineStream: OfflineStreamCapability] = Dictionary(
+        uniqueKeysWithValues: PolarOfflineStream.allCases.map {
+            ($0, OfflineStreamCapability(stream: $0, isSupported: false, reason: "Offline recording is unavailable"))
+        }
+    )
+    var nextStartOfflineResults: [PolarOfflineStream: OfflineStreamOperationResult] = [:]
+    var nextStopOfflineResults: [PolarOfflineStream: OfflineStreamOperationResult] = [:]
+    var nextOfflineRecordings: [OfflineRecordingEntry] = []
+    var offlineListShouldThrowError: Error?
+    private(set) var lastStartedOfflineStreams: [PolarOfflineStream] = []
+    private(set) var lastStoppedOfflineStreams: [PolarOfflineStream] = []
+
     init(
         deviceIdentity: CollectorDevice = CollectorDevice(
             id: "mock-polar-verity-sense",
@@ -81,6 +94,34 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
 
     func streamProviders() -> [HeartRateStreamProviding] {
         providers.filter { availableStreams.contains($0.streamType) }
+    }
+
+
+    func connectability(for device: CollectorDevice) -> DeviceConnectability {
+        connectabilityByDeviceID[device.id] ?? .connectable
+    }
+
+    func offlineCapabilities() async -> [OfflineStreamCapability] {
+        PolarOfflineStream.allCases.map {
+            offlineCapabilityByStream[$0] ?? OfflineStreamCapability(stream: $0, isSupported: false, reason: "Offline recording is unavailable")
+        }
+    }
+
+    func startOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {
+        lastStartedOfflineStreams = streams
+        return streams.map { nextStartOfflineResults[$0] ?? OfflineStreamOperationResult(stream: $0, success: true, message: "started") }
+    }
+
+    func stopOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {
+        lastStoppedOfflineStreams = streams
+        return streams.map { nextStopOfflineResults[$0] ?? OfflineStreamOperationResult(stream: $0, success: true, message: "stopped") }
+    }
+
+    func listOfflineRecordings() async throws -> [OfflineRecordingEntry] {
+        if let offlineListShouldThrowError {
+            throw offlineListShouldThrowError
+        }
+        return nextOfflineRecordings
     }
 
     func heartRateStreamProvider() -> HeartRateStreamProviding? {

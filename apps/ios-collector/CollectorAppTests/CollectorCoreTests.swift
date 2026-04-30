@@ -205,6 +205,39 @@ final class CollectorCoreTests: XCTestCase {
         func stop() {}
     }
 
+    final class ProgressiveScanAdapter: CollectorDeviceAdapter {
+        let deviceIdentity: CollectorDevice
+        let availableStreams: [CollectorStream] = [.heartRate]
+        let sourceIdentifier: String = "polar"
+        let deviceSelectionActionTitle: String = "Scan"
+        private(set) var connectionState: ConnectionState = .disconnected
+        private let scanDevicesSequence: [[CollectorDevice]]
+
+        init(scanDevicesSequence: [[CollectorDevice]]) {
+            self.scanDevicesSequence = scanDevicesSequence
+            self.deviceIdentity = scanDevicesSequence.last?.last ?? CollectorDevice(
+                id: "progressive-default",
+                name: "Polar Verity Sense",
+                vendor: "Polar",
+                model: "Verity Sense"
+            )
+        }
+
+        func scanDevices() async throws -> [CollectorDevice] { scanDevicesSequence.last ?? [] }
+
+        func scanDevices(onDiscovered: @escaping @Sendable ([CollectorDevice]) -> Void) async throws -> [CollectorDevice] {
+            for step in scanDevicesSequence {
+                onDiscovered(step)
+            }
+            return scanDevicesSequence.last ?? []
+        }
+
+        func selectDevice(_ device: CollectorDevice) throws { connectionState = .deviceSelected }
+        func connect() async throws { connectionState = .connected }
+        func disconnect() { connectionState = .disconnected }
+        func streamProviders() -> [HeartRateStreamProviding] { [] }
+    }
+
     func testCoreStartsAndStopsSession() async {
         let core = CollectorCore(
             adapter: MockDeviceAdapter(
@@ -827,5 +860,153 @@ final class CollectorCoreTests: XCTestCase {
         XCTAssertNotNil(snapshot)
         XCTAssertEqual(snapshot?.status.battery?.levelPercent, 64)
         XCTAssertEqual(snapshot?.status.battery?.chargeState, .charging)
+    }
+
+    func testConnectSelectedDeviceDoesNotAutoStartOnlineStreaming() async {
+        let hrProvider = CountingProvider(streamType: .heartRate)
+        let adapter = MockDeviceAdapter(
+            availableStreams: [.heartRate],
+            hrProvider: hrProvider
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        XCTAssertEqual(core.status, .connected)
+        XCTAssertEqual(hrProvider.startCount, 0)
+        XCTAssertNil(core.activeSession)
+    }
+
+    func testScanProgressivelyUpdatesDiscoveredDevices() async {
+        let first = CollectorDevice(id: "d1", name: "Polar A", vendor: "Polar", model: "Verity Sense")
+        let second = CollectorDevice(id: "d2", name: "Polar B", vendor: "Polar", model: "Verity Sense")
+        let adapter = ProgressiveScanAdapter(scanDevicesSequence: [[first], [first, second]])
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        await core.scanAndSelectDevice()
+
+        XCTAssertEqual(core.discoveredDevices, [first, second])
+        XCTAssertEqual(core.lastErrorMessage, "Select a device from the list below")
+    }
+
+    func testConnectabilityReflectsAdapterStateForDiscoveredDevice() {
+        let device = CollectorDevice(id: "d1", name: "Polar A", vendor: "Polar", model: "Verity Sense")
+        let adapter = MockDeviceAdapter(deviceIdentity: device)
+        adapter.connectabilityByDeviceID[device.id] = DeviceConnectability(isConnectable: false, reason: "Busy")
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        let result = core.connectability(for: device)
+        XCTAssertFalse(result.isConnectable)
+        XCTAssertEqual(result.reason, "Busy")
+    }
+
+    func testStartSelectedOfflineRecordingsCallsAdapterWithSelectedOnly() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = Dictionary(
+            uniqueKeysWithValues: PolarOfflineStream.allCases.map { stream in
+                (stream, OfflineStreamCapability(stream: stream, isSupported: true, reason: nil))
+            }
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+        core.toggleOfflineStream(.ppi)
+        core.toggleOfflineStream(.ppg)
+        core.toggleOfflineStream(.mag)
+        core.toggleOfflineStream(.gyr)
+
+        await core.startOfflineSelected()
+
+        XCTAssertEqual(adapter.lastStartedOfflineStreams.sorted { $0.rawValue < $1.rawValue }, [.acc, .hr])
+    }
+
+    func testStartAllOfflineUsesAllSupportedVeritySenseStreams() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = Dictionary(
+            uniqueKeysWithValues: PolarOfflineStream.allCases.map { stream in
+                (stream, OfflineStreamCapability(stream: stream, isSupported: true, reason: nil))
+            }
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        await core.startOfflineAllSupported()
+
+        XCTAssertEqual(adapter.lastStartedOfflineStreams.sorted { $0.rawValue < $1.rawValue }, [.acc, .gyr, .hr, .mag, .ppg, .ppi])
+    }
+
+    func testStopSelectedAndAllOfflineMappings() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = Dictionary(
+            uniqueKeysWithValues: PolarOfflineStream.allCases.map { stream in
+                (stream, OfflineStreamCapability(stream: stream, isSupported: true, reason: nil))
+            }
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+        core.toggleOfflineStream(.ppi)
+        core.toggleOfflineStream(.ppg)
+        core.toggleOfflineStream(.mag)
+        core.toggleOfflineStream(.gyr)
+
+        await core.stopOfflineSelected()
+        XCTAssertEqual(adapter.lastStoppedOfflineStreams.sorted { $0.rawValue < $1.rawValue }, [.acc, .hr])
+
+        await core.stopOfflineAllSupported()
+        XCTAssertEqual(adapter.lastStoppedOfflineStreams.sorted { $0.rawValue < $1.rawValue }, [.acc, .gyr, .hr, .mag, .ppg, .ppi])
+    }
+
+    func testListOfflineRecordingsStateMapping() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = Dictionary(
+            uniqueKeysWithValues: PolarOfflineStream.allCases.map { stream in
+                (stream, OfflineStreamCapability(stream: stream, isSupported: true, reason: nil))
+            }
+        )
+        adapter.nextOfflineRecordings = [
+            OfflineRecordingEntry(
+                id: "entry-1",
+                path: "/U/0/HR/1.rec",
+                stream: .hr,
+                sizeBytes: 123,
+                startedAt: Date(timeIntervalSince1970: 100),
+                status: "available"
+            )
+        ]
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        await core.listOfflineRecordings()
+
+        XCTAssertEqual(core.offlineRecordings.count, 1)
+        XCTAssertEqual(core.offlineRecordings.first?.stream, .hr)
+        XCTAssertEqual(core.offlineLifecycleState, .ready)
+    }
+
+    func testOfflinePartialFailureIsRepresentedInState() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = Dictionary(
+            uniqueKeysWithValues: PolarOfflineStream.allCases.map { stream in
+                (stream, OfflineStreamCapability(stream: stream, isSupported: true, reason: nil))
+            }
+        )
+        adapter.nextStartOfflineResults[.hr] = OfflineStreamOperationResult(stream: .hr, success: true, message: "Started")
+        adapter.nextStartOfflineResults[.acc] = OfflineStreamOperationResult(stream: .acc, success: false, message: "Busy")
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+        core.toggleOfflineStream(.ppi)
+        core.toggleOfflineStream(.ppg)
+        core.toggleOfflineStream(.mag)
+        core.toggleOfflineStream(.gyr)
+
+        await core.startOfflineSelected()
+
+        XCTAssertEqual(core.offlineLifecycleState, .partialSuccess)
+        XCTAssertEqual(core.offlineStreamRunMessages[.acc], "Busy")
     }
 }

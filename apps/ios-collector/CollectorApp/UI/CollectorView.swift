@@ -11,7 +11,7 @@ struct CollectorView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if collectorCore.status == .collecting || collectorCore.status == .stopped {
+                if collectorCore.status == .connected || collectorCore.status == .collecting || collectorCore.status == .stopped {
                     polarDeviceScreen
                 } else {
                     scanScreen
@@ -39,6 +39,7 @@ struct CollectorView: View {
                     .foregroundStyle(.secondary)
             } else {
                 List(collectorCore.discoveredDevices) { device in
+                    let connectability = collectorCore.connectability(for: device)
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(device.name).fontWeight(.medium)
@@ -48,16 +49,21 @@ struct CollectorView: View {
                             Text(device.id)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                            if let reason = connectability.reason, !connectability.isConnectable {
+                                Text(reason)
+                                    .font(.caption2)
+                                    .foregroundStyle(.red)
+                            }
                         }
                         Spacer()
                         Button("Connect") {
                             collectorCore.selectScannedDevice(device)
                             Task {
-                                await collectorCore.startCollection()
+                                await collectorCore.connectSelectedDevice()
                             }
                         }
                         .buttonStyle(.bordered)
-                        .disabled(collectorCore.isScanningDevices || collectorCore.isConnectingDevice)
+                        .disabled(!connectability.isConnectable || collectorCore.isConnectingDevice)
                     }
                 }
                 .listStyle(.plain)
@@ -131,7 +137,7 @@ struct CollectorView: View {
                         Task { await collectorCore.startCollection() }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(collectorCore.isConnectingDevice || collectorCore.isScanningDevices || collectorCore.status == .collecting)
+                    .disabled(collectorCore.isConnectingDevice || collectorCore.status == .collecting)
 
                     Button("Stop") {
                         collectorCore.stopCollection()
@@ -147,36 +153,82 @@ struct CollectorView: View {
     }
 
     private var offlineTab: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Offline Recording (foundation only)")
-                .font(.headline)
-            Text("Offline fetch/upload/delete is intentionally not implemented in this task.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Offline Recording")
+                    .font(.headline)
+                Text("State: \(collectorCore.offlineLifecycleState.rawValue)")
+                    .font(.footnote)
+                Text(collectorCore.offlineStatusMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
 
-            ForEach(PolarOfflineStream.allCases) { stream in
-                let supported = collectorCore.polarCapabilities.availableOfflineStreams.contains(stream)
-                HStack {
-                    Text(stream.rawValue)
-                    Spacer()
-                    Text(supported ? "Supported" : "Unavailable")
+                ForEach(PolarOfflineStream.allCases, id: \.self) { stream in
+                    OfflineStreamRow(
+                        stream: stream,
+                        capability: collectorCore.capabilityForOfflineStream(stream),
+                        selected: collectorCore.selectedOfflineStreams.contains(stream),
+                        onToggle: { collectorCore.toggleOfflineStream(stream) }
+                    )
+                    if let runMessage = collectorCore.offlineStreamRunMessages[stream] {
+                        Text(runMessage)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Button("Start selected offline recordings") {
+                        Task { await collectorCore.startOfflineSelected() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Button("Start all supported offline recordings") {
+                        Task { await collectorCore.startOfflineAllSupported() }
+                    }
+                    .buttonStyle(.bordered)
+                }
+                HStack(spacing: 8) {
+                    Button("Stop selected offline recordings") {
+                        Task { await collectorCore.stopOfflineSelected() }
+                    }
+                    .buttonStyle(.bordered)
+                    Button("Stop all offline recordings") {
+                        Task { await collectorCore.stopOfflineAllSupported() }
+                    }
+                    .buttonStyle(.bordered)
+                }
+                HStack(spacing: 8) {
+                    Button("List offline recordings / Refresh list") {
+                        Task { await collectorCore.listOfflineRecordings() }
+                    }
+                    .buttonStyle(.bordered)
+                    Button("Upload offline recordings to server") {
+                        Task { await collectorCore.uploadOfflineRecordings() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Button("Refresh offline feature readiness") {
+                        Task { await collectorCore.refreshOfflineCapabilities() }
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if collectorCore.offlineRecordings.isEmpty {
+                    Text("No offline recordings listed yet.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                } else {
+                    ForEach(collectorCore.offlineRecordings) { entry in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.stream?.rawValue ?? "Unknown")
+                                .font(.subheadline.weight(.medium))
+                            Text(entry.path).font(.caption2).foregroundStyle(.secondary)
+                            Text("size: \(entry.sizeBytes.map(String.init) ?? "n/a"), started: \(entry.startedAt.map { dateFormatter.string(from: $0) } ?? "n/a"), status: \(entry.status ?? "n/a")")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
                 }
-                .opacity(supported ? 1 : 0.45)
-            }
-
-            HStack(spacing: 8) {
-                offlineButton("Start selected")
-                offlineButton("Start all")
-            }
-            HStack(spacing: 8) {
-                offlineButton("Stop selected")
-                offlineButton("Stop all")
-            }
-            HStack(spacing: 8) {
-                offlineButton("List recordings")
-                offlineButton("Sync recordings")
             }
         }
     }
@@ -223,12 +275,6 @@ struct CollectorView: View {
                     .foregroundStyle(.secondary)
             }
         }
-    }
-
-    private func offlineButton(_ title: String) -> some View {
-        Button(title) {}
-            .buttonStyle(.bordered)
-            .disabled(true)
     }
 
     private var activityCard: some View {
@@ -290,6 +336,36 @@ struct CollectorView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
+
+private struct OfflineStreamRow: View {
+    let stream: PolarOfflineStream
+    let capability: OfflineStreamCapability
+    let selected: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        HStack {
+            Button(selected ? "Selected" : "Select") {
+                onToggle()
+            }
+            .buttonStyle(.bordered)
+            .disabled(!capability.isSupported)
+            Text(stream.rawValue)
+            Spacer()
+            Text(capability.isSupported ? "Ready" : (capability.reason ?? "Unavailable"))
+                .font(.caption)
+                .foregroundStyle(capability.isSupported ? Color.secondary : Color.red)
+        }
+        .opacity(capability.isSupported ? 1 : 0.5)
+    }
+}
+
+private let dateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    return formatter
+}()
 
 private enum PolarScreenTab: String, CaseIterable, Identifiable {
     case online = "Online"

@@ -6,7 +6,7 @@ enum PolarDeviceFamily: String, Equatable, Sendable {
     case unknownPolar = "Unknown Polar"
 }
 
-enum PolarOfflineStream: String, CaseIterable, Identifiable, Sendable {
+enum PolarOfflineStream: String, CaseIterable, Identifiable, Hashable, Sendable {
     case hr = "HR"
     case ppi = "PPI"
     case acc = "ACC"
