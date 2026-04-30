@@ -3,6 +3,7 @@ import SwiftUI
 struct CollectorView: View {
     @StateObject private var collectorCore: CollectorCore
     @State private var selectedTab: PolarScreenTab = .online
+    @State private var pendingDeleteEntry: OfflineRecordingEntry?
 
     init(collectorCore: CollectorCore) {
         _collectorCore = StateObject(wrappedValue: collectorCore)
@@ -157,59 +158,59 @@ struct CollectorView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Offline Recording")
                     .font(.headline)
-                Text("State: \(collectorCore.offlineLifecycleState.rawValue)")
-                    .font(.footnote)
-                Text(collectorCore.offlineStatusMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                offlineStatusCard
 
                 ForEach(PolarOfflineStream.allCases, id: \.self) { stream in
                     OfflineStreamRow(
                         stream: stream,
                         capability: collectorCore.capabilityForOfflineStream(stream),
                         selected: collectorCore.selectedOfflineStreams.contains(stream),
+                        runState: collectorCore.offlineStreamRunStates[stream] ?? .ready,
+                        runMessage: collectorCore.offlineStreamRunMessages[stream],
                         onToggle: { collectorCore.toggleOfflineStream(stream) }
                     )
-                    if let runMessage = collectorCore.offlineStreamRunMessages[stream] {
-                        Text(runMessage)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
                 }
 
                 HStack(spacing: 8) {
-                    Button("Start selected offline recordings") {
+                    Button(collectorCore.offlineOperation == .starting ? "Starting..." : "Start selected offline recordings") {
                         Task { await collectorCore.startOfflineSelected() }
                     }
                     .buttonStyle(.borderedProminent)
-                    Button("Start all supported offline recordings") {
+                    .disabled(collectorCore.isOfflineActionDisabled(.starting))
+                    Button(collectorCore.offlineOperation == .starting ? "Starting..." : "Start all supported offline recordings") {
                         Task { await collectorCore.startOfflineAllSupported() }
                     }
                     .buttonStyle(.bordered)
+                    .disabled(collectorCore.isOfflineActionDisabled(.starting))
                 }
                 HStack(spacing: 8) {
-                    Button("Stop selected offline recordings") {
+                    Button(collectorCore.offlineOperation == .stopping ? "Stopping..." : "Stop selected offline recordings") {
                         Task { await collectorCore.stopOfflineSelected() }
                     }
                     .buttonStyle(.bordered)
-                    Button("Stop all offline recordings") {
+                    .disabled(collectorCore.isOfflineActionDisabled(.stopping))
+                    Button(collectorCore.offlineOperation == .stopping ? "Stopping..." : "Stop all offline recordings") {
                         Task { await collectorCore.stopOfflineAllSupported() }
                     }
                     .buttonStyle(.bordered)
+                    .disabled(collectorCore.isOfflineActionDisabled(.stopping))
                 }
                 HStack(spacing: 8) {
-                    Button("List offline recordings / Refresh list") {
+                    Button(collectorCore.offlineOperation == .listing ? "Listing..." : "List offline recordings / Refresh list") {
                         Task { await collectorCore.listOfflineRecordings() }
                     }
                     .buttonStyle(.bordered)
-                    Button("Upload offline recordings to server") {
+                    .disabled(collectorCore.isOfflineActionDisabled(.listing))
+                    Button(collectorCore.offlineOperation == .uploading ? "Uploading..." : "Upload offline recordings to server") {
                         Task { await collectorCore.uploadOfflineRecordings() }
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(collectorCore.isOfflineActionDisabled(.uploading))
                     Button("Refresh offline feature readiness") {
                         Task { await collectorCore.refreshOfflineCapabilities() }
                     }
                     .buttonStyle(.bordered)
+                    .disabled(collectorCore.offlineIsOperationRunning)
                 }
 
                 if collectorCore.offlineRecordings.isEmpty {
@@ -218,19 +219,81 @@ struct CollectorView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(collectorCore.offlineRecordings) { entry in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(entry.stream?.rawValue ?? "Unknown")
-                                .font(.subheadline.weight(.medium))
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(entry.stream?.rawValue ?? "Unknown")
+                                    .font(.subheadline.weight(.medium))
+                                Spacer()
+                                Button(collectorCore.deletingOfflineRecordingIDs.contains(entry.id) ? "Deleting..." : "Delete") {
+                                    pendingDeleteEntry = entry
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(collectorCore.offlineIsOperationRunning || collectorCore.isUploadingChunk)
+                            }
                             Text(entry.path).font(.caption2).foregroundStyle(.secondary)
-                            Text("size: \(entry.sizeBytes.map(String.init) ?? "n/a"), started: \(entry.startedAt.map { dateFormatter.string(from: $0) } ?? "n/a"), status: \(entry.status ?? "n/a")")
+                            Text("id: \(entry.id), size: \(entry.sizeBytes.map(String.init) ?? "n/a"), started: \(entry.startedAt.map { dateFormatter.string(from: $0) } ?? "n/a"), status: \(entry.status ?? "n/a")")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                            if let recordError = collectorCore.offlineRecordErrorsByID[entry.id] {
+                                Text(recordError)
+                                    .font(.caption2)
+                                    .foregroundStyle(.red)
+                            }
                         }
                         .padding(.vertical, 4)
                     }
                 }
             }
         }
+        .alert("Delete offline recording?", isPresented: Binding(
+            get: { pendingDeleteEntry != nil },
+            set: { isPresented in
+                if !isPresented { pendingDeleteEntry = nil }
+            }
+        )) {
+            Button("Delete", role: .destructive) {
+                guard let entry = pendingDeleteEntry else { return }
+                Task { await collectorCore.deleteOfflineRecording(entry) }
+                pendingDeleteEntry = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingDeleteEntry = nil
+            }
+        } message: {
+            Text(pendingDeleteEntry?.path ?? "")
+        }
+    }
+
+    private var offlineStatusCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                if collectorCore.offlineIsOperationRunning {
+                    ProgressView().controlSize(.small)
+                }
+                Text("Operation: \(collectorCore.offlineOperation.rawValue)")
+                    .font(.footnote.weight(.medium))
+            }
+            Text("State: \(collectorCore.offlineLifecycleState.rawValue)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(collectorCore.offlineStatusMessage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("Last success: \(collectorCore.offlineLastSuccessAction)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if let lastError = collectorCore.offlineLastErrorMessage {
+                Text("Last error: \(lastError)")
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+            }
+            Text("Per-stream summary: \(collectorCore.offlineProgressSummary)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var deviceTab: some View {
@@ -341,20 +404,29 @@ private struct OfflineStreamRow: View {
     let stream: PolarOfflineStream
     let capability: OfflineStreamCapability
     let selected: Bool
+    let runState: OfflineStreamRunState
+    let runMessage: String?
     let onToggle: () -> Void
 
     var body: some View {
-        HStack {
-            Button(selected ? "Selected" : "Select") {
-                onToggle()
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Button(selected ? "Selected" : "Select") {
+                    onToggle()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!capability.isSupported)
+                Text(stream.rawValue)
+                Spacer()
+                Text(capability.isSupported ? runState.rawValue : (capability.reason ?? "Unavailable"))
+                    .font(.caption)
+                    .foregroundStyle(capability.isSupported && runState != .failed ? Color.secondary : Color.red)
             }
-            .buttonStyle(.bordered)
-            .disabled(!capability.isSupported)
-            Text(stream.rawValue)
-            Spacer()
-            Text(capability.isSupported ? "Ready" : (capability.reason ?? "Unavailable"))
-                .font(.caption)
-                .foregroundStyle(capability.isSupported ? Color.secondary : Color.red)
+            if let runMessage {
+                Text(runMessage)
+                    .font(.caption2)
+                    .foregroundStyle(runState == .failed ? Color.red : Color.secondary)
+            }
         }
         .opacity(capability.isSupported ? 1 : 0.5)
     }

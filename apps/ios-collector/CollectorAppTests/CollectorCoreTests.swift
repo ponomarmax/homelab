@@ -984,7 +984,7 @@ final class CollectorCoreTests: XCTestCase {
 
         XCTAssertEqual(core.offlineRecordings.count, 1)
         XCTAssertEqual(core.offlineRecordings.first?.stream, .hr)
-        XCTAssertEqual(core.offlineLifecycleState, .ready)
+        XCTAssertEqual(core.offlineLifecycleState, .completed)
     }
 
     func testOfflinePartialFailureIsRepresentedInState() async {
@@ -1091,5 +1091,96 @@ final class CollectorCoreTests: XCTestCase {
 
         XCTAssertEqual(core.uploadStatus, .failure)
         XCTAssertGreaterThanOrEqual(transport.uploadedChunks.count, 1)
+    }
+
+    func testDeleteOfflineRecordingCallsAdapterForSelectedOnly() async {
+        let adapter = MockDeviceAdapter()
+        let entry = OfflineRecordingEntry(
+            id: "entry-1",
+            path: "/U/0/HR/1.rec",
+            stream: .hr,
+            sizeBytes: 12,
+            startedAt: Date(timeIntervalSince1970: 100),
+            status: "available"
+        )
+        adapter.nextOfflineRecordings = [entry]
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+        await core.listOfflineRecordings()
+
+        await core.deleteOfflineRecording(entry)
+
+        XCTAssertEqual(adapter.removedOfflineRecordingPaths, ["/U/0/HR/1.rec"])
+        XCTAssertTrue(core.offlineRecordings.isEmpty)
+        XCTAssertEqual(core.offlineLifecycleState, .completed)
+    }
+
+    func testDeleteOfflineRecordingFailureShowsPerRecordError() async {
+        enum DeleteError: Error, LocalizedError {
+            case failed
+            var errorDescription: String? { "remove failed" }
+        }
+        let adapter = MockDeviceAdapter()
+        let entry = OfflineRecordingEntry(
+            id: "entry-1",
+            path: "/U/0/HR/1.rec",
+            stream: .hr,
+            sizeBytes: nil,
+            startedAt: nil,
+            status: "available"
+        )
+        adapter.offlineDeleteErrorsByPath["/U/0/HR/1.rec"] = DeleteError.failed
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        await core.deleteOfflineRecording(entry)
+
+        XCTAssertEqual(core.offlineRecordErrorsByID["entry-1"], "Delete failed: remove failed")
+        XCTAssertEqual(core.offlineLifecycleState, .failed)
+    }
+
+    func testOfflineOperationLockPreventsDuplicateStartTaps() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = Dictionary(
+            uniqueKeysWithValues: PolarOfflineStream.allCases.map { stream in
+                (stream, OfflineStreamCapability(stream: stream, isSupported: true, reason: nil))
+            }
+        )
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        async let first: Void = core.startOfflineAllSupported()
+        async let second: Void = core.startOfflineAllSupported()
+        _ = await (first, second)
+
+        XCTAssertEqual(adapter.lastStartedOfflineStreams.sorted { $0.rawValue < $1.rawValue }, [.acc, .gyr, .hr, .mag, .ppg, .ppi])
+        XCTAssertFalse(core.offlineIsOperationRunning)
+    }
+
+    func testStartOfflineMapsPerStreamStatesAndErrors() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = Dictionary(
+            uniqueKeysWithValues: PolarOfflineStream.allCases.map { stream in
+                (stream, OfflineStreamCapability(stream: stream, isSupported: true, reason: nil))
+            }
+        )
+        adapter.nextStartOfflineResults[.hr] = OfflineStreamOperationResult(stream: .hr, success: false, message: "Failed to start: GATT attribute error 1")
+        adapter.nextStartOfflineResults[.acc] = OfflineStreamOperationResult(stream: .acc, success: true, message: "Started")
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+        core.toggleOfflineStream(.ppi)
+        core.toggleOfflineStream(.ppg)
+        core.toggleOfflineStream(.mag)
+        core.toggleOfflineStream(.gyr)
+
+        await core.startOfflineSelected()
+
+        XCTAssertEqual(core.offlineStreamRunStates[.acc], .recording)
+        XCTAssertEqual(core.offlineStreamRunStates[.hr], .failed)
+        XCTAssertEqual(core.offlineLastErrorMessage, "Failed to start: GATT attribute error 1")
     }
 }

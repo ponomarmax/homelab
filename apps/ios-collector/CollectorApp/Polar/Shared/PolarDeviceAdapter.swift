@@ -105,6 +105,10 @@ final class PolarDeviceAdapter: CollectorDeviceAdapter {
         []
     }
 
+    func removeOfflineRecording(path: String) async throws {
+        throw PolarAdapterError.unsupportedEnvironment
+    }
+
     func prepareOfflineUploadBatches() async -> OfflineUploadPreparationResult {
         OfflineUploadPreparationResult(batches: [], messagesByStream: [:])
     }
@@ -620,8 +624,20 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         guard let selectedPolarIdentifier else {
             return streams.map { OfflineStreamOperationResult(stream: $0, success: false, message: "No selected device") }
         }
+        let capabilities = await offlineCapabilities()
+        let capabilitiesByStream = Dictionary(uniqueKeysWithValues: capabilities.map { ($0.stream, $0) })
         var results: [OfflineStreamOperationResult] = []
         for stream in streams {
+            if let capability = capabilitiesByStream[stream], !capability.isSupported {
+                results.append(
+                    OfflineStreamOperationResult(
+                        stream: stream,
+                        success: false,
+                        message: capability.reason ?? "Offline stream unsupported"
+                    )
+                )
+                continue
+            }
             do {
                 try await retryOfflineGattOperation {
                     try await withCheckedThrowingContinuation { continuation in
@@ -645,7 +661,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
                     OfflineStreamOperationResult(
                         stream: stream,
                         success: false,
-                        message: "Failed: \(error.localizedDescription)"
+                        message: Self.offlineOperationErrorMessage(error, action: "start")
                     )
                 )
             }
@@ -681,7 +697,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
                     OfflineStreamOperationResult(
                         stream: stream,
                         success: false,
-                        message: "Failed: \(error.localizedDescription)"
+                        message: Self.offlineOperationErrorMessage(error, action: "stop")
                     )
                 )
             }
@@ -715,6 +731,38 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
                     onError: { error in continuation.resume(throwing: error) },
                     onCompleted: { continuation.resume(returning: entries) }
                 )
+        }
+    }
+
+    func removeOfflineRecording(path: String) async throws {
+        guard let selectedPolarIdentifier else {
+            throw PolarAdapterError.noDeviceSelected
+        }
+        let entries = try await withCheckedThrowingContinuation { continuation in
+            var listedEntries: [PolarOfflineRecordingEntry] = []
+            streamCapabilitiesDisposable?.dispose()
+            streamCapabilitiesDisposable = api.listOfflineRecordings(selectedPolarIdentifier)
+                .observe(on: MainScheduler.asyncInstance)
+                .subscribe(
+                    onNext: { entry in listedEntries.append(entry) },
+                    onError: { error in continuation.resume(throwing: error) },
+                    onCompleted: { continuation.resume(returning: listedEntries) }
+                )
+        }
+        guard let entryToRemove = entries.first(where: { $0.path == path }) else { return }
+        try await retryOfflineGattOperation {
+            try await withCheckedThrowingContinuation { continuation in
+                streamCapabilitiesDisposable?.dispose()
+                streamCapabilitiesDisposable = api.removeOfflineRecord(
+                    selectedPolarIdentifier,
+                    entry: entryToRemove
+                )
+                .observe(on: MainScheduler.asyncInstance)
+                .subscribe(
+                    onCompleted: { continuation.resume() },
+                    onError: { error in continuation.resume(throwing: error) }
+                )
+            }
         }
     }
 
@@ -850,6 +898,25 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         }
         let nsError = error as NSError
         return nsError.code == 1 || nsError.code == 8 || nsError.code == 12
+    }
+
+    private static func offlineOperationErrorMessage(_ error: Error, action: String) -> String {
+        if let bleError = error as? BleGattException {
+            switch bleError {
+            case let .gattAttributeError(errorCode, _):
+                if errorCode == 1 {
+                    return "Failed to \(action): GATT attribute error 1 (likely busy/not ready/already recording)."
+                }
+                return "Failed to \(action): GATT attribute error \(errorCode)."
+            default:
+                return "Failed to \(action): \(bleError.localizedDescription)"
+            }
+        }
+        let nsError = error as NSError
+        if nsError.code == 1 {
+            return "Failed to \(action): GATT error 1 (likely busy/not ready/already recording)."
+        }
+        return "Failed to \(action): \(error.localizedDescription)"
     }
 
     private func beginCapabilityProbe() {

@@ -25,8 +25,10 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
     var nextOfflineRecordings: [OfflineRecordingEntry] = []
     var nextOfflinePreparationResult: OfflineUploadPreparationResult = OfflineUploadPreparationResult(batches: [], messagesByStream: [:])
     var offlineListShouldThrowError: Error?
+    var offlineDeleteErrorsByPath: [String: Error] = [:]
     private(set) var lastStartedOfflineStreams: [PolarOfflineStream] = []
     private(set) var lastStoppedOfflineStreams: [PolarOfflineStream] = []
+    private(set) var removedOfflineRecordingPaths: [String] = []
 
     init(
         deviceIdentity: CollectorDevice = CollectorDevice(
@@ -123,6 +125,13 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
             throw offlineListShouldThrowError
         }
         return nextOfflineRecordings
+    }
+
+    func removeOfflineRecording(path: String) async throws {
+        removedOfflineRecordingPaths.append(path)
+        if let error = offlineDeleteErrorsByPath[path] {
+            throw error
+        }
     }
 
     func prepareOfflineUploadBatches() async -> OfflineUploadPreparationResult {

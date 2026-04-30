@@ -10,13 +10,36 @@ struct DeviceConnectability: Equatable, Sendable {
 enum OfflineLifecycleState: String, Equatable, Sendable {
     case disconnected
     case featureUnavailable
+    case idle
     case ready
     case starting
     case recording
     case stopping
     case listing
+    case uploading
+    case deleting
+    case completed
     case failed
     case partialSuccess
+}
+
+enum OfflineOperation: String, Equatable, Sendable {
+    case none = "Idle"
+    case starting = "Starting offline recordings…"
+    case stopping = "Stopping offline recordings…"
+    case listing = "Listing offline recordings…"
+    case uploading = "Uploading offline recordings…"
+    case deleting = "Deleting offline recording…"
+}
+
+enum OfflineStreamRunState: String, Equatable, Sendable {
+    case ready
+    case recording
+    case stopping
+    case fetching
+    case uploading
+    case uploaded
+    case failed
 }
 
 struct OfflineStreamCapability: Equatable, Sendable {

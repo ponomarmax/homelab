@@ -45,7 +45,14 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var offlineStatusMessage: String = "Disconnected"
     @Published private(set) var offlineStreamCapabilities: [PolarOfflineStream: OfflineStreamCapability] = [:]
     @Published private(set) var offlineStreamRunMessages: [PolarOfflineStream: String] = [:]
+    @Published private(set) var offlineStreamRunStates: [PolarOfflineStream: OfflineStreamRunState] = [:]
     @Published private(set) var offlineRecordings: [OfflineRecordingEntry] = []
+    @Published private(set) var offlineOperation: OfflineOperation = .none
+    @Published private(set) var offlineIsOperationRunning: Bool = false
+    @Published private(set) var offlineLastSuccessAction: String = "None"
+    @Published private(set) var offlineLastErrorMessage: String?
+    @Published private(set) var offlineRecordErrorsByID: [String: String] = [:]
+    @Published private(set) var deletingOfflineRecordingIDs: Set<String> = []
     @Published private(set) var deviceTimeSyncState: DeviceTimeSyncState = .idle
     @Published private(set) var deviceTimeStatusMessage: String = "Not synced"
     @Published private(set) var deviceTimeDebugDetails: String = "Stream timestamp verification not performed"
@@ -498,7 +505,25 @@ final class CollectorCore: ObservableObject {
         } else {
             offlineLifecycleState = .ready
             offlineStatusMessage = "Ready"
+            for stream in supported {
+                if offlineStreamRunStates[stream] == nil {
+                    offlineStreamRunStates[stream] = .ready
+                }
+            }
         }
+    }
+
+    var offlineProgressSummary: String {
+        let all = PolarOfflineStream.allCases
+        let failed = all.filter { offlineStreamRunStates[$0] == .failed }.count
+        let recording = all.filter { offlineStreamRunStates[$0] == .recording }.count
+        let uploaded = all.filter { offlineStreamRunStates[$0] == .uploaded }.count
+        return "recording: \(recording), uploaded: \(uploaded), failed: \(failed)"
+    }
+
+    func isOfflineActionDisabled(_ action: OfflineOperation) -> Bool {
+        guard offlineIsOperationRunning else { return false }
+        return offlineOperation != action
     }
 
     func startOfflineSelected() async {
@@ -521,32 +546,41 @@ final class CollectorCore: ObservableObject {
     }
 
     func listOfflineRecordings() async {
+        guard beginOfflineOperation(.listing, lifecycle: .listing, statusMessage: "Listing offline recordings...") else { return }
+        defer { completeOfflineOperation() }
         guard adapter.connectionState == .connected else {
             offlineLifecycleState = .disconnected
             offlineStatusMessage = "Device disconnected"
+            offlineLastErrorMessage = "Device disconnected"
             return
         }
-        offlineLifecycleState = .listing
-        offlineStatusMessage = "Listing recordings..."
         do {
             let entries = try await adapter.listOfflineRecordings()
             offlineRecordings = entries
-            offlineLifecycleState = .ready
+            offlineLifecycleState = .completed
             offlineStatusMessage = entries.isEmpty ? "No recordings found" : "Loaded \(entries.count) recording(s)"
+            offlineLastSuccessAction = "Listed offline recordings"
         } catch {
             offlineLifecycleState = .failed
             offlineStatusMessage = "List failed: \(error.localizedDescription)"
+            offlineLastErrorMessage = offlineStatusMessage
         }
     }
 
     func uploadOfflineRecordings() async {
+        guard beginOfflineOperation(.uploading, lifecycle: .uploading, statusMessage: "Uploading offline recordings...") else { return }
+        defer { completeOfflineOperation() }
         guard adapter.connectionState == .connected else {
             offlineLifecycleState = .disconnected
             offlineStatusMessage = "Device disconnected"
+            offlineLastErrorMessage = "Device disconnected"
             return
         }
 
-        offlineStatusMessage = "fetching"
+        offlineStatusMessage = "Fetching offline recordings..."
+        for stream in selectedOfflineStreams {
+            offlineStreamRunStates[stream] = .fetching
+        }
         let preparation = await adapter.prepareOfflineUploadBatches()
         offlineStreamRunMessages.merge(
             preparation.messagesByStream,
@@ -556,6 +590,7 @@ final class CollectorCore: ObservableObject {
         guard !preparation.batches.isEmpty else {
             offlineLifecycleState = .failed
             offlineStatusMessage = "No offline recordings were prepared for upload"
+            offlineLastErrorMessage = offlineStatusMessage
             return
         }
 
@@ -568,17 +603,55 @@ final class CollectorCore: ObservableObject {
         }
         bufferedSamplesCount = bufferedSampleTotalCount()
 
-        offlineStatusMessage = "uploading"
+        offlineStatusMessage = "Uploading chunks..."
+        for stream in selectedOfflineStreams {
+            offlineStreamRunStates[stream] = .uploading
+        }
         await flushAndUploadAllBufferedSamples(trigger: .manual)
         if uploadStatus == .success {
-            offlineLifecycleState = .ready
+            offlineLifecycleState = .completed
             offlineStatusMessage = "Offline recordings uploaded"
+            offlineLastSuccessAction = "Uploaded offline recordings"
+            for stream in selectedOfflineStreams {
+                offlineStreamRunStates[stream] = .uploaded
+            }
         } else if uploadStatus == .failure {
             offlineLifecycleState = .failed
             offlineStatusMessage = "Offline upload failed"
+            offlineLastErrorMessage = offlineStatusMessage
+            for stream in selectedOfflineStreams {
+                offlineStreamRunStates[stream] = .failed
+            }
         } else {
             offlineLifecycleState = .partialSuccess
             offlineStatusMessage = "Offline upload completed with mixed result"
+        }
+    }
+
+    func deleteOfflineRecording(_ entry: OfflineRecordingEntry) async {
+        guard !isUploadingChunk else {
+            offlineLastErrorMessage = "Cannot delete while upload is running"
+            return
+        }
+        guard beginOfflineOperation(.deleting, lifecycle: .deleting, statusMessage: "Deleting offline recording...") else { return }
+        deletingOfflineRecordingIDs.insert(entry.id)
+        defer {
+            deletingOfflineRecordingIDs.remove(entry.id)
+            completeOfflineOperation()
+        }
+        do {
+            try await adapter.removeOfflineRecording(path: entry.path)
+            offlineRecordings.removeAll { $0.id == entry.id }
+            offlineRecordErrorsByID[entry.id] = nil
+            offlineLifecycleState = .completed
+            offlineStatusMessage = "Deleted recording"
+            offlineLastSuccessAction = "Deleted offline recording"
+        } catch {
+            let message = "Delete failed: \(error.localizedDescription)"
+            offlineRecordErrorsByID[entry.id] = message
+            offlineLifecycleState = .failed
+            offlineStatusMessage = message
+            offlineLastErrorMessage = message
         }
     }
 
@@ -1066,68 +1139,104 @@ final class CollectorCore: ObservableObject {
     }
 
     private func startOffline(streams: [PolarOfflineStream]) async {
+        guard beginOfflineOperation(.starting, lifecycle: .starting, statusMessage: "Starting offline recordings...") else { return }
+        defer { completeOfflineOperation() }
         guard adapter.connectionState == .connected else {
             offlineLifecycleState = .disconnected
             offlineStatusMessage = "Device disconnected"
+            offlineLastErrorMessage = "Device disconnected"
             return
         }
         guard !streams.isEmpty else {
             offlineLifecycleState = .featureUnavailable
             offlineStatusMessage = "No supported offline streams selected"
+            offlineLastErrorMessage = offlineStatusMessage
             return
         }
 
         _ = await runPreOfflineSyncTimeCheck()
-        offlineLifecycleState = .starting
-        offlineStatusMessage = "Starting offline recording..."
+        streams.forEach { offlineStreamRunStates[$0] = .ready }
         let results = await adapter.startOfflineRecordings(streams: streams)
         offlineStreamRunMessages.merge(
             Dictionary(uniqueKeysWithValues: results.map { ($0.stream, $0.message) }),
             uniquingKeysWith: { _, new in new }
         )
+        for result in results {
+            offlineStreamRunStates[result.stream] = result.success ? .recording : .failed
+        }
         let successCount = results.filter(\.success).count
         if successCount == results.count {
             offlineLifecycleState = .recording
             offlineStatusMessage = "Offline recording started (\(successCount)/\(results.count))"
+            offlineLastSuccessAction = "Started offline recordings"
         } else if successCount > 0 {
             offlineLifecycleState = .partialSuccess
             offlineStatusMessage = "Partial start success (\(successCount)/\(results.count))"
+            offlineLastErrorMessage = results.first(where: { !$0.success })?.message
         } else {
             offlineLifecycleState = .failed
             offlineStatusMessage = "Offline start failed"
+            offlineLastErrorMessage = results.first?.message
         }
     }
 
     private func stopOffline(streams: [PolarOfflineStream]) async {
+        guard beginOfflineOperation(.stopping, lifecycle: .stopping, statusMessage: "Stopping offline recordings...") else { return }
+        defer { completeOfflineOperation() }
         guard adapter.connectionState == .connected else {
             offlineLifecycleState = .disconnected
             offlineStatusMessage = "Device disconnected"
+            offlineLastErrorMessage = "Device disconnected"
             return
         }
         guard !streams.isEmpty else {
             offlineLifecycleState = .featureUnavailable
             offlineStatusMessage = "No supported offline streams selected"
+            offlineLastErrorMessage = offlineStatusMessage
             return
         }
 
-        offlineLifecycleState = .stopping
-        offlineStatusMessage = "Stopping offline recording..."
+        streams.forEach { offlineStreamRunStates[$0] = .stopping }
         let results = await adapter.stopOfflineRecordings(streams: streams)
         offlineStreamRunMessages.merge(
             Dictionary(uniqueKeysWithValues: results.map { ($0.stream, $0.message) }),
             uniquingKeysWith: { _, new in new }
         )
+        for result in results {
+            offlineStreamRunStates[result.stream] = result.success ? .ready : .failed
+        }
         let successCount = results.filter(\.success).count
         if successCount == results.count {
             offlineLifecycleState = .ready
             offlineStatusMessage = "Offline recording stopped (\(successCount)/\(results.count))"
+            offlineLastSuccessAction = "Stopped offline recordings"
         } else if successCount > 0 {
             offlineLifecycleState = .partialSuccess
             offlineStatusMessage = "Partial stop success (\(successCount)/\(results.count))"
+            offlineLastErrorMessage = results.first(where: { !$0.success })?.message
         } else {
             offlineLifecycleState = .failed
             offlineStatusMessage = "Offline stop failed"
+            offlineLastErrorMessage = results.first?.message
         }
+    }
+
+    private func beginOfflineOperation(
+        _ operation: OfflineOperation,
+        lifecycle: OfflineLifecycleState,
+        statusMessage: String
+    ) -> Bool {
+        guard !offlineIsOperationRunning else { return false }
+        offlineIsOperationRunning = true
+        offlineOperation = operation
+        offlineLifecycleState = lifecycle
+        offlineStatusMessage = statusMessage
+        return true
+    }
+
+    private func completeOfflineOperation() {
+        offlineIsOperationRunning = false
+        offlineOperation = .none
     }
 
     private func applyDeviceTimeActionResult(_ result: DeviceTimeActionResult, isSyncAction: Bool) {
