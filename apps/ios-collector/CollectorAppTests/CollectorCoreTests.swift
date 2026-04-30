@@ -1141,6 +1141,75 @@ final class CollectorCoreTests: XCTestCase {
         XCTAssertEqual(core.offlineLifecycleState, .failed)
     }
 
+    func testDeleteAllOfflineRecordingsCallsDeleteForEachEntry() async {
+        let adapter = MockDeviceAdapter()
+        adapter.nextOfflineRecordings = [
+            OfflineRecordingEntry(id: "entry-1", path: "/U/0/HR/1.rec", stream: .hr, sizeBytes: 10, startedAt: nil, status: "available"),
+            OfflineRecordingEntry(id: "entry-2", path: "/U/0/ACC/1.rec", stream: .acc, sizeBytes: 12, startedAt: nil, status: "available")
+        ]
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        await core.deleteAllOfflineRecordings(confirmed: true)
+
+        XCTAssertEqual(adapter.removedOfflineRecordingPaths, ["/U/0/HR/1.rec", "/U/0/ACC/1.rec"])
+        XCTAssertEqual(core.offlineLifecycleState, .completed)
+    }
+
+    func testDeleteAllOfflineRecordingsContinuesAfterSingleFailure() async {
+        enum DeleteError: Error, LocalizedError {
+            case failed
+            var errorDescription: String? { "remove failed" }
+        }
+        let adapter = MockDeviceAdapter()
+        adapter.nextOfflineRecordings = [
+            OfflineRecordingEntry(id: "entry-1", path: "/U/0/HR/1.rec", stream: .hr, sizeBytes: 10, startedAt: nil, status: "available"),
+            OfflineRecordingEntry(id: "entry-2", path: "/U/0/ACC/1.rec", stream: .acc, sizeBytes: 12, startedAt: nil, status: "available")
+        ]
+        adapter.offlineDeleteErrorsByPath["/U/0/HR/1.rec"] = DeleteError.failed
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        await core.deleteAllOfflineRecordings(confirmed: true)
+
+        XCTAssertEqual(adapter.removedOfflineRecordingPaths, ["/U/0/HR/1.rec", "/U/0/ACC/1.rec"])
+        XCTAssertEqual(core.offlineLifecycleState, .partialSuccess)
+        XCTAssertEqual(core.offlineRecordErrorsByID["entry-1"], "Delete failed: remove failed")
+    }
+
+    func testDeleteAllOfflineRecordingsRequiresConfirmation() async {
+        let adapter = MockDeviceAdapter()
+        adapter.nextOfflineRecordings = [
+            OfflineRecordingEntry(id: "entry-1", path: "/U/0/HR/1.rec", stream: .hr, sizeBytes: 10, startedAt: nil, status: "available")
+        ]
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        await core.deleteAllOfflineRecordings(confirmed: false)
+
+        XCTAssertTrue(adapter.removedOfflineRecordingPaths.isEmpty)
+        XCTAssertEqual(core.offlineLastErrorMessage, "Delete all recordings requires confirmation")
+    }
+
+    func testRefreshOfflineDataListsRecordingsAndRefreshesCapabilities() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream[.hr] = OfflineStreamCapability(stream: .hr, isSupported: true, reason: nil)
+        adapter.nextOfflineRecordings = [
+            OfflineRecordingEntry(id: "entry-1", path: "/U/0/HR/1.rec", stream: .hr, sizeBytes: 10, startedAt: nil, status: "available")
+        ]
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        await core.refreshOfflineData()
+
+        XCTAssertEqual(core.offlineRecordings.count, 1)
+        XCTAssertTrue(core.capabilityForOfflineStream(.hr).isSupported)
+    }
+
     func testOfflineOperationLockPreventsDuplicateStartTaps() async {
         let adapter = MockDeviceAdapter()
         adapter.offlineCapabilityByStream = Dictionary(
@@ -1157,6 +1226,23 @@ final class CollectorCoreTests: XCTestCase {
         _ = await (first, second)
 
         XCTAssertEqual(adapter.lastStartedOfflineStreams.sorted { $0.rawValue < $1.rawValue }, [.acc, .gyr, .hr, .mag, .ppg, .ppi])
+        XCTAssertFalse(core.offlineIsOperationRunning)
+    }
+
+    func testOfflineOperationLockPreventsDuplicateDeleteAllTaps() async {
+        let adapter = MockDeviceAdapter()
+        adapter.nextOfflineRecordings = [
+            OfflineRecordingEntry(id: "entry-1", path: "/U/0/HR/1.rec", stream: .hr, sizeBytes: 10, startedAt: nil, status: "available")
+        ]
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        async let first: Void = core.deleteAllOfflineRecordings(confirmed: true)
+        async let second: Void = core.deleteAllOfflineRecordings(confirmed: true)
+        _ = await (first, second)
+
+        XCTAssertEqual(adapter.removedOfflineRecordingPaths, ["/U/0/HR/1.rec"])
         XCTAssertFalse(core.offlineIsOperationRunning)
     }
 

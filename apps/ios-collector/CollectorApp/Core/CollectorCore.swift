@@ -639,6 +639,11 @@ final class CollectorCore: ObservableObject {
         }
     }
 
+    func refreshOfflineData() async {
+        await refreshOfflineCapabilities()
+        await listOfflineRecordings()
+    }
+
     func uploadOfflineRecordings() async {
         guard beginOfflineOperation(.uploading, lifecycle: .uploading, statusMessage: "Uploading offline recordings...") else { return }
         defer { completeOfflineOperation() }
@@ -725,6 +730,74 @@ final class CollectorCore: ObservableObject {
             offlineStatusMessage = message
             offlineLastErrorMessage = message
         }
+    }
+
+    func deleteAllOfflineRecordings(confirmed: Bool) async {
+        guard confirmed else {
+            offlineLastErrorMessage = "Delete all recordings requires confirmation"
+            return
+        }
+        guard !isUploadingChunk else {
+            offlineLastErrorMessage = "Cannot delete while upload is running"
+            return
+        }
+        guard beginOfflineOperation(.deleting, lifecycle: .deleting, statusMessage: "Deleting all offline recordings...") else { return }
+        defer { completeOfflineOperation() }
+        guard adapter.connectionState == .connected else {
+            offlineLifecycleState = .disconnected
+            offlineStatusMessage = "Device disconnected"
+            offlineLastErrorMessage = "Device disconnected"
+            return
+        }
+
+        let entries: [OfflineRecordingEntry]
+        do {
+            entries = try await adapter.listOfflineRecordings()
+        } catch {
+            offlineLifecycleState = .failed
+            offlineStatusMessage = "List failed: \(error.localizedDescription)"
+            offlineLastErrorMessage = offlineStatusMessage
+            return
+        }
+
+        if entries.isEmpty {
+            offlineLifecycleState = .completed
+            offlineStatusMessage = "No recordings to delete"
+            offlineLastSuccessAction = "Deleted all offline recordings"
+            offlineRecordings = []
+            return
+        }
+
+        var deletedIDs = Set<String>()
+        var failed: [String] = []
+
+        for (index, entry) in entries.enumerated() {
+            deletingOfflineRecordingIDs.insert(entry.id)
+            offlineStatusMessage = "Deleting recording \(index + 1)/\(entries.count)..."
+            do {
+                try await adapter.removeOfflineRecording(path: entry.path)
+                deletedIDs.insert(entry.id)
+                offlineRecordErrorsByID[entry.id] = nil
+            } catch {
+                let message = "Delete failed: \(error.localizedDescription)"
+                offlineRecordErrorsByID[entry.id] = message
+                failed.append(entry.path)
+            }
+            deletingOfflineRecordingIDs.remove(entry.id)
+        }
+
+        offlineRecordings.removeAll { deletedIDs.contains($0.id) }
+        if failed.isEmpty {
+            offlineLifecycleState = .completed
+            offlineStatusMessage = "Deleted \(entries.count) recording(s)"
+            offlineLastSuccessAction = "Deleted all offline recordings"
+            return
+        }
+
+        offlineLifecycleState = .partialSuccess
+        let successCount = entries.count - failed.count
+        offlineStatusMessage = "Deleted \(successCount)/\(entries.count) recording(s)"
+        offlineLastErrorMessage = "Failed to delete \(failed.count) recording(s)"
     }
 
     func stopCollection() {
