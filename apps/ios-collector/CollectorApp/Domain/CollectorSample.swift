@@ -105,6 +105,72 @@ struct PolarAccSampleData: Equatable, Codable, Sendable {
     }
 }
 
+struct PolarPpiSampleData: Equatable, Codable, Sendable {
+    let timeStamp: UInt64
+    let hr: Int
+    let ppiMs: UInt16
+    let errorEstimateMs: UInt16
+    let blockerBit: Int
+    let skinContactStatus: Int
+    let skinContactSupported: Int
+
+    enum CodingKeys: String, CodingKey {
+        case timeStamp = "time_stamp"
+        case hr
+        case ppiMs = "ppi_ms"
+        case errorEstimateMs = "error_estimate_ms"
+        case blockerBit = "blocker_bit"
+        case skinContactStatus = "skin_contact_status"
+        case skinContactSupported = "skin_contact_supported"
+    }
+}
+
+struct PolarPpgSampleData: Equatable, Codable, Sendable {
+    let deviceTimeNS: UInt64
+    let ppg0: Int32?
+    let ppg1: Int32?
+    let ppg2: Int32?
+    let ambient: Int32?
+    let channelSamples: [Int32]
+
+    enum CodingKeys: String, CodingKey {
+        case deviceTimeNS = "device_time_ns"
+        case ppg0 = "ppg0"
+        case ppg1 = "ppg1"
+        case ppg2 = "ppg2"
+        case ambient = "ambient"
+        case channelSamples = "channel_samples"
+    }
+}
+
+struct PolarMagSampleData: Equatable, Codable, Sendable {
+    let deviceTimeNS: UInt64
+    let xGauss: Float
+    let yGauss: Float
+    let zGauss: Float
+
+    enum CodingKeys: String, CodingKey {
+        case deviceTimeNS = "device_time_ns"
+        case xGauss = "x_gauss"
+        case yGauss = "y_gauss"
+        case zGauss = "z_gauss"
+    }
+}
+
+struct PolarGyrSampleData: Equatable, Codable, Sendable {
+    let deviceTimeNS: UInt64
+    let xDps: Float
+    let yDps: Float
+    let zDps: Float
+
+    enum CodingKeys: String, CodingKey {
+        case deviceTimeNS = "device_time_ns"
+        case xDps = "x_dps"
+        case yDps = "y_dps"
+        case zDps = "z_dps"
+    }
+}
+
 enum PolarBatteryEventType: String, Codable, Sendable {
     case callbackUpdate = "callback_update"
     case pollSnapshot = "poll_snapshot"
@@ -133,6 +199,10 @@ enum CollectorSamplePayload: Equatable, Codable, Sendable {
     case hr(PolarHrStreamData)
     case ecg(PolarEcgSampleData)
     case acc(PolarAccSampleData)
+    case ppi(PolarPpiSampleData)
+    case ppg(PolarPpgSampleData)
+    case mag(PolarMagSampleData)
+    case gyr(PolarGyrSampleData)
     case battery(PolarBatteryData)
 }
 
@@ -176,7 +246,13 @@ struct CollectorSample: Equatable, Codable, Sendable {
             return ecgData.deviceTimeNS
         case .acc(let accData):
             return accData.deviceTimeNS
-        case .hr, .battery:
+        case .ppg(let ppgData):
+            return ppgData.deviceTimeNS
+        case .mag(let magData):
+            return magData.deviceTimeNS
+        case .gyr(let gyrData):
+            return gyrData.deviceTimeNS
+        case .hr, .ppi, .battery:
             return nil
         }
     }

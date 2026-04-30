@@ -23,6 +23,7 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
     var nextStartOfflineResults: [PolarOfflineStream: OfflineStreamOperationResult] = [:]
     var nextStopOfflineResults: [PolarOfflineStream: OfflineStreamOperationResult] = [:]
     var nextOfflineRecordings: [OfflineRecordingEntry] = []
+    var nextOfflinePreparationResult: OfflineUploadPreparationResult = OfflineUploadPreparationResult(batches: [], messagesByStream: [:])
     var offlineListShouldThrowError: Error?
     private(set) var lastStartedOfflineStreams: [PolarOfflineStream] = []
     private(set) var lastStoppedOfflineStreams: [PolarOfflineStream] = []
@@ -122,6 +123,10 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
             throw offlineListShouldThrowError
         }
         return nextOfflineRecordings
+    }
+
+    func prepareOfflineUploadBatches() async -> OfflineUploadPreparationResult {
+        nextOfflinePreparationResult
     }
 
     func heartRateStreamProvider() -> HeartRateStreamProviding? {

@@ -106,6 +106,10 @@ struct CollectorUploadConfiguration: Equatable, Sendable {
             .heartRate: .default,
             .ecg: .default,
             .accelerometer: .default,
+            .ppi: .default,
+            .ppg: .default,
+            .magnetometer: .default,
+            .gyroscope: .default,
             .battery: .default
         ],
         userIDHeaderValue: "2",
@@ -113,6 +117,10 @@ struct CollectorUploadConfiguration: Equatable, Sendable {
             .heartRate: PolarStreamProfile.hrLive,
             .ecg: PolarStreamProfile.ecgLive,
             .accelerometer: PolarStreamProfile.accLive,
+            .ppi: PolarStreamProfile.ppiOffline,
+            .ppg: PolarStreamProfile.ppgOffline,
+            .magnetometer: PolarStreamProfile.magOffline,
+            .gyroscope: PolarStreamProfile.gyrOffline,
             .battery: PolarStreamProfile.batteryLive
         ]
     )

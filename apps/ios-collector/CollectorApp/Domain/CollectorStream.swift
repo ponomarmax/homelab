@@ -5,6 +5,9 @@ enum CollectorStream: String, CaseIterable, Identifiable, Codable, Sendable {
     case ecg
     case ppi
     case accelerometer
+    case ppg
+    case magnetometer
+    case gyroscope
     case eeg
     case battery
 
@@ -20,6 +23,12 @@ enum CollectorStream: String, CaseIterable, Identifiable, Codable, Sendable {
             return "PPI"
         case .accelerometer:
             return "ACC"
+        case .ppg:
+            return "PPG"
+        case .magnetometer:
+            return "MAG"
+        case .gyroscope:
+            return "GYR"
         case .eeg:
             return "EEG"
         case .battery:
@@ -37,6 +46,12 @@ enum CollectorStream: String, CaseIterable, Identifiable, Codable, Sendable {
             return "ppi"
         case .accelerometer:
             return "acc"
+        case .ppg:
+            return "ppg"
+        case .magnetometer:
+            return "mag"
+        case .gyroscope:
+            return "gyro"
         case .eeg:
             return "eeg"
         case .battery:
@@ -54,6 +69,12 @@ enum CollectorStream: String, CaseIterable, Identifiable, Codable, Sendable {
             return "ms"
         case .accelerometer:
             return "mg"
+        case .ppg:
+            return "raw"
+        case .magnetometer:
+            return "gauss"
+        case .gyroscope:
+            return "deg/sec"
         case .eeg:
             return "uV"
         case .battery:

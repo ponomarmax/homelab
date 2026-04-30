@@ -335,4 +335,87 @@ final class ContractMappingTests: XCTestCase {
         XCTAssertEqual(PolarStreamProfile.batteryLive.streamType, "battery")
         XCTAssertEqual(PolarStreamProfile.batteryLive.transport.payloadSchema, "polar.device_battery")
     }
+
+    func testOfflinePpiMappingPreservesZeroTimestampAndOfflineMode() throws {
+        let sample = HeartRateSample(
+            stream: .ppi,
+            collectorReceivedAtUTC: Date(timeIntervalSince1970: 5_000),
+            sourceTimestampKind: .deviceReported,
+            sampleSequenceNumber: 1,
+            payload: .ppi(
+                PolarPpiSampleData(
+                    timeStamp: 0,
+                    hr: 62,
+                    ppiMs: 980,
+                    errorEstimateMs: 4,
+                    blockerBit: 0,
+                    skinContactStatus: 1,
+                    skinContactSupported: 1
+                )
+            )
+        )
+        let chunk = UploadChunk(
+            sessionID: UUID(),
+            streamName: "PPI",
+            streamType: "ppi",
+            streamID: "stream-offline-ppi",
+            chunkID: UUID(),
+            chunkSequenceNumber: 1,
+            createdAtUTC: Date(),
+            samples: [sample],
+            collectionMode: .offlineRecording,
+            streamProfile: PolarStreamProfile.ppiOffline,
+            sourceDeviceID: nil
+        )
+
+        let request = try XCTUnwrap(chunk.makeCanonicalRequest(uploadedAtUTC: Date(timeIntervalSince1970: 5_001)))
+        XCTAssertEqual(request.collection.mode, "offline_recording")
+        XCTAssertEqual(request.source.vendor, "polar")
+        XCTAssertEqual(request.source.deviceModel, "Polar Verity Sense")
+        XCTAssertEqual(request.transport.payloadSchema, "polar.offline.ppi")
+        XCTAssertEqual(request.time.firstSampleReceivedAtCollector, "1970-01-01T01:23:20.000Z")
+
+        guard case .offlinePpi(let payload) = request.payload else {
+            return XCTFail("Expected offline ppi payload")
+        }
+        XCTAssertEqual(payload.samples.first?.timeStamp, 0)
+    }
+
+    func testOfflineHrMappingUsesSampleIndexWhenNoRawTimestamp() throws {
+        let sample = HeartRateSample(
+            stream: .heartRate,
+            collectorReceivedAtUTC: Date(timeIntervalSince1970: 6_000),
+            sourceTimestampKind: .collectorObserved,
+            sampleSequenceNumber: 7,
+            payload: .hr(
+                PolarHrStreamData(
+                    hr: 70,
+                    ppgQuality: 90,
+                    correctedHr: 69,
+                    rrsMs: [800],
+                    rrAvailable: true,
+                    contactStatus: true,
+                    contactStatusSupported: true
+                )
+            )
+        )
+        let chunk = UploadChunk(
+            sessionID: UUID(),
+            streamName: "HR",
+            streamType: "hr",
+            streamID: "stream-offline-hr",
+            chunkID: UUID(),
+            chunkSequenceNumber: 1,
+            createdAtUTC: Date(),
+            samples: [sample],
+            collectionMode: .offlineRecording,
+            streamProfile: PolarStreamProfile.hrOffline,
+            sourceDeviceID: nil
+        )
+        let request = try XCTUnwrap(chunk.makeCanonicalRequest())
+        guard case .offlineHr(let payload) = request.payload else {
+            return XCTFail("Expected offline hr payload")
+        }
+        XCTAssertEqual(payload.samples.first?.sampleIndex, 7)
+    }
 }

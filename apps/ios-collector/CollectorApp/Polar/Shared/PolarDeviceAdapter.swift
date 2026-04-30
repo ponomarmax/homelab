@@ -722,7 +722,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         guard let selectedPolarIdentifier else {
             return OfflineUploadPreparationResult(
                 batches: [],
-                messagesByStream: [.acc: "Failed: No selected device"]
+                messagesByStream: [.hr: "failed: no selected device"]
             )
         }
 
@@ -742,63 +742,30 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         } catch {
             return OfflineUploadPreparationResult(
                 batches: [],
-                messagesByStream: [.acc: "Failed to list offline recordings: \(error.localizedDescription)"]
+                messagesByStream: [.hr: "failed: list recordings: \(error.localizedDescription)"]
             )
         }
 
         var batches: [OfflineUploadBatch] = []
         var messagesByStream: [PolarOfflineStream: String] = [:]
+        let fetchStartedAt = Date()
 
         for entry in entries {
-            switch entry.type {
-            case .acc:
-                do {
-                    let offlineData = try await fetchOfflineRecord(
-                        identifier: selectedPolarIdentifier,
-                        entry: entry
-                    )
-                    guard case .accOfflineRecordingData(let accData, let startTime, let settings) = offlineData else {
-                        messagesByStream[.acc] = "Skipped: Unsupported ACC payload format"
-                        continue
-                    }
-                    let samples = Self.makeAccSamples(from: accData, startTime: startTime, settings: settings)
-                    if !samples.isEmpty {
-                        batches.append(
-                            OfflineUploadBatch(stream: .accelerometer, sourcePath: entry.path, samples: samples)
-                        )
-                        messagesByStream[.acc] = "Prepared \(samples.count) ACC sample(s)"
-                    } else {
-                        messagesByStream[.acc] = "Skipped: ACC recording contains no samples"
-                    }
-                } catch {
-                    messagesByStream[.acc] = "Failed: \(error.localizedDescription)"
+            guard let offlineStream = Self.offlineStream(from: entry.type) else { continue }
+            messagesByStream[offlineStream] = "fetching"
+            do {
+                let offlineData = try await fetchOfflineRecord(identifier: selectedPolarIdentifier, entry: entry)
+                let (stream, samples, message) = Self.makeOfflineSamples(
+                    from: offlineData,
+                    fallbackType: entry.type,
+                    fetchStartedAt: fetchStartedAt
+                )
+                if !samples.isEmpty {
+                    batches.append(OfflineUploadBatch(stream: stream, sourcePath: entry.path, samples: samples))
                 }
-            case .hr:
-                do {
-                    let offlineData = try await fetchOfflineRecord(
-                        identifier: selectedPolarIdentifier,
-                        entry: entry
-                    )
-                    guard case .hrOfflineRecordingData(let hrData, let startTime) = offlineData else {
-                        messagesByStream[.hr] = "Skipped: Unsupported HR payload format"
-                        continue
-                    }
-                    let samples = Self.makeHrSamples(from: hrData, startTime: startTime)
-                    if !samples.isEmpty {
-                        batches.append(
-                            OfflineUploadBatch(stream: .heartRate, sourcePath: entry.path, samples: samples)
-                        )
-                        messagesByStream[.hr] = "Prepared \(samples.count) HR sample(s)"
-                    } else {
-                        messagesByStream[.hr] = "Skipped: HR recording contains no samples"
-                    }
-                } catch {
-                    messagesByStream[.hr] = "Failed: \(error.localizedDescription)"
-                }
-            default:
-                if let stream = Self.offlineStream(from: entry.type) {
-                    messagesByStream[stream] = "Skipped: Stream is not supported by current upload contract"
-                }
+                messagesByStream[offlineStream] = message
+            } catch {
+                messagesByStream[offlineStream] = "failed: \(error.localizedDescription)"
             }
         }
 
@@ -1373,21 +1340,18 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
 
     private static func makeAccSamples(
         from data: PolarAccData,
-        startTime: Date,
+        collectorTimestamp: Date,
         settings: PolarSensorSetting
     ) -> [HeartRateSample] {
-        guard let firstTimestamp = data.first?.timeStamp else { return [] }
         let sampleRate = settings.settings[.sampleRate]?.first.map { UInt32($0) }
         let range = settings.settings[.range]?.first.map { UInt32($0) }
         let streamSettings = mapStreamSettings(from: settings)
 
         return data.enumerated().map { index, sample in
-            let deltaNs = sample.timeStamp >= firstTimestamp ? (sample.timeStamp - firstTimestamp) : 0
-            let collectorTime = startTime.addingTimeInterval(Double(deltaNs) / 1_000_000_000.0)
             return HeartRateSample(
                 stream: .accelerometer,
-                collectorReceivedAtUTC: collectorTime,
-                deviceTimestampRaw: collectorTime,
+                collectorReceivedAtUTC: collectorTimestamp,
+                deviceTimestampRaw: nil,
                 sourceTimestampKind: .deviceReported,
                 sampleSequenceNumber: index + 1,
                 payload: .acc(
@@ -1407,13 +1371,12 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
 
     private static func makeHrSamples(
         from data: PolarHrData,
-        startTime: Date
+        collectorTimestamp: Date
     ) -> [HeartRateSample] {
         data.enumerated().map { index, sample in
-            let sampleTime = startTime.addingTimeInterval(Double(index))
             return HeartRateSample(
                 stream: .heartRate,
-                collectorReceivedAtUTC: sampleTime,
+                collectorReceivedAtUTC: collectorTimestamp,
                 deviceTimestampRaw: nil,
                 sourceTimestampKind: .deviceReported,
                 sampleSequenceNumber: index + 1,
@@ -1430,6 +1393,129 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
                 ),
                 streamSettings: nil
             )
+        }
+    }
+
+    private static func makePpiSamples(from data: PolarPpiData, collectorTimestamp: Date) -> [HeartRateSample] {
+        data.samples.enumerated().map { index, sample in
+            HeartRateSample(
+                stream: .ppi,
+                collectorReceivedAtUTC: collectorTimestamp,
+                deviceTimestampRaw: nil,
+                sourceTimestampKind: .deviceReported,
+                sampleSequenceNumber: index + 1,
+                payload: .ppi(
+                    PolarPpiSampleData(
+                        timeStamp: sample.timeStamp,
+                        hr: sample.hr,
+                        ppiMs: sample.ppInMs,
+                        errorEstimateMs: sample.ppErrorEstimate,
+                        blockerBit: sample.blockerBit,
+                        skinContactStatus: sample.skinContactStatus,
+                        skinContactSupported: sample.skinContactSupported
+                    )
+                ),
+                streamSettings: nil
+            )
+        }
+    }
+
+    private static func makePpgSamples(from data: PolarPpgData, collectorTimestamp: Date, settings: PolarSensorSetting) -> [HeartRateSample] {
+        let streamSettings = mapStreamSettings(from: settings)
+        return data.samples.enumerated().map { index, sample in
+            let channels = sample.channelSamples
+            return HeartRateSample(
+                stream: .ppg,
+                collectorReceivedAtUTC: collectorTimestamp,
+                deviceTimestampRaw: nil,
+                sourceTimestampKind: .deviceReported,
+                sampleSequenceNumber: index + 1,
+                payload: .ppg(
+                    PolarPpgSampleData(
+                        deviceTimeNS: sample.timeStamp,
+                        ppg0: channels.indices.contains(0) ? channels[0] : nil,
+                        ppg1: channels.indices.contains(1) ? channels[1] : nil,
+                        ppg2: channels.indices.contains(2) ? channels[2] : nil,
+                        ambient: channels.indices.contains(3) ? channels[3] : nil,
+                        channelSamples: channels
+                    )
+                ),
+                streamSettings: streamSettings
+            )
+        }
+    }
+
+    private static func makeMagSamples(from data: PolarMagnetometerData, collectorTimestamp: Date, settings: PolarSensorSetting) -> [HeartRateSample] {
+        let streamSettings = mapStreamSettings(from: settings)
+        return data.enumerated().map { index, sample in
+            HeartRateSample(
+                stream: .magnetometer,
+                collectorReceivedAtUTC: collectorTimestamp,
+                deviceTimestampRaw: nil,
+                sourceTimestampKind: .deviceReported,
+                sampleSequenceNumber: index + 1,
+                payload: .mag(
+                    PolarMagSampleData(deviceTimeNS: sample.timeStamp, xGauss: sample.x, yGauss: sample.y, zGauss: sample.z)
+                ),
+                streamSettings: streamSettings
+            )
+        }
+    }
+
+    private static func makeGyrSamples(from data: PolarGyroData, collectorTimestamp: Date, settings: PolarSensorSetting) -> [HeartRateSample] {
+        let streamSettings = mapStreamSettings(from: settings)
+        return data.enumerated().map { index, sample in
+            HeartRateSample(
+                stream: .gyroscope,
+                collectorReceivedAtUTC: collectorTimestamp,
+                deviceTimestampRaw: nil,
+                sourceTimestampKind: .deviceReported,
+                sampleSequenceNumber: index + 1,
+                payload: .gyr(
+                    PolarGyrSampleData(deviceTimeNS: sample.timeStamp, xDps: sample.x, yDps: sample.y, zDps: sample.z)
+                ),
+                streamSettings: streamSettings
+            )
+        }
+    }
+
+    private static func makeOfflineSamples(
+        from offlineData: PolarOfflineRecordingData,
+        fallbackType: PolarDeviceDataType,
+        fetchStartedAt: Date
+    ) -> (CollectorStream, [HeartRateSample], String) {
+        switch offlineData {
+        case .hrOfflineRecordingData(let hrData, _):
+            let samples = makeHrSamples(from: hrData, collectorTimestamp: fetchStartedAt)
+            return (.heartRate, samples, samples.isEmpty ? "skipped: no samples" : "uploaded-ready: \(samples.count)")
+        case .ppiOfflineRecordingData(let ppiData, _):
+            let samples = makePpiSamples(from: ppiData, collectorTimestamp: fetchStartedAt)
+            return (.ppi, samples, samples.isEmpty ? "skipped: no samples" : "uploaded-ready: \(samples.count)")
+        case .accOfflineRecordingData(let accData, _, let settings):
+            let samples = makeAccSamples(from: accData, collectorTimestamp: fetchStartedAt, settings: settings)
+            return (.accelerometer, samples, samples.isEmpty ? "skipped: no samples" : "uploaded-ready: \(samples.count)")
+        case .ppgOfflineRecordingData(let ppgData, _, let settings):
+            let samples = makePpgSamples(from: ppgData, collectorTimestamp: fetchStartedAt, settings: settings)
+            return (.ppg, samples, samples.isEmpty ? "skipped: no samples" : "uploaded-ready: \(samples.count)")
+        case .magOfflineRecordingData(let magData, _, let settings):
+            let samples = makeMagSamples(from: magData, collectorTimestamp: fetchStartedAt, settings: settings)
+            return (.magnetometer, samples, samples.isEmpty ? "skipped: no samples" : "uploaded-ready: \(samples.count)")
+        case .gyroOfflineRecordingData(let gyrData, _, let settings):
+            let samples = makeGyrSamples(from: gyrData, collectorTimestamp: fetchStartedAt, settings: settings)
+            return (.gyroscope, samples, samples.isEmpty ? "skipped: no samples" : "uploaded-ready: \(samples.count)")
+        default:
+            let stream: CollectorStream = {
+                switch fallbackType {
+                case .hr: return .heartRate
+                case .ppi: return .ppi
+                case .acc: return .accelerometer
+                case .ppg: return .ppg
+                case .magnetometer: return .magnetometer
+                case .gyro: return .gyroscope
+                default: return .heartRate
+                }
+            }()
+            return (stream, [], "skipped: unsupported payload")
         }
     }
 

@@ -24,12 +24,30 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
         case "polar.hr":
             guard let hrPayload = makeHrPayload(samples: samples) else { return nil }
             payload = .hr(hrPayload)
+        case "polar.offline.hr":
+            guard let hrPayload = makeOfflineHrPayload(samples: samples) else { return nil }
+            payload = .offlineHr(hrPayload)
+        case "polar.offline.ppi":
+            guard let ppiPayload = makeOfflinePpiPayload(samples: samples) else { return nil }
+            payload = .offlinePpi(ppiPayload)
         case "polar.ecg":
             guard let ecgPayload = makeEcgPayload(samples: samples) else { return nil }
             payload = .ecg(ecgPayload)
         case "polar.acc":
             guard let accPayload = makeAccPayload(samples: samples) else { return nil }
             payload = .acc(accPayload)
+        case "polar.offline.acc":
+            guard let accPayload = makeOfflineAccPayload(samples: samples) else { return nil }
+            payload = .offlineAcc(accPayload)
+        case "polar.offline.ppg":
+            guard let ppgPayload = makeOfflinePpgPayload(samples: samples) else { return nil }
+            payload = .offlinePpg(ppgPayload)
+        case "polar.offline.mag":
+            guard let magPayload = makeOfflineMagPayload(samples: samples) else { return nil }
+            payload = .offlineMag(magPayload)
+        case "polar.offline.gyr", "polar.offline.gyro":
+            guard let gyrPayload = makeOfflineGyrPayload(samples: samples) else { return nil }
+            payload = .offlineGyr(gyrPayload)
         case "polar.device_battery":
             guard let batteryPayload = makeBatteryPayload(samples: samples) else { return nil }
             payload = .battery(batteryPayload)
@@ -88,6 +106,24 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
             streamSettings: resolveStreamSettings(from: samples),
             samples: payloadSamples
         )
+    }
+
+    private func makeOfflineHrPayload(samples: [HeartRateSample]) -> CanonicalPolarOfflineHrPayload? {
+        let payloadSamples = samples.compactMap { sample -> CanonicalPolarOfflineHrSample? in
+            guard case .hr(let streamData) = sample.payload else { return nil }
+            return CanonicalPolarOfflineHrSample(
+                sampleIndex: sample.sampleSequenceNumber,
+                hr: streamData.hr,
+                ppgQuality: streamData.ppgQuality,
+                correctedHr: streamData.correctedHr,
+                rrsMs: streamData.rrsMs,
+                rrAvailable: streamData.rrAvailable,
+                contactStatus: streamData.contactStatus,
+                contactStatusSupported: streamData.contactStatusSupported
+            )
+        }
+        guard !payloadSamples.isEmpty else { return nil }
+        return CanonicalPolarOfflineHrPayload(type: "HR", source: "polar_verity_sense_offline", samples: payloadSamples)
     }
 
     private func makeEcgPayload(samples: [HeartRateSample]) -> CanonicalPolarEcgPayload? {
@@ -154,6 +190,67 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
             ),
             samples: payloadSamples
         )
+    }
+
+    private func makeOfflineAccPayload(samples: [HeartRateSample]) -> CanonicalPolarOfflineAccPayload? {
+        let payloadSamples = samples.compactMap { sample -> CanonicalPolarOfflineAccSample? in
+            guard case .acc(let accData) = sample.payload else { return nil }
+            guard let deviceTimeNS = accData.deviceTimeNS else { return nil }
+            return CanonicalPolarOfflineAccSample(timeStamp: deviceTimeNS, xMg: accData.xMg, yMg: accData.yMg, zMg: accData.zMg)
+        }
+        guard !payloadSamples.isEmpty else { return nil }
+        return CanonicalPolarOfflineAccPayload(type: "ACC", source: "polar_verity_sense_offline", samples: payloadSamples)
+    }
+
+    private func makeOfflinePpiPayload(samples: [HeartRateSample]) -> CanonicalPolarOfflinePpiPayload? {
+        let payloadSamples = samples.compactMap { sample -> CanonicalPolarOfflinePpiSample? in
+            guard case .ppi(let ppiData) = sample.payload else { return nil }
+            return CanonicalPolarOfflinePpiSample(
+                timeStamp: ppiData.timeStamp,
+                hr: ppiData.hr,
+                ppiMs: ppiData.ppiMs,
+                ppErrorEstimate: ppiData.errorEstimateMs,
+                blockerBit: ppiData.blockerBit,
+                skinContactStatus: ppiData.skinContactStatus,
+                skinContactSupported: ppiData.skinContactSupported
+            )
+        }
+        guard !payloadSamples.isEmpty else { return nil }
+        return CanonicalPolarOfflinePpiPayload(type: "PPI", source: "polar_verity_sense_offline", samples: payloadSamples)
+    }
+
+    private func makeOfflinePpgPayload(samples: [HeartRateSample]) -> CanonicalPolarOfflinePpgPayload? {
+        let payloadSamples = samples.compactMap { sample -> CanonicalPolarOfflinePpgSample? in
+            guard case .ppg(let ppgData) = sample.payload else { return nil }
+            return CanonicalPolarOfflinePpgSample(
+                timeStamp: ppgData.deviceTimeNS,
+                ppg0: ppgData.ppg0,
+                ppg1: ppgData.ppg1,
+                ppg2: ppgData.ppg2,
+                ambient: ppgData.ambient,
+                channelSamples: ppgData.channelSamples
+            )
+        }
+        guard !payloadSamples.isEmpty else { return nil }
+        return CanonicalPolarOfflinePpgPayload(type: "PPG", source: "polar_verity_sense_offline", samples: payloadSamples)
+    }
+
+    private func makeOfflineMagPayload(samples: [HeartRateSample]) -> CanonicalPolarOfflineMagPayload? {
+        let payloadSamples = samples.compactMap { sample -> CanonicalPolarOfflineMagSample? in
+            guard case .mag(let magData) = sample.payload else { return nil }
+            return CanonicalPolarOfflineMagSample(timeStamp: magData.deviceTimeNS, xGauss: magData.xGauss, yGauss: magData.yGauss, zGauss: magData.zGauss)
+        }
+        guard !payloadSamples.isEmpty else { return nil }
+        return CanonicalPolarOfflineMagPayload(type: "MAG", source: "polar_verity_sense_offline", samples: payloadSamples)
+    }
+
+    private func makeOfflineGyrPayload(samples: [HeartRateSample]) -> CanonicalPolarOfflineGyrPayload? {
+        let payloadSamples = samples.compactMap { sample -> CanonicalPolarOfflineGyrSample? in
+            guard case .gyr(let gyrData) = sample.payload else { return nil }
+            return CanonicalPolarOfflineGyrSample(timeStamp: gyrData.deviceTimeNS, xDps: gyrData.xDps, yDps: gyrData.yDps, zDps: gyrData.zDps)
+        }
+        guard !payloadSamples.isEmpty else { return nil }
+        return CanonicalPolarOfflineGyrPayload(type: "GYR", source: "polar_verity_sense_offline", samples: payloadSamples)
     }
 
     private func makeBatteryPayload(samples: [HeartRateSample]) -> CanonicalPolarDeviceBatteryPayload? {
@@ -227,6 +324,60 @@ struct CanonicalPolarHrPayload: Equatable, Codable, Sendable {
         case streamSettings = "stream_settings"
         case samples
     }
+}
+
+struct CanonicalPolarOfflineHrSample: Equatable, Codable, Sendable {
+    let sampleIndex: Int
+    let hr: Int
+    let ppgQuality: Int
+    let correctedHr: Int
+    let rrsMs: [Int]
+    let rrAvailable: Bool
+    let contactStatus: Bool
+    let contactStatusSupported: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case sampleIndex = "sample_index"
+        case hr
+        case ppgQuality = "ppg_quality"
+        case correctedHr = "corrected_hr"
+        case rrsMs = "rrs_ms"
+        case rrAvailable = "rr_available"
+        case contactStatus = "contact_status"
+        case contactStatusSupported = "contact_status_supported"
+    }
+}
+
+struct CanonicalPolarOfflineHrPayload: Equatable, Codable, Sendable {
+    let type: String
+    let source: String
+    let samples: [CanonicalPolarOfflineHrSample]
+}
+
+struct CanonicalPolarOfflinePpiSample: Equatable, Codable, Sendable {
+    let timeStamp: UInt64
+    let hr: Int
+    let ppiMs: UInt16
+    let ppErrorEstimate: UInt16
+    let blockerBit: Int
+    let skinContactStatus: Int
+    let skinContactSupported: Int
+
+    enum CodingKeys: String, CodingKey {
+        case timeStamp = "timeStamp"
+        case hr
+        case ppiMs = "ppInMs"
+        case ppErrorEstimate = "ppErrorEstimate"
+        case blockerBit = "blockerBit"
+        case skinContactStatus = "skinContactStatus"
+        case skinContactSupported = "skinContactSupported"
+    }
+}
+
+struct CanonicalPolarOfflinePpiPayload: Equatable, Codable, Sendable {
+    let type: String
+    let source: String
+    let samples: [CanonicalPolarOfflinePpiSample]
 }
 
 struct CanonicalPolarEcgSample: Equatable, Codable, Sendable {
@@ -311,6 +462,90 @@ struct CanonicalPolarAccPayload: Equatable, Codable, Sendable {
     }
 }
 
+struct CanonicalPolarOfflineAccSample: Equatable, Codable, Sendable {
+    let timeStamp: UInt64
+    let xMg: Int32
+    let yMg: Int32
+    let zMg: Int32
+
+    enum CodingKeys: String, CodingKey {
+        case timeStamp = "timeStamp"
+        case xMg = "x"
+        case yMg = "y"
+        case zMg = "z"
+    }
+}
+
+struct CanonicalPolarOfflineAccPayload: Equatable, Codable, Sendable {
+    let type: String
+    let source: String
+    let samples: [CanonicalPolarOfflineAccSample]
+}
+
+struct CanonicalPolarOfflinePpgSample: Equatable, Codable, Sendable {
+    let timeStamp: UInt64
+    let ppg0: Int32?
+    let ppg1: Int32?
+    let ppg2: Int32?
+    let ambient: Int32?
+    let channelSamples: [Int32]
+
+    enum CodingKeys: String, CodingKey {
+        case timeStamp = "timeStamp"
+        case ppg0 = "ppg0"
+        case ppg1 = "ppg1"
+        case ppg2 = "ppg2"
+        case ambient = "ambient"
+        case channelSamples = "channelSamples"
+    }
+}
+
+struct CanonicalPolarOfflinePpgPayload: Equatable, Codable, Sendable {
+    let type: String
+    let source: String
+    let samples: [CanonicalPolarOfflinePpgSample]
+}
+
+struct CanonicalPolarOfflineMagSample: Equatable, Codable, Sendable {
+    let timeStamp: UInt64
+    let xGauss: Float
+    let yGauss: Float
+    let zGauss: Float
+
+    enum CodingKeys: String, CodingKey {
+        case timeStamp = "timeStamp"
+        case xGauss = "x"
+        case yGauss = "y"
+        case zGauss = "z"
+    }
+}
+
+struct CanonicalPolarOfflineMagPayload: Equatable, Codable, Sendable {
+    let type: String
+    let source: String
+    let samples: [CanonicalPolarOfflineMagSample]
+}
+
+struct CanonicalPolarOfflineGyrSample: Equatable, Codable, Sendable {
+    let timeStamp: UInt64
+    let xDps: Float
+    let yDps: Float
+    let zDps: Float
+
+    enum CodingKeys: String, CodingKey {
+        case timeStamp = "timeStamp"
+        case xDps = "x"
+        case yDps = "y"
+        case zDps = "z"
+    }
+}
+
+struct CanonicalPolarOfflineGyrPayload: Equatable, Codable, Sendable {
+    let type: String
+    let source: String
+    let samples: [CanonicalPolarOfflineGyrSample]
+}
+
 struct CanonicalPolarDeviceBatteryPayload: Equatable, Codable, Sendable {
     struct Units: Equatable, Codable, Sendable {
         let levelPercent: String
@@ -351,8 +586,14 @@ struct CanonicalPolarDeviceBatteryPayload: Equatable, Codable, Sendable {
 
 enum CanonicalPayload: Equatable, Codable, Sendable {
     case hr(CanonicalPolarHrPayload)
+    case offlineHr(CanonicalPolarOfflineHrPayload)
+    case offlinePpi(CanonicalPolarOfflinePpiPayload)
     case ecg(CanonicalPolarEcgPayload)
     case acc(CanonicalPolarAccPayload)
+    case offlineAcc(CanonicalPolarOfflineAccPayload)
+    case offlinePpg(CanonicalPolarOfflinePpgPayload)
+    case offlineMag(CanonicalPolarOfflineMagPayload)
+    case offlineGyr(CanonicalPolarOfflineGyrPayload)
     case battery(CanonicalPolarDeviceBatteryPayload)
 
     func encode(to encoder: Encoder) throws {
@@ -360,9 +601,21 @@ enum CanonicalPayload: Equatable, Codable, Sendable {
         switch self {
         case .hr(let value):
             try container.encode(value)
+        case .offlineHr(let value):
+            try container.encode(value)
+        case .offlinePpi(let value):
+            try container.encode(value)
         case .ecg(let value):
             try container.encode(value)
         case .acc(let value):
+            try container.encode(value)
+        case .offlineAcc(let value):
+            try container.encode(value)
+        case .offlinePpg(let value):
+            try container.encode(value)
+        case .offlineMag(let value):
+            try container.encode(value)
+        case .offlineGyr(let value):
             try container.encode(value)
         case .battery(let value):
             try container.encode(value)
@@ -375,12 +628,36 @@ enum CanonicalPayload: Equatable, Codable, Sendable {
             self = .hr(value)
             return
         }
+        if let value = try? container.decode(CanonicalPolarOfflineHrPayload.self) {
+            self = .offlineHr(value)
+            return
+        }
+        if let value = try? container.decode(CanonicalPolarOfflinePpiPayload.self) {
+            self = .offlinePpi(value)
+            return
+        }
         if let value = try? container.decode(CanonicalPolarEcgPayload.self) {
             self = .ecg(value)
             return
         }
         if let value = try? container.decode(CanonicalPolarAccPayload.self) {
             self = .acc(value)
+            return
+        }
+        if let value = try? container.decode(CanonicalPolarOfflineAccPayload.self) {
+            self = .offlineAcc(value)
+            return
+        }
+        if let value = try? container.decode(CanonicalPolarOfflinePpgPayload.self) {
+            self = .offlinePpg(value)
+            return
+        }
+        if let value = try? container.decode(CanonicalPolarOfflineMagPayload.self) {
+            self = .offlineMag(value)
+            return
+        }
+        if let value = try? container.decode(CanonicalPolarOfflineGyrPayload.self) {
+            self = .offlineGyr(value)
             return
         }
         if let value = try? container.decode(CanonicalPolarDeviceBatteryPayload.self) {

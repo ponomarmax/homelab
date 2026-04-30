@@ -1009,4 +1009,87 @@ final class CollectorCoreTests: XCTestCase {
         XCTAssertEqual(core.offlineLifecycleState, .partialSuccess)
         XCTAssertEqual(core.offlineStreamRunMessages[.acc], "Busy")
     }
+
+    func testStopAllOfflineTriggersFetchChunkUploadFlow() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = Dictionary(
+            uniqueKeysWithValues: PolarOfflineStream.allCases.map { ($0, OfflineStreamCapability(stream: $0, isSupported: true, reason: nil)) }
+        )
+        adapter.nextOfflinePreparationResult = OfflineUploadPreparationResult(
+            batches: [
+                OfflineUploadBatch(
+                    stream: .heartRate,
+                    sourcePath: "/U/0/HR/1.rec",
+                    samples: [makeSample(hr: 61, receivedAt: Date(timeIntervalSince1970: 100), sequence: 1)]
+                ),
+                OfflineUploadBatch(
+                    stream: .ppi,
+                    sourcePath: "/U/0/PPI/1.rec",
+                    samples: [
+                        HeartRateSample(
+                            stream: .ppi,
+                            collectorReceivedAtUTC: Date(timeIntervalSince1970: 101),
+                            sourceTimestampKind: .collectorObserved,
+                            sampleSequenceNumber: 1,
+                            payload: .ppi(
+                                PolarPpiSampleData(
+                                    timeStamp: 0,
+                                    hr: 62,
+                                    ppiMs: 900,
+                                    errorEstimateMs: 5,
+                                    blockerBit: 0,
+                                    skinContactStatus: 1,
+                                    skinContactSupported: 1
+                                )
+                            )
+                        )
+                    ]
+                )
+            ],
+            messagesByStream: [.hr: "fetched", .ppi: "fetched"]
+        )
+        let transport = RecordingTransport()
+        let core = CollectorCore(adapter: adapter, transport: transport)
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        await core.stopOfflineAllSupported()
+
+        XCTAssertFalse(transport.uploadedChunks.isEmpty)
+        XCTAssertEqual(core.uploadStatus, .success)
+        XCTAssertEqual(core.offlineStreamRunMessages[.hr], "fetched")
+    }
+
+    func testOfflineUploadFailureForOneChunkDoesNotCrashFlow() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = Dictionary(
+            uniqueKeysWithValues: PolarOfflineStream.allCases.map { ($0, OfflineStreamCapability(stream: $0, isSupported: true, reason: nil)) }
+        )
+        adapter.nextOfflinePreparationResult = OfflineUploadPreparationResult(
+            batches: [
+                OfflineUploadBatch(stream: .heartRate, sourcePath: "/U/0/HR/1.rec", samples: [makeSample(hr: 60, receivedAt: Date(timeIntervalSince1970: 100), sequence: 1)]),
+                OfflineUploadBatch(stream: .accelerometer, sourcePath: "/U/0/ACC/1.rec", samples: [
+                    HeartRateSample(
+                        stream: .accelerometer,
+                        collectorReceivedAtUTC: Date(timeIntervalSince1970: 100),
+                        sourceTimestampKind: .collectorObserved,
+                        sampleSequenceNumber: 1,
+                        payload: .acc(
+                            PolarAccSampleData(deviceTimeNS: 10, xMg: 1, yMg: 2, zMg: 3, sampleRateHz: nil, rangeMg: nil)
+                        )
+                    )
+                ])
+            ],
+            messagesByStream: [.hr: "fetched", .acc: "fetched"]
+        )
+        let transport = RecordingTransport(failUploadAttempts: 1)
+        let core = CollectorCore(adapter: adapter, transport: transport)
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        await core.uploadOfflineRecordings()
+
+        XCTAssertEqual(core.uploadStatus, .failure)
+        XCTAssertGreaterThanOrEqual(transport.uploadedChunks.count, 1)
+    }
 }

@@ -517,6 +517,7 @@ final class CollectorCore: ObservableObject {
     func stopOfflineAllSupported() async {
         let streams = offlineStreamCapabilities.values.filter(\.isSupported).map(\.stream).sorted { $0.rawValue < $1.rawValue }
         await stopOffline(streams: streams)
+        await uploadOfflineRecordings()
     }
 
     func listOfflineRecordings() async {
@@ -545,7 +546,7 @@ final class CollectorCore: ObservableObject {
             return
         }
 
-        offlineStatusMessage = "Preparing offline recordings for upload..."
+        offlineStatusMessage = "fetching"
         let preparation = await adapter.prepareOfflineUploadBatches()
         offlineStreamRunMessages.merge(
             preparation.messagesByStream,
@@ -567,7 +568,7 @@ final class CollectorCore: ObservableObject {
         }
         bufferedSamplesCount = bufferedSampleTotalCount()
 
-        offlineStatusMessage = "Uploading offline recordings..."
+        offlineStatusMessage = "uploading"
         await flushAndUploadAllBufferedSamples(trigger: .manual)
         if uploadStatus == .success {
             offlineLifecycleState = .ready
@@ -664,7 +665,7 @@ final class CollectorCore: ObservableObject {
             return nil
         }
 
-        let streamProfile = uploadConfiguration.streamProfile(for: stream)
+        let streamProfile = resolvedStreamProfile(for: stream, session: session)
         let chunkSequenceNumber = nextChunkSequenceNumberByStream[stream] ?? 1
 
         let chunk = transport.prepareUploadChunk(
@@ -1195,8 +1196,11 @@ final class CollectorCore: ObservableObject {
             .heartRate,
             .ecg,
             .accelerometer,
-            .battery,
             .ppi,
+            .ppg,
+            .magnetometer,
+            .gyroscope,
+            .battery,
             .eeg
         ]
     }
@@ -1205,6 +1209,22 @@ final class CollectorCore: ObservableObject {
         streamFlushOrder().first { stream in
             let samples = bufferedSamplesByStream[stream] ?? []
             return !samples.isEmpty
+        }
+    }
+
+    private func resolvedStreamProfile(for stream: CollectorStream, session: CollectionSession) -> StreamMetadataProfile {
+        guard session.collectionMode == .offlineRecording else {
+            return uploadConfiguration.streamProfile(for: stream)
+        }
+        switch stream {
+        case .heartRate: return PolarStreamProfile.hrOffline
+        case .ppi: return PolarStreamProfile.ppiOffline
+        case .accelerometer: return PolarStreamProfile.accOffline
+        case .ppg: return PolarStreamProfile.ppgOffline
+        case .magnetometer: return PolarStreamProfile.magOffline
+        case .gyroscope: return PolarStreamProfile.gyrOffline
+        case .ecg, .eeg, .battery:
+            return uploadConfiguration.streamProfile(for: stream)
         }
     }
 
