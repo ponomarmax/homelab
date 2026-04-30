@@ -1,0 +1,31 @@
+{
+  "recording": {
+    "type": "PPG",
+    "source": "polar_verity_sense_offline"
+  },
+  "units": {
+    "raw_timestamp_ns": "ns",
+    "ppg0": "raw_int",
+    "ppg1": "raw_int",
+    "ppg2": "raw_int",
+    "ambient": "raw_int"
+  },
+  "samples": [
+    {
+      "sample_index": 0,
+      "raw_timestamp_ns": 545998017227188608,
+      "ppg0": 98321,
+      "ppg1": 97388,
+      "ppg2": 96540,
+      "ambient": 226
+    },
+    {
+      "sample_index": 1,
+      "raw_timestamp_ns": 545998017229688608,
+      "ppg0": 98312,
+      "ppg1": 97395,
+      "ppg2": 96544,
+      "ambient": 227
+    }
+  ]
+}

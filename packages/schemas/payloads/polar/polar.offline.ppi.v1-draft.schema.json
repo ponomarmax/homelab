@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homelab.local/schemas/payloads/polar/polar.offline.ppi.v1-draft.schema.json",
+  "title": "polar.offline.ppi v1-draft",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recording",
+    "units",
+    "samples"
+  ],
+  "properties": {
+    "recording": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "source"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "PPI"
+        },
+        "source": {
+          "type": "string",
+          "const": "polar_verity_sense_offline"
+        }
+      }
+    },
+    "units": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_timestamp_ns",
+        "ppi_ms"
+      ],
+      "properties": {
+        "raw_timestamp_ns": {
+          "type": "string",
+          "const": "ns"
+        },
+        "ppi_ms": {
+          "type": "string",
+          "const": "ms"
+        }
+      }
+    },
+    "samples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sample_index",
+          "raw_timestamp_ns",
+          "ppi_ms",
+          "hr",
+          "error_estimate",
+          "blocker_bit",
+          "skin_contact_support",
+          "skin_contact_status"
+        ],
+        "properties": {
+          "sample_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "raw_timestamp_ns": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ppi_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hr": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error_estimate": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "blocker_bit": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "skin_contact_support": {
+            "type": "boolean"
+          },
+          "skin_contact_status": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homelab.local/schemas/payloads/polar/polar.offline.hr.v1-draft.schema.json",
+  "title": "polar.offline.hr v1-draft",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recording",
+    "samples"
+  ],
+  "properties": {
+    "recording": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "source"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "HR"
+        },
+        "source": {
+          "type": "string",
+          "const": "polar_verity_sense_offline"
+        }
+      }
+    },
+    "samples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sample_index",
+          "hr",
+          "ppg_quality",
+          "corrected_hr",
+          "contact_supported",
+          "contact_status",
+          "rr_available",
+          "rr_ms"
+        ],
+        "properties": {
+          "sample_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hr": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ppg_quality": {
+            "type": "integer"
+          },
+          "corrected_hr": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "contact_supported": {
+            "type": "boolean"
+          },
+          "contact_status": {
+            "type": "boolean"
+          },
+          "rr_available": {
+            "type": "boolean"
+          },
+          "rr_ms": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -9,6 +9,12 @@ This registry lists sensor-specific payload contracts that may be referenced by 
 | `polar.acc` | `1.0` | Polar H10 | `acc` | accepted | `packages/schemas/payloads/polar/polar.acc.v1.schema.json` | `packages/schemas/examples/payloads/polar.acc.v1.json` |
 | `polar.ecg` | `1.0` | Polar H10 | `ecg` | accepted | `packages/schemas/payloads/polar/polar.ecg.v1.schema.json` | `packages/schemas/examples/payloads/polar.ecg.v1.json` |
 | `polar.device_battery` | `1.0` | Polar H10 | `battery` | accepted | `packages/schemas/payloads/polar/polar.device_battery.v1.schema.json` | `packages/schemas/examples/payloads/polar.device_battery.v1.json` |
+| `polar.offline.hr` | `1.0-draft` | Polar Verity Sense | `hr` | draft | `packages/schemas/payloads/polar/polar.offline.hr.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.hr.v1-draft.json` |
+| `polar.offline.ppi` | `1.0-draft` | Polar Verity Sense | `ppi` | draft | `packages/schemas/payloads/polar/polar.offline.ppi.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.ppi.v1-draft.json` |
+| `polar.offline.acc` | `1.0-draft` | Polar Verity Sense | `acc` | draft | `packages/schemas/payloads/polar/polar.offline.acc.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.acc.v1-draft.json` |
+| `polar.offline.ppg` | `1.0-draft` | Polar Verity Sense | `ppg` | draft | `packages/schemas/payloads/polar/polar.offline.ppg.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.ppg.v1-draft.json` |
+| `polar.offline.mag` | `1.0-draft` | Polar Verity Sense | `mag` | draft | `packages/schemas/payloads/polar/polar.offline.mag.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.mag.v1-draft.json` |
+| `polar.offline.gyr` | `1.0-draft` | Polar Verity Sense | `gyro` | draft | `packages/schemas/payloads/polar/polar.offline.gyr.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.gyr.v1-draft.json` |
 | `muse.eeg` | `1.0-draft` | Muse Athena | `eeg` | draft | `packages/schemas/payloads/muse/muse.eeg.v1-draft.schema.json` | `packages/schemas/examples/payloads/muse.eeg.v1-draft.json` |
 | `muse.ppg` | `1.0-draft` | Muse Athena | `ppg` | draft | `packages/schemas/payloads/muse/muse.ppg.v1-draft.schema.json` | `packages/schemas/examples/payloads/muse.ppg.v1-draft.json` |
 
@@ -19,4 +25,5 @@ This registry lists sensor-specific payload contracts that may be referenced by 
 - Ingestion validates the transport envelope only; payload content remains opaque at ingest boundary.
 - Deep sensor parsing belongs after raw ingestion.
 - `polar.device_battery` is a known device-status stream and is supported by the wearable processing pipeline via a dedicated battery handler.
+- `polar.offline.*` payloads preserve raw offline fields (including raw/zero timestamps) and do not define canonical `ts_utc`.
 - Sensor payloads may include optional `stream_settings` to preserve SDK-negotiated runtime stream configuration as raw metadata.
