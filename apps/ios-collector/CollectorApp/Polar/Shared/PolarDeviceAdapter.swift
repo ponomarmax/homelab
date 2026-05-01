@@ -81,6 +81,12 @@ final class PolarDeviceAdapter: CollectorDeviceAdapter {
         }
     }
 
+    func offlineRecordingStatus() async -> [PolarOfflineStream: OfflineStreamStatus] {
+        Dictionary(
+            uniqueKeysWithValues: PolarOfflineStream.allCases.map { ($0, .unavailable) }
+        )
+    }
+
     func startOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {
         streams.map {
             OfflineStreamOperationResult(
@@ -628,6 +634,50 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             return PolarOfflineStream.allCases.map {
                 OfflineStreamCapability(stream: $0, isSupported: false, reason: "Offline capability query failed: \(error.localizedDescription)")
             }
+        }
+    }
+
+    func offlineRecordingStatus() async -> [PolarOfflineStream: OfflineStreamStatus] {
+        guard let selectedPolarIdentifier else {
+            return Dictionary(
+                uniqueKeysWithValues: PolarOfflineStream.allCases.map { ($0, .unknown) }
+            )
+        }
+        guard connectionState == .connected else {
+            return Dictionary(
+                uniqueKeysWithValues: PolarOfflineStream.allCases.map { ($0, .unavailable) }
+            )
+        }
+        guard api.isFeatureReady(selectedPolarIdentifier, feature: .feature_polar_offline_recording) else {
+            return Dictionary(
+                uniqueKeysWithValues: PolarOfflineStream.allCases.map { ($0, .unavailable) }
+            )
+        }
+
+        do {
+            let statusByType = try await withCheckedThrowingContinuation { continuation in
+                streamCapabilitiesDisposable?.dispose()
+                streamCapabilitiesDisposable = api.getOfflineRecordingStatus(selectedPolarIdentifier)
+                    .observe(on: MainScheduler.asyncInstance)
+                    .subscribe(
+                        onSuccess: { status in continuation.resume(returning: status) },
+                        onFailure: { error in continuation.resume(throwing: error) }
+                    )
+            }
+            var statuses: [PolarOfflineStream: OfflineStreamStatus] = [:]
+            for stream in PolarOfflineStream.allCases {
+                let type = dataType(for: stream)
+                if let isRecording = statusByType[type] {
+                    statuses[stream] = isRecording ? .recording : .ready
+                } else {
+                    statuses[stream] = .unknown
+                }
+            }
+            return statuses
+        } catch {
+            return Dictionary(
+                uniqueKeysWithValues: PolarOfflineStream.allCases.map { ($0, .failed) }
+            )
         }
     }
 

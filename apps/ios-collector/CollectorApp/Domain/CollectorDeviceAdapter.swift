@@ -17,6 +17,7 @@ protocol CollectorDeviceAdapter: DeviceStatusProvider {
     func streamProviders() -> [HeartRateStreamProviding]
 
     func offlineCapabilities() async -> [OfflineStreamCapability]
+    func offlineRecordingStatus() async -> [PolarOfflineStream: OfflineStreamStatus]
     func offlineRecordingSettings(for stream: PolarOfflineStream) async -> Result<OfflineStreamSettings, OfflineSettingsFailure>
     func updateOfflineRecordingSettingsSelection(_ selection: OfflineStreamSettingsSelection, for stream: PolarOfflineStream)
     func startOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult]
@@ -50,6 +51,12 @@ extension CollectorDeviceAdapter {
         PolarOfflineStream.allCases.map {
             OfflineStreamCapability(stream: $0, isSupported: false, reason: "Offline recording is unavailable")
         }
+    }
+
+    func offlineRecordingStatus() async -> [PolarOfflineStream: OfflineStreamStatus] {
+        Dictionary(
+            uniqueKeysWithValues: PolarOfflineStream.allCases.map { ($0, .unavailable) }
+        )
     }
 
     func startOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {

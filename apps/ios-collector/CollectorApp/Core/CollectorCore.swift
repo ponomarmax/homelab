@@ -41,13 +41,14 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var eventLogs: [String] = []
     @Published private(set) var selectedOnlineStreams: Set<CollectorStream> = []
     @Published private(set) var selectedOfflineStreams: Set<PolarOfflineStream> = []
-    @Published private(set) var offlineLifecycleState: OfflineLifecycleState = .disconnected
+    @Published private(set) var offlineLifecycleState: OfflineLifecycleState = .notLoaded
     @Published private(set) var offlineStatusMessage: String = "Disconnected"
     @Published private(set) var offlineStreamCapabilities: [PolarOfflineStream: OfflineStreamCapability] = [:]
     @Published private(set) var offlineSettingsByStream: [PolarOfflineStream: OfflineStreamSettings] = [:]
     @Published private(set) var offlineSettingsLoadStateByStream: [PolarOfflineStream: OfflineSettingsLoadState] = [:]
     @Published private(set) var offlineStreamRunMessages: [PolarOfflineStream: String] = [:]
     @Published private(set) var offlineStreamRunStates: [PolarOfflineStream: OfflineStreamRunState] = [:]
+    @Published private(set) var offlineRecoveredStateByStream: [PolarOfflineStream: OfflineStreamRecoveredState] = [:]
     @Published private(set) var offlineRecordings: [OfflineRecordingEntry] = []
     @Published private(set) var offlineOperation: OfflineOperation = .none
     @Published private(set) var offlineIsOperationRunning: Bool = false
@@ -332,7 +333,7 @@ final class CollectorCore: ObservableObject {
             try await adapter.connect()
             status = .connected
             activityMessage = "Connected"
-            await refreshOfflineCapabilities()
+            await recoverOfflineStateAfterReconnect()
         } catch {
             status = .deviceSelected
             reportFailure(
@@ -520,6 +521,78 @@ final class CollectorCore: ObservableObject {
                 }
             }
         }
+        updateRecoveredStates()
+    }
+
+    func recoverOfflineStateAfterReconnect() async {
+        offlineLifecycleState = .refreshing
+        offlineStatusMessage = "Refreshing device offline state..."
+        offlineLastErrorMessage = nil
+
+        let capabilities = await adapter.offlineCapabilities()
+        offlineStreamCapabilities = Dictionary(uniqueKeysWithValues: capabilities.map { ($0.stream, $0) })
+        let supportedStreams = Set(capabilities.filter(\.isSupported).map(\.stream))
+
+        let statusByStream = await adapter.offlineRecordingStatus()
+        for stream in PolarOfflineStream.allCases {
+            let capability = offlineStreamCapabilities[stream]
+            let status = statusByStream[stream] ?? .unknown
+            if capability?.isSupported == false {
+                offlineStreamRunStates[stream] = .unavailable
+                offlineStreamRunMessages[stream] = capability?.reason ?? "Unsupported"
+                continue
+            }
+            switch status {
+            case .recording:
+                offlineStreamRunStates[stream] = .recording
+                offlineStreamRunMessages[stream] = "Recording"
+            case .ready:
+                offlineStreamRunStates[stream] = .ready
+                offlineStreamRunMessages[stream] = "Ready"
+            case .unavailable:
+                offlineStreamRunStates[stream] = .unavailable
+                offlineStreamRunMessages[stream] = "Unavailable"
+            case .failed:
+                offlineStreamRunStates[stream] = .failed
+                offlineStreamRunMessages[stream] = "Failed"
+            case .unknown:
+                offlineStreamRunStates[stream] = .unknown
+                offlineStreamRunMessages[stream] = "Unknown"
+            }
+        }
+
+        if selectedOfflineStreams.isEmpty {
+            selectedOfflineStreams = supportedStreams
+        } else {
+            selectedOfflineStreams = Set(selectedOfflineStreams.filter { supportedStreams.contains($0) })
+        }
+
+        do {
+            offlineRecordings = try await adapter.listOfflineRecordings()
+        } catch {
+            offlineLastErrorMessage = "Listing failed during reconnect refresh: \(error.localizedDescription)"
+        }
+
+        for stream in supportedStreams where offlineSettingsLoadStateByStream[stream] == nil {
+            offlineSettingsLoadStateByStream[stream] = .notLoaded
+        }
+
+        updateRecoveredStates()
+        let hasRecording = offlineRecoveredStateByStream.values.contains(where: { $0.isRecording })
+        let hasFailedStream = offlineRecoveredStateByStream.values.contains(where: { $0.status == .failed || $0.status == .unknown })
+        if hasRecording {
+            offlineLifecycleState = .recoveredRecording
+            offlineStatusMessage = "Device already has active offline recordings. State restored after reconnect."
+        } else if hasFailedStream {
+            offlineLifecycleState = .failed
+            offlineStatusMessage = "Failed to refresh offline state"
+        } else if supportedStreams.isEmpty {
+            offlineLifecycleState = .featureUnavailable
+            offlineStatusMessage = capabilities.first(where: { !$0.isSupported })?.reason ?? "Offline recording unavailable"
+        } else {
+            offlineLifecycleState = .ready
+            offlineStatusMessage = "Ready"
+        }
     }
 
     func offlineSettingsSummary(for stream: PolarOfflineStream) -> String {
@@ -594,8 +667,25 @@ final class CollectorCore: ObservableObject {
     }
 
     func isOfflineActionDisabled(_ action: OfflineOperation) -> Bool {
+        if action == .uploading && hasActiveOfflineRecording() {
+            return true
+        }
+        if action == .deleting && hasActiveOfflineRecording() {
+            return true
+        }
         guard offlineIsOperationRunning else { return false }
         return offlineOperation != action
+    }
+
+    func canStartOfflineSelected() -> Bool {
+        selectedOfflineStreams.contains { stream in
+            guard capabilityForOfflineStream(stream).isSupported else { return false }
+            return offlineStreamRunStates[stream] != .recording
+        }
+    }
+
+    func canStopOfflineSelected() -> Bool {
+        selectedOfflineStreams.contains { offlineStreamRunStates[$0] == .recording }
     }
 
     func startOfflineSelected() async {
@@ -1306,7 +1396,9 @@ final class CollectorCore: ObservableObject {
                 await loadOfflineSettings(for: stream)
             }
         }
+        let alreadyRecordingStreams = streams.filter { offlineStreamRunStates[$0] == .recording }
         let startableStreams = streams.filter { stream in
+            guard !alreadyRecordingStreams.contains(stream) else { return false }
             if case .failed = (offlineSettingsLoadStateByStream[stream] ?? .notLoaded) {
                 return false
             }
@@ -1320,10 +1412,15 @@ final class CollectorCore: ObservableObject {
             OfflineRecordingStartRequest(stream: stream, selectedSettings: offlineSettingsByStream[stream]?.selected)
         }
         let adapterResults = await adapter.startOfflineRecordings(requests: requests)
-        let failedSettingsResults = streams.filter { !startableStreams.contains($0) }.map {
+        let alreadyRecordingResults = alreadyRecordingStreams.map {
+            OfflineStreamOperationResult(stream: $0, success: false, message: "Already recording")
+        }
+        let failedSettingsResults = streams.filter {
+            !startableStreams.contains($0) && !alreadyRecordingStreams.contains($0)
+        }.map {
             OfflineStreamOperationResult(stream: $0, success: false, message: "Settings unavailable for stream")
         }
-        let results = adapterResults + failedSettingsResults
+        let results = adapterResults + failedSettingsResults + alreadyRecordingResults
         offlineStreamRunMessages.merge(
             Dictionary(uniqueKeysWithValues: results.map { ($0.stream, $0.message) }),
             uniquingKeysWith: { _, new in new }
@@ -1404,6 +1501,42 @@ final class CollectorCore: ObservableObject {
     private func completeOfflineOperation() {
         offlineIsOperationRunning = false
         offlineOperation = .none
+        updateRecoveredStates()
+    }
+
+    func hasActiveOfflineRecording() -> Bool {
+        offlineRecoveredStateByStream.values.contains(where: { $0.isRecording })
+    }
+
+    private func updateRecoveredStates() {
+        var next: [PolarOfflineStream: OfflineStreamRecoveredState] = [:]
+        let recordingsByStream = Dictionary(grouping: offlineRecordings, by: \.stream)
+        for stream in PolarOfflineStream.allCases {
+            let capability = capabilityForOfflineStream(stream)
+            let runState = offlineStreamRunStates[stream] ?? .unknown
+            let status: OfflineStreamStatus
+            switch runState {
+            case .recording:
+                status = .recording
+            case .ready, .uploaded:
+                status = .ready
+            case .unavailable:
+                status = .unavailable
+            case .failed:
+                status = .failed
+            case .unknown, .loadingSettings, .starting, .stopping, .fetching, .uploading:
+                status = .unknown
+            }
+            next[stream] = OfflineStreamRecoveredState(
+                isSelected: selectedOfflineStreams.contains(stream),
+                isSupported: capability.isSupported,
+                isRecording: runState == .recording,
+                status: status,
+                lastError: runState == .failed ? offlineStreamRunMessages[stream] : nil,
+                lastKnownRecordInfo: recordingsByStream[stream]?.first ?? nil
+            )
+        }
+        offlineRecoveredStateByStream = next
     }
 
     private func applyDeviceTimeActionResult(_ result: DeviceTimeActionResult, isSyncAction: Bool) {

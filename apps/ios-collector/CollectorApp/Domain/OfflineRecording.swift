@@ -8,10 +8,13 @@ struct DeviceConnectability: Equatable, Sendable {
 }
 
 enum OfflineLifecycleState: String, Equatable, Sendable {
+    case notLoaded
+    case refreshing
     case disconnected
     case featureUnavailable
     case idle
     case ready
+    case recoveredRecording
     case starting
     case recording
     case stopping
@@ -19,6 +22,7 @@ enum OfflineLifecycleState: String, Equatable, Sendable {
     case uploading
     case deleting
     case completed
+    case unknown
     case failed
     case partialSuccess
 }
@@ -35,6 +39,8 @@ enum OfflineOperation: String, Equatable, Sendable {
 enum OfflineStreamRunState: String, Equatable, Sendable {
     case loadingSettings
     case ready
+    case unavailable
+    case unknown
     case starting
     case recording
     case stopping
@@ -98,6 +104,23 @@ struct OfflineStreamCapability: Equatable, Sendable {
     let stream: PolarOfflineStream
     let isSupported: Bool
     let reason: String?
+}
+
+enum OfflineStreamStatus: String, Equatable, Sendable {
+    case recording
+    case ready
+    case unavailable
+    case failed
+    case unknown
+}
+
+struct OfflineStreamRecoveredState: Equatable, Sendable {
+    let isSelected: Bool
+    let isSupported: Bool
+    let isRecording: Bool
+    let status: OfflineStreamStatus
+    let lastError: String?
+    let lastKnownRecordInfo: OfflineRecordingEntry?
 }
 
 struct OfflineRecordingEntry: Identifiable, Equatable, Sendable {

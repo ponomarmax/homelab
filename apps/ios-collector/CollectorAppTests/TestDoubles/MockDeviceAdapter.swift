@@ -21,6 +21,7 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
             ($0, OfflineStreamCapability(stream: $0, isSupported: false, reason: "Offline recording is unavailable"))
         }
     )
+    var offlineStatusByStream: [PolarOfflineStream: OfflineStreamStatus] = [:]
     var nextStartOfflineResults: [PolarOfflineStream: OfflineStreamOperationResult] = [:]
     var nextStopOfflineResults: [PolarOfflineStream: OfflineStreamOperationResult] = [:]
     var offlineSettingsByStream: [PolarOfflineStream: Result<OfflineStreamSettings, OfflineSettingsFailure>] = [:]
@@ -111,6 +112,14 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
         PolarOfflineStream.allCases.map {
             offlineCapabilityByStream[$0] ?? OfflineStreamCapability(stream: $0, isSupported: false, reason: "Offline recording is unavailable")
         }
+    }
+
+    func offlineRecordingStatus() async -> [PolarOfflineStream: OfflineStreamStatus] {
+        var statuses: [PolarOfflineStream: OfflineStreamStatus] = [:]
+        for stream in PolarOfflineStream.allCases {
+            statuses[stream] = offlineStatusByStream[stream] ?? .unknown
+        }
+        return statuses
     }
 
     func startOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult] {

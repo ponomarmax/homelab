@@ -1210,6 +1210,153 @@ final class CollectorCoreTests: XCTestCase {
         XCTAssertTrue(core.capabilityForOfflineStream(.hr).isSupported)
     }
 
+    func testReconnectRecoveryWithNoActiveOfflineRecordingsShowsReady() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = [
+            .hr: OfflineStreamCapability(stream: .hr, isSupported: true, reason: nil),
+            .acc: OfflineStreamCapability(stream: .acc, isSupported: true, reason: nil),
+            .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
+            .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
+            .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
+            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+        ]
+        adapter.offlineStatusByStream = [.hr: .ready, .acc: .ready]
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        XCTAssertEqual(core.offlineLifecycleState, .ready)
+        XCTAssertEqual(core.offlineStreamRunStates[.hr], .ready)
+        XCTAssertEqual(core.offlineStreamRunStates[.acc], .ready)
+    }
+
+    func testReconnectRecoveryWithHrAndAccRecordingMarksRecoveredRecordingState() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = [
+            .hr: OfflineStreamCapability(stream: .hr, isSupported: true, reason: nil),
+            .acc: OfflineStreamCapability(stream: .acc, isSupported: true, reason: nil),
+            .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
+            .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
+            .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
+            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+        ]
+        adapter.offlineStatusByStream = [.hr: .recording, .acc: .recording]
+        adapter.nextOfflineRecordings = [
+            OfflineRecordingEntry(id: "hr-1", path: "/U/0/HR/1.rec", stream: .hr, sizeBytes: 10, startedAt: nil, status: "active")
+        ]
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        XCTAssertEqual(core.offlineLifecycleState, .recoveredRecording)
+        XCTAssertEqual(core.offlineStreamRunStates[.hr], .recording)
+        XCTAssertEqual(core.offlineStreamRunStates[.acc], .recording)
+        XCTAssertTrue(core.hasActiveOfflineRecording())
+    }
+
+    func testRecoveredRecordingPreventsDuplicateStartForSameStream() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = [
+            .hr: OfflineStreamCapability(stream: .hr, isSupported: true, reason: nil),
+            .acc: OfflineStreamCapability(stream: .acc, isSupported: false, reason: "Unsupported"),
+            .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
+            .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
+            .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
+            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+        ]
+        adapter.offlineStatusByStream = [.hr: .recording]
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.connectSelectedDevice()
+        await core.startOfflineSelected()
+
+        XCTAssertTrue(adapter.lastStartedOfflineStreams.isEmpty)
+        XCTAssertEqual(core.offlineStreamRunMessages[.hr], "Already recording")
+    }
+
+    func testRecoveredRecordingEnablesStopForActiveStream() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = [
+            .hr: OfflineStreamCapability(stream: .hr, isSupported: true, reason: nil),
+            .acc: OfflineStreamCapability(stream: .acc, isSupported: false, reason: "Unsupported"),
+            .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
+            .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
+            .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
+            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+        ]
+        adapter.offlineStatusByStream = [.hr: .recording]
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        XCTAssertTrue(core.canStopOfflineSelected())
+    }
+
+    func testReconnectRecoveryStatusUnknownOrFailedSetsFailedRefreshState() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = Dictionary(
+            uniqueKeysWithValues: PolarOfflineStream.allCases.map { ($0, OfflineStreamCapability(stream: $0, isSupported: true, reason: nil)) }
+        )
+        adapter.offlineStatusByStream = [.hr: .failed, .acc: .unknown]
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        XCTAssertEqual(core.offlineLifecycleState, .failed)
+        XCTAssertEqual(core.offlineStatusMessage, "Failed to refresh offline state")
+    }
+
+    func testReconnectRecoveryListingFailureDoesNotCrashAndKeepsStreamState() async {
+        enum ListingError: LocalizedError { case failed; var errorDescription: String? { "list failed" } }
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = [
+            .hr: OfflineStreamCapability(stream: .hr, isSupported: true, reason: nil),
+            .acc: OfflineStreamCapability(stream: .acc, isSupported: false, reason: "Unsupported"),
+            .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
+            .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
+            .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
+            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+        ]
+        adapter.offlineStatusByStream = [.hr: .ready]
+        adapter.offlineListShouldThrowError = ListingError.failed
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        XCTAssertEqual(core.offlineLifecycleState, .ready)
+        XCTAssertEqual(core.offlineStreamRunStates[.hr], .ready)
+        XCTAssertEqual(core.offlineRecordings.count, 0)
+        XCTAssertNotNil(core.offlineLastErrorMessage)
+    }
+
+    func testReconnectDoesNotAutoStopUploadOrDeleteOfflineData() async {
+        let adapter = MockDeviceAdapter()
+        adapter.offlineCapabilityByStream = [
+            .hr: OfflineStreamCapability(stream: .hr, isSupported: true, reason: nil),
+            .acc: OfflineStreamCapability(stream: .acc, isSupported: false, reason: "Unsupported"),
+            .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
+            .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
+            .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
+            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+        ]
+        adapter.offlineStatusByStream = [.hr: .recording]
+        let transport = RecordingTransport()
+        let core = CollectorCore(adapter: adapter, transport: transport)
+
+        core.selectDevice()
+        await core.connectSelectedDevice()
+
+        XCTAssertTrue(adapter.lastStoppedOfflineStreams.isEmpty)
+        XCTAssertTrue(adapter.removedOfflineRecordingPaths.isEmpty)
+        XCTAssertEqual(transport.uploadedChunks.count, 0)
+    }
+
     func testOfflineOperationLockPreventsDuplicateStartTaps() async {
         let adapter = MockDeviceAdapter()
         adapter.offlineCapabilityByStream = Dictionary(

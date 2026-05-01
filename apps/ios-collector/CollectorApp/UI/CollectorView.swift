@@ -204,7 +204,7 @@ struct CollectorView: View {
                             Task { await collectorCore.startOfflineSelected() }
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(collectorCore.isOfflineActionDisabled(.starting))
+                        .disabled(collectorCore.isOfflineActionDisabled(.starting) || !collectorCore.canStartOfflineSelected())
 
                         Menu {
                             Button("Stop all") {
@@ -217,7 +217,7 @@ struct CollectorView: View {
                             Task { await collectorCore.stopOfflineSelected() }
                         }
                         .buttonStyle(.bordered)
-                        .disabled(collectorCore.isOfflineActionDisabled(.stopping))
+                        .disabled(collectorCore.isOfflineActionDisabled(.stopping) || !collectorCore.canStopOfflineSelected())
                     }
 
                     HStack(spacing: 8) {
@@ -257,6 +257,7 @@ struct CollectorView: View {
                         .disabled(
                             collectorCore.offlineIsOperationRunning
                                 || collectorCore.isUploadingChunk
+                                || collectorCore.hasActiveOfflineRecording()
                                 || !collectorCore.offlineRecordings.contains(where: {
                                     if let stream = $0.stream {
                                         return collectorCore.selectedOfflineStreams.contains(stream)
@@ -269,7 +270,7 @@ struct CollectorView: View {
                             showDeleteAllConfirmation = true
                         }
                         .buttonStyle(.bordered)
-                        .disabled(collectorCore.offlineIsOperationRunning || collectorCore.isUploadingChunk)
+                        .disabled(collectorCore.offlineIsOperationRunning || collectorCore.isUploadingChunk || collectorCore.hasActiveOfflineRecording())
                     }
                 }
 
@@ -291,7 +292,7 @@ struct CollectorView: View {
                                         pendingDeleteEntry = entry
                                     }
                                     .buttonStyle(.bordered)
-                                    .disabled(collectorCore.offlineIsOperationRunning || collectorCore.isUploadingChunk)
+                                    .disabled(collectorCore.offlineIsOperationRunning || collectorCore.isUploadingChunk || collectorCore.hasActiveOfflineRecording())
                                 }
                                 Text("path: \(entry.path)")
                                     .font(.caption2)
@@ -362,10 +363,10 @@ struct CollectorView: View {
                 Text("Operation: \(collectorCore.offlineOperation.rawValue)")
                     .font(.footnote.weight(.medium))
             }
-            Text("State: \(collectorCore.offlineLifecycleState.rawValue)")
+            Text("State: \(offlineLifecycleLabel)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(collectorCore.offlineStatusMessage)
+            Text(offlineGlobalMessage)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text("Last success: \(collectorCore.offlineLastSuccessAction)")
@@ -383,6 +384,36 @@ struct CollectorView: View {
         .padding()
         .background(.background)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var offlineLifecycleLabel: String {
+        switch collectorCore.offlineLifecycleState {
+        case .refreshing:
+            return "Refreshing"
+        case .recoveredRecording:
+            return "Recovered active recording"
+        case .ready:
+            return "Ready"
+        case .failed:
+            return "Failed to refresh offline state"
+        default:
+            return collectorCore.offlineLifecycleState.rawValue
+        }
+    }
+
+    private var offlineGlobalMessage: String {
+        switch collectorCore.offlineLifecycleState {
+        case .refreshing:
+            return "Refreshing device offline state..."
+        case .recoveredRecording:
+            return "Device already has active offline recordings. State restored after reconnect."
+        case .ready:
+            return "Ready"
+        case .failed:
+            return collectorCore.offlineStatusMessage
+        default:
+            return collectorCore.offlineStatusMessage
+        }
     }
 
     private var deviceTab: some View {
@@ -506,7 +537,7 @@ private struct OfflineStreamRow: View {
                 Text(stream.rawValue)
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(capability.isSupported ? runState.rawValue : (capability.reason ?? "Unavailable"))
+                Text(capability.isSupported ? streamStatusLabel : (capability.reason ?? "Unavailable"))
                     .font(.caption)
                     .foregroundStyle(capability.isSupported && runState != .failed ? Color.secondary : Color.red)
             }
@@ -537,6 +568,19 @@ private struct OfflineStreamRow: View {
         .background(.background)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .opacity(capability.isSupported ? 1 : 0.5)
+    }
+
+    private var streamStatusLabel: String {
+        switch runState {
+        case .recording:
+            return "Recording"
+        case .ready, .uploaded:
+            return "Ready"
+        case .failed:
+            return "Failed"
+        default:
+            return "Unknown"
+        }
     }
 }
 
