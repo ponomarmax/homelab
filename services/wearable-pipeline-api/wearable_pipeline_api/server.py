@@ -22,6 +22,11 @@ def create_app(settings: Settings) -> FastAPI:
         raw_root=settings.raw_root,
         processed_root=settings.processed_root,
         state_root=settings.pipeline_state_root,
+        l0_cross_stream_max_start_delta_seconds=settings.l0_cross_stream_max_start_delta_seconds,
+        l0_cross_stream_max_end_delta_seconds=settings.l0_cross_stream_max_end_delta_seconds,
+        l0_cross_stream_min_overlap_ratio=settings.l0_cross_stream_min_overlap_ratio,
+        l0_cross_stream_min_anchor_streams=settings.l0_cross_stream_min_anchor_streams,
+        l0_cross_stream_anchor_streams=settings.l0_cross_stream_anchor_streams,
     )
 
     app = FastAPI(title=SERVICE_NAME, version="1.0.0")
@@ -54,6 +59,11 @@ def main(argv: list[str] | None = None) -> int:
         processed_root=Path(args.processed_root),
         pipeline_state_root=Path(args.pipeline_state_root),
         log_level=str(args.log_level).upper(),
+        l0_cross_stream_max_start_delta_seconds=base.l0_cross_stream_max_start_delta_seconds,
+        l0_cross_stream_max_end_delta_seconds=base.l0_cross_stream_max_end_delta_seconds,
+        l0_cross_stream_min_overlap_ratio=base.l0_cross_stream_min_overlap_ratio,
+        l0_cross_stream_min_anchor_streams=base.l0_cross_stream_min_anchor_streams,
+        l0_cross_stream_anchor_streams=base.l0_cross_stream_anchor_streams,
     )
 
     logging.basicConfig(

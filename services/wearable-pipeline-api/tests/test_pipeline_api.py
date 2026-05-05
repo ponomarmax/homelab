@@ -295,7 +295,7 @@ class PipelineApiTests(unittest.TestCase):
         last_ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce").max()
         self.assertEqual(first_ts.isoformat().replace("+00:00", "Z"), "2026-04-25T09:59:59Z")
         self.assertEqual(last_ts.isoformat().replace("+00:00", "Z"), "2026-04-25T10:00:00Z")
-        self.assertEqual(output.report["alignment_basis_level"], "L4")
+        self.assertEqual(output.report["alignment_basis_level"], "L3")
 
     def test_verity_offline_ppi_zero_timestamp_fallback(self) -> None:
         raw_path = write_raw_stream(
@@ -412,7 +412,7 @@ class PipelineApiTests(unittest.TestCase):
         min_ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce").min()
         self.assertEqual(min_ts.year, 2026)
 
-    def test_verity_offline_rejects_implausible_l1_and_falls_back_l4(self) -> None:
+    def test_verity_offline_rejects_implausible_l1_and_falls_back_l3(self) -> None:
         chunk = build_chunk(
             chunk_id="chunk-offline-acc-implausible-1",
             sequence=1,
@@ -430,8 +430,100 @@ class PipelineApiTests(unittest.TestCase):
         )
         raw_path = write_raw_stream(self.raw_root, session_id="session-verity-offline-implausible", stream_type="acc", chunks=[chunk])
         output = PolarVerityOfflineNormalizer(StreamSpec(stream_type="acc", payload_schema="polar.offline.acc", time_field="timeStamp")).handle(raw_path)
+        self.assertEqual(output.report.get("alignment_basis_level"), "L3")
+
+    def test_verity_offline_uses_l4_when_no_valid_time_basis(self) -> None:
+        chunk = build_chunk(
+            chunk_id="chunk-offline-hr-unresolved-1",
+            sequence=1,
+            stream_type="hr",
+            payload_schema="polar.offline.hr",
+            stream_id="stream-offline-hr-unresolved-001",
+            device_model="verity_sense",
+            payload={
+                "type": "HR",
+                "samples": [
+                    {"sample_index": 0, "hr": 67},
+                    {"sample_index": 1, "hr": 68},
+                ],
+            },
+        )
+        chunk["time"]["first_sample_received_at_collector"] = None
+        chunk["time"]["uploaded_at_collector"] = None
+        chunk["time"]["fetch_started_at_collector"] = None
+        chunk["time"]["fetch_completed_at_collector"] = None
+        chunk["server"]["received_at_server"] = None
+
+        raw_path = write_raw_stream(
+            self.raw_root,
+            session_id="session-verity-offline-unresolved",
+            stream_type="hr",
+            chunks=[chunk],
+        )
+        output = PolarVerityOfflineNormalizer(StreamSpec(stream_type="hr", payload_schema="polar.offline.hr", time_field=None)).handle(raw_path)
         self.assertEqual(output.report.get("alignment_basis_level"), "L4")
+        self.assertEqual(output.report.get("alignment_basis"), "unresolved")
         self.assertIn("fallback_to_collector_server_time_L4", output.report.get("warnings", []))
+        self.assertIn("no_valid_time_basis", output.report.get("hard_fail_reasons", []))
+
+    def test_verity_offline_l0_cross_stream_inconsistency_degrades_to_l2(self) -> None:
+        acc_chunk = build_chunk(
+            chunk_id="chunk-offline-acc-l0-gate-1",
+            sequence=1,
+            stream_type="acc",
+            payload_schema="polar.offline.acc",
+            stream_id="stream-offline-acc-l0-gate-001",
+            device_model="verity_sense",
+            payload={
+                "type": "ACC",
+                "samples": [
+                    {"timeStamp": 545998017227188608, "x": -272, "y": -780, "z": -542},
+                    {"timeStamp": 545998061572134724, "x": -542, "y": -780, "z": -299},
+                ],
+            },
+        )
+        acc_chunk["time"]["recording_start_utc"] = "2026-04-20T10:00:00Z"
+        acc_chunk["time"]["recording_end_utc"] = "2026-04-20T10:00:01Z"
+
+        hr_chunk = build_chunk(
+            chunk_id="chunk-offline-hr-l0-gate-1",
+            sequence=1,
+            stream_type="hr",
+            payload_schema="polar.offline.hr",
+            stream_id="stream-offline-hr-l0-gate-001",
+            device_model="verity_sense",
+            payload={
+                "type": "HR",
+                "samples": [
+                    {"sample_index": 0, "hr": 67},
+                    {"sample_index": 1, "hr": 68},
+                ],
+            },
+        )
+        hr_chunk["time"]["recording_start_utc"] = "2026-04-20T09:59:20Z"
+        hr_chunk["time"]["recording_end_utc"] = "2026-04-20T09:59:21Z"
+
+        session_id = "session-verity-offline-l0-gate"
+        write_raw_stream(self.raw_root, session_id=session_id, stream_type="acc", chunks=[acc_chunk])
+        write_raw_stream(self.raw_root, session_id=session_id, stream_type="hr", chunks=[hr_chunk])
+
+        runner = SessionPipelineRunner(
+            raw_root=self.raw_root,
+            processed_root=self.processed_root,
+            state_root=self.state_root,
+            l0_cross_stream_max_start_delta_seconds=5.0,
+            l0_cross_stream_max_end_delta_seconds=5.0,
+            l0_cross_stream_min_overlap_ratio=0.5,
+            l0_cross_stream_min_anchor_streams=1,
+            l0_cross_stream_anchor_streams=("acc",),
+        )
+        summary = runner.run(session_id=session_id)
+        per_stream = {item["stream_type"]: item for item in summary["normalize_runs"][0]["per_stream_results"]}
+        hr_report_path = Path(per_stream["hr"]["output_path"]).with_name("time_alignment_report.json")
+        hr_report = json.loads(hr_report_path.read_text(encoding="utf-8"))
+        self.assertEqual(hr_report.get("alignment_basis_level"), "L2")
+        self.assertEqual(hr_report.get("alignment_basis"), "cross_stream_anchoring")
+        self.assertIn("l0_cross_stream_inconsistent", hr_report.get("warnings", []))
 
     def test_battery_normalizer_supports_nested_battery_payload(self) -> None:
         battery_path = write_raw_stream(

@@ -52,14 +52,16 @@ struct CollectorHTTPTransport: CollectorTransporting {
         streamDescriptor: StreamDescriptor,
         streamProfile: StreamMetadataProfile,
         chunkSequenceNumber: Int,
-        samples: [HeartRateSample]
+        samples: [HeartRateSample],
+        timeContext: UploadChunkTimeContext?
     ) -> UploadChunk? {
         chunkBuilder.buildChunk(
             session: session,
             streamDescriptor: streamDescriptor,
             streamProfile: streamProfile,
             chunkSequenceNumber: chunkSequenceNumber,
-            samples: samples
+            samples: samples,
+            timeContext: timeContext
         )
     }
 

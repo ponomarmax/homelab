@@ -76,6 +76,7 @@ final class CollectorCore: ObservableObject {
 
     private var pendingUploadChunks: [UploadChunk] = []
     private var bufferedSamplesByStream: [CollectorStream: [HeartRateSample]] = [:]
+    private var pendingTimeContextByStream: [CollectorStream: UploadChunkTimeContext] = [:]
     private var streamDescriptorsByType: [CollectorStream: StreamDescriptor] = [:]
     private var nextChunkSequenceNumberByStream: [CollectorStream: Int] = [:]
     private var lastFlushAtUTCByStream: [CollectorStream: Date] = [:]
@@ -767,6 +768,9 @@ final class CollectorCore: ObservableObject {
             var samples = bufferedSamplesByStream[batch.stream] ?? []
             samples.append(contentsOf: batch.samples)
             bufferedSamplesByStream[batch.stream] = samples
+            if let context = batch.timeContext {
+                pendingTimeContextByStream[batch.stream] = context
+            }
         }
         bufferedSamplesCount = bufferedSampleTotalCount()
 
@@ -981,7 +985,8 @@ final class CollectorCore: ObservableObject {
             streamDescriptor: streamDescriptor,
             streamProfile: streamProfile,
             chunkSequenceNumber: chunkSequenceNumber,
-            samples: streamSamples
+            samples: streamSamples,
+            timeContext: resolveChunkTimeContext(for: stream, session: session)
         )
 
         if let chunk {
@@ -994,6 +999,7 @@ final class CollectorCore: ObservableObject {
 
             nextChunkSequenceNumberByStream[stream] = chunkSequenceNumber + 1
             bufferedSamplesByStream[stream] = []
+            pendingTimeContextByStream[stream] = nil
             bufferedSamplesCount = bufferedSampleTotalCount()
             lastFlushAtUTCByStream[stream] = nowProvider()
             self.streamDescriptor = streamDescriptor
@@ -1009,6 +1015,39 @@ final class CollectorCore: ObservableObject {
         }
 
         return chunk
+    }
+
+    private func resolveChunkTimeContext(for stream: CollectorStream, session: CollectionSession) -> UploadChunkTimeContext {
+        if let pending = pendingTimeContextByStream[stream] {
+            return pending
+        }
+
+        let now = nowProvider()
+        let timezoneOffsetMinutes = TimeZone.current.secondsFromGMT(for: now) / 60
+        let clockSyncState: String
+        switch deviceTimeSyncState {
+        case .success:
+            clockSyncState = "synced"
+        case .failed:
+            clockSyncState = "unsynced"
+        case .idle, .running, .unavailable:
+            clockSyncState = "unknown"
+        }
+
+        return UploadChunkTimeContext(
+            recordingStartUTC: session.startedAtUTC,
+            recordingEndUTC: session.stoppedAtUTC,
+            fileCreatedAtDevice: nil,
+            fileClosedAtDevice: nil,
+            deviceLocalTimeAtFetch: now,
+            deviceTimezoneOffset: timezoneOffsetMinutes,
+            clockSyncState: clockSyncState,
+            clockDriftEstimate: nil,
+            sourceAppOrigin: session.collectionMode == .offlineRecording ? "unknown" : "our_app",
+            sensorRecordingID: nil,
+            fetchStartedAtCollector: now,
+            fetchCompletedAtCollector: now
+        )
     }
 
     func uploadLastPreparedChunk() async {

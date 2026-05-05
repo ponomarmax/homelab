@@ -43,17 +43,129 @@ def _status_from_results(results: list[StreamRunResult]) -> str:
 class NormalizeStepRunner:
     step_name = "normalize"
 
-    def __init__(self, raw_root: Path, processed_root: Path, state_store: RunStateStore) -> None:
+    def __init__(
+        self,
+        raw_root: Path,
+        processed_root: Path,
+        state_store: RunStateStore,
+        *,
+        l0_cross_stream_max_start_delta_seconds: float,
+        l0_cross_stream_max_end_delta_seconds: float,
+        l0_cross_stream_min_overlap_ratio: float,
+        l0_cross_stream_min_anchor_streams: int,
+        l0_cross_stream_anchor_streams: tuple[str, ...],
+    ) -> None:
         self.raw_root = raw_root
         self.processed_root = processed_root
         self.state_store = state_store
         self.registry = normalize_handler_registry()
+        self.l0_cross_stream_max_start_delta_seconds = l0_cross_stream_max_start_delta_seconds
+        self.l0_cross_stream_max_end_delta_seconds = l0_cross_stream_max_end_delta_seconds
+        self.l0_cross_stream_min_overlap_ratio = l0_cross_stream_min_overlap_ratio
+        self.l0_cross_stream_min_anchor_streams = l0_cross_stream_min_anchor_streams
+        self.l0_cross_stream_anchor_streams = set(l0_cross_stream_anchor_streams)
+
+    @staticmethod
+    def _parse_utc(value: Any):
+        if not value:
+            return None
+        try:
+            import pandas as pd
+
+            ts = pd.to_datetime(value, utc=True, errors="coerce")
+            if pd.isna(ts):
+                return None
+            if hasattr(ts, "to_pydatetime"):
+                try:
+                    return ts.to_pydatetime(warn=False)
+                except TypeError:
+                    return ts.to_pydatetime()
+            return ts
+        except Exception:
+            return None
+
+    @staticmethod
+    def _degrade_confidence(value: str) -> str:
+        levels = ["low", "medium", "high"]
+        if value not in levels:
+            return "low"
+        idx = max(levels.index(value) - 1, 0)
+        return levels[idx]
+
+    def _apply_l0_cross_stream_gate(
+        self,
+        reports_by_stream: dict[str, dict[str, Any]],
+    ) -> list[str]:
+        anchor_windows: list[tuple[Any, Any]] = []
+        for stream_type, report in reports_by_stream.items():
+            if stream_type not in self.l0_cross_stream_anchor_streams:
+                continue
+            if report.get("alignment_basis_level") != "L0":
+                continue
+            start = self._parse_utc(report.get("session_window_start") or (report.get("normalized_time_range") or {}).get("start_utc"))
+            end = self._parse_utc(report.get("session_window_end") or (report.get("normalized_time_range") or {}).get("end_utc"))
+            if start is None or end is None or end <= start:
+                continue
+            anchor_windows.append((start, end))
+
+        if len(anchor_windows) < self.l0_cross_stream_min_anchor_streams:
+            return []
+
+        anchor_start = min(item[0] for item in anchor_windows)
+        anchor_end = max(item[1] for item in anchor_windows)
+        warnings: list[str] = []
+
+        for stream_type, report in reports_by_stream.items():
+            if report.get("alignment_basis_level") != "L0":
+                continue
+            stream_start = self._parse_utc(report.get("session_window_start") or (report.get("normalized_time_range") or {}).get("start_utc"))
+            stream_end = self._parse_utc(report.get("session_window_end") or (report.get("normalized_time_range") or {}).get("end_utc"))
+            if stream_start is None or stream_end is None or stream_end <= stream_start:
+                continue
+
+            start_delta = abs((stream_start - anchor_start).total_seconds())
+            end_delta = abs((stream_end - anchor_end).total_seconds())
+            overlap_start = max(stream_start, anchor_start)
+            overlap_end = min(stream_end, anchor_end)
+            overlap_seconds = max((overlap_end - overlap_start).total_seconds(), 0.0)
+            stream_duration = max((stream_end - stream_start).total_seconds(), 1e-9)
+            overlap_ratio = overlap_seconds / stream_duration
+
+            if (
+                start_delta <= self.l0_cross_stream_max_start_delta_seconds
+                and end_delta <= self.l0_cross_stream_max_end_delta_seconds
+                and overlap_ratio >= self.l0_cross_stream_min_overlap_ratio
+            ):
+                continue
+
+            report["alignment_basis_level"] = "L2"
+            report["alignment_basis"] = "cross_stream_anchoring"
+            report["epoch_offset_decision"] = "l0_cross_stream_inconsistent"
+            report["confidence"] = self._degrade_confidence(str(report.get("confidence") or "low"))
+            details = report.get("alignment_basis_details")
+            if not isinstance(details, dict):
+                details = {}
+            details["selected_source"] = "cross_stream_anchoring"
+            details["selected_reason"] = "l0_cross_stream_inconsistent"
+            details["anchor_streams"] = sorted(self.l0_cross_stream_anchor_streams)
+            details["start_delta_seconds"] = round(start_delta, 3)
+            details["end_delta_seconds"] = round(end_delta, 3)
+            details["overlap_ratio"] = round(overlap_ratio, 4)
+            report["alignment_basis_details"] = details
+            report.setdefault("warnings", [])
+            if "l0_cross_stream_inconsistent" not in report["warnings"]:
+                report["warnings"].append("l0_cross_stream_inconsistent")
+            warnings.append(f"stream {stream_type}: l0_cross_stream_inconsistent")
+
+        return warnings
 
     def run_for_session(self, session_id: str, streams: list[StreamContext]) -> dict[str, Any]:
         run_id = self.state_store.new_run_id()
         started_at = utc_now_iso()
         warnings: list[str] = []
         per_stream_results: list[StreamRunResult] = []
+        reports_by_stream: dict[str, dict[str, Any]] = {}
+        report_paths_by_stream: dict[str, Path] = {}
 
         for stream in sorted(streams, key=lambda item: item.stream_type):
             raw_path = Path(stream.raw_path)
@@ -84,6 +196,8 @@ class NormalizeStepRunner:
                 result.dataframe.to_parquet(output_path, index=False)
                 report_path.write_text(json.dumps(result.report, indent=2), encoding="utf-8")
                 warnings.extend(result.warnings)
+                reports_by_stream[stream.stream_type] = result.report
+                report_paths_by_stream[stream.stream_type] = report_path
                 per_stream_results.append(
                     StreamRunResult(
                         stream_type=stream.stream_type,
@@ -105,6 +219,13 @@ class NormalizeStepRunner:
                         error=str(exc),
                     )
                 )
+
+        warnings.extend(self._apply_l0_cross_stream_gate(reports_by_stream))
+        for stream_type, report in reports_by_stream.items():
+            path = report_paths_by_stream.get(stream_type)
+            if path is None:
+                continue
+            path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
         finished_at = utc_now_iso()
         run_record = StepRunRecord(

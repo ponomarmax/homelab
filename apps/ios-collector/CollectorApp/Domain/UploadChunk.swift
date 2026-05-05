@@ -12,8 +12,37 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
     let collectionMode: CollectionMode
     let streamProfile: StreamMetadataProfile
     let sourceDeviceID: String?
+    let timeContext: UploadChunkTimeContext?
 
     var id: UUID { chunkID }
+
+    init(
+        sessionID: UUID,
+        streamName: String,
+        streamType: String,
+        streamID: String,
+        chunkID: UUID,
+        chunkSequenceNumber: Int,
+        createdAtUTC: Date,
+        samples: [HeartRateSample],
+        collectionMode: CollectionMode,
+        streamProfile: StreamMetadataProfile,
+        sourceDeviceID: String?,
+        timeContext: UploadChunkTimeContext? = nil
+    ) {
+        self.sessionID = sessionID
+        self.streamName = streamName
+        self.streamType = streamType
+        self.streamID = streamID
+        self.chunkID = chunkID
+        self.chunkSequenceNumber = chunkSequenceNumber
+        self.createdAtUTC = createdAtUTC
+        self.samples = samples
+        self.collectionMode = collectionMode
+        self.streamProfile = streamProfile
+        self.sourceDeviceID = sourceDeviceID
+        self.timeContext = timeContext
+    }
 
     func makeCanonicalRequest(uploadedAtUTC: Date = Date()) -> CanonicalUploadChunkRequest? {
         guard !samples.isEmpty else { return nil }
@@ -73,7 +102,19 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
             time: CanonicalUploadChunkRequest.TimeMetadata(
                 deviceTimeReference: streamProfile.deviceTimeReference,
                 firstSampleReceivedAtCollector: Self.iso8601(from: firstSampleAt),
-                uploadedAtCollector: Self.iso8601(from: uploadedAtUTC)
+                uploadedAtCollector: Self.iso8601(from: uploadedAtUTC),
+                recordingStartUTC: timeContext?.recordingStartUTC.flatMap(Self.iso8601Optional),
+                recordingEndUTC: timeContext?.recordingEndUTC.flatMap(Self.iso8601Optional),
+                fileCreatedAtDevice: timeContext?.fileCreatedAtDevice.flatMap(Self.iso8601Optional),
+                fileClosedAtDevice: timeContext?.fileClosedAtDevice.flatMap(Self.iso8601Optional),
+                deviceLocalTimeAtFetch: timeContext?.deviceLocalTimeAtFetch.flatMap(Self.iso8601Optional),
+                deviceTimezoneOffset: timeContext?.deviceTimezoneOffset,
+                clockSyncState: timeContext?.clockSyncState,
+                clockDriftEstimate: timeContext?.clockDriftEstimate,
+                sourceAppOrigin: timeContext?.sourceAppOrigin,
+                sensorRecordingID: timeContext?.sensorRecordingID,
+                fetchStartedAtCollector: timeContext?.fetchStartedAtCollector.flatMap(Self.iso8601Optional),
+                fetchCompletedAtCollector: timeContext?.fetchCompletedAtCollector.flatMap(Self.iso8601Optional)
             ),
             transport: CanonicalUploadChunkRequest.TransportMetadata(
                 encoding: streamProfile.transport.encoding,
@@ -287,6 +328,11 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
 
     private static func iso8601(from date: Date) -> String {
         iso8601Formatter.string(from: date)
+    }
+
+    private static func iso8601Optional(from date: Date?) -> String? {
+        guard let date else { return nil }
+        return iso8601(from: date)
     }
 
     private func resolveStreamSettings(from samples: [HeartRateSample]) -> [String: StreamSettingValue]? {
@@ -715,11 +761,35 @@ struct CanonicalUploadChunkRequest: Equatable, Codable, Sendable {
         let deviceTimeReference: String
         let firstSampleReceivedAtCollector: String
         let uploadedAtCollector: String
+        let recordingStartUTC: String?
+        let recordingEndUTC: String?
+        let fileCreatedAtDevice: String?
+        let fileClosedAtDevice: String?
+        let deviceLocalTimeAtFetch: String?
+        let deviceTimezoneOffset: Int?
+        let clockSyncState: String?
+        let clockDriftEstimate: Double?
+        let sourceAppOrigin: String?
+        let sensorRecordingID: String?
+        let fetchStartedAtCollector: String?
+        let fetchCompletedAtCollector: String?
 
         enum CodingKeys: String, CodingKey {
             case deviceTimeReference = "device_time_reference"
             case firstSampleReceivedAtCollector = "first_sample_received_at_collector"
             case uploadedAtCollector = "uploaded_at_collector"
+            case recordingStartUTC = "recording_start_utc"
+            case recordingEndUTC = "recording_end_utc"
+            case fileCreatedAtDevice = "file_created_at_device"
+            case fileClosedAtDevice = "file_closed_at_device"
+            case deviceLocalTimeAtFetch = "device_local_time_at_fetch"
+            case deviceTimezoneOffset = "device_timezone_offset"
+            case clockSyncState = "clock_sync_state"
+            case clockDriftEstimate = "clock_drift_estimate"
+            case sourceAppOrigin = "source_app_origin"
+            case sensorRecordingID = "sensor_recording_id"
+            case fetchStartedAtCollector = "fetch_started_at_collector"
+            case fetchCompletedAtCollector = "fetch_completed_at_collector"
         }
     }
 
@@ -736,6 +806,21 @@ struct CanonicalUploadChunkRequest: Equatable, Codable, Sendable {
             case payloadVersion = "payload_version"
         }
     }
+}
+
+struct UploadChunkTimeContext: Equatable, Codable, Sendable {
+    let recordingStartUTC: Date?
+    let recordingEndUTC: Date?
+    let fileCreatedAtDevice: Date?
+    let fileClosedAtDevice: Date?
+    let deviceLocalTimeAtFetch: Date?
+    let deviceTimezoneOffset: Int?
+    let clockSyncState: String?
+    let clockDriftEstimate: Double?
+    let sourceAppOrigin: String?
+    let sensorRecordingID: String?
+    let fetchStartedAtCollector: Date?
+    let fetchCompletedAtCollector: Date?
 }
 
 struct UploadAck: Equatable, Codable, Sendable {

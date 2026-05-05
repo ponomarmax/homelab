@@ -142,6 +142,7 @@ struct OfflineUploadBatch: Equatable, Sendable {
     let stream: CollectorStream
     let sourcePath: String
     let samples: [HeartRateSample]
+    let timeContext: UploadChunkTimeContext?
 }
 
 struct OfflineUploadPreparationResult: Equatable, Sendable {

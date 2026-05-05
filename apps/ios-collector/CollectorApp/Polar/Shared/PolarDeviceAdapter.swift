@@ -901,12 +901,17 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             )
         }
 
+        let selectedEntries = Self.selectSessionEntries(entries)
         var batches: [OfflineUploadBatch] = []
         var messagesByStream: [PolarOfflineStream: String] = [:]
         let fetchStartedAt = Date()
 
         for entry in entries {
             guard let offlineStream = Self.offlineStream(from: entry.type) else { continue }
+            if !selectedEntries.contains(where: { $0.path == entry.path }) {
+                messagesByStream[offlineStream] = "skipped: out-of-session recording group"
+                continue
+            }
             messagesByStream[offlineStream] = "fetching"
             do {
                 let offlineData = try await fetchOfflineRecord(identifier: selectedPolarIdentifier, entry: entry)
@@ -916,7 +921,35 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
                     fetchStartedAt: fetchStartedAt
                 )
                 if !samples.isEmpty {
-                    batches.append(OfflineUploadBatch(stream: stream, sourcePath: entry.path, samples: samples))
+                    let fetchCompletedAt = Date()
+                    let timezoneOffsetMinutes = TimeZone.current.secondsFromGMT(for: fetchCompletedAt) / 60
+                    let estimatedEndUTC = Self.estimatedOfflineRecordingEndUTC(
+                        stream: stream,
+                        startUTC: entry.date,
+                        samples: samples
+                    )
+                    let timeContext = UploadChunkTimeContext(
+                        recordingStartUTC: entry.date,
+                        recordingEndUTC: estimatedEndUTC,
+                        fileCreatedAtDevice: entry.date,
+                        fileClosedAtDevice: estimatedEndUTC,
+                        deviceLocalTimeAtFetch: fetchStartedAt,
+                        deviceTimezoneOffset: timezoneOffsetMinutes,
+                        clockSyncState: "unknown",
+                        clockDriftEstimate: nil,
+                        sourceAppOrigin: "unknown",
+                        sensorRecordingID: entry.path,
+                        fetchStartedAtCollector: fetchStartedAt,
+                        fetchCompletedAtCollector: fetchCompletedAt
+                    )
+                    batches.append(
+                        OfflineUploadBatch(
+                            stream: stream,
+                            sourcePath: entry.path,
+                            samples: samples,
+                            timeContext: timeContext
+                        )
+                    )
                 }
                 messagesByStream[offlineStream] = message
             } catch {
@@ -924,7 +957,73 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             }
         }
 
+        batches = Self.unifyBatchSessionWindow(batches)
         return OfflineUploadPreparationResult(batches: batches, messagesByStream: messagesByStream)
+    }
+
+    private static func selectSessionEntries(_ entries: [PolarOfflineRecordingEntry]) -> [PolarOfflineRecordingEntry] {
+        guard entries.count > 1 else { return entries }
+        let known = entries.filter { offlineStream(from: $0.type) != nil }
+        guard !known.isEmpty else { return entries }
+
+        let anchor = known.compactMap(\.date).max()
+        guard let anchor else { return known }
+
+        func distance(_ date: Date?) -> TimeInterval {
+            guard let date else { return .greatestFiniteMagnitude }
+            return abs(date.timeIntervalSince(anchor))
+        }
+
+        var byStream: [PolarOfflineStream: PolarOfflineRecordingEntry] = [:]
+        for entry in known {
+            guard let stream = offlineStream(from: entry.type) else { continue }
+            guard byStream[stream] == nil || distance(entry.date) < distance(byStream[stream]?.date) else { continue }
+            byStream[stream] = entry
+        }
+
+        let selected = Array(byStream.values)
+        // Soft guard: avoid mixing stale historical recordings into a single upload session.
+        // Keep entries close to the anchor; if a stream has no close sample, keep best effort pick.
+        let closeThresholdSeconds: TimeInterval = 15 * 60
+        let close = selected.filter { distance($0.date) <= closeThresholdSeconds }
+        if close.count >= 3 {
+            return close
+        }
+        return selected
+    }
+
+    private static func unifyBatchSessionWindow(_ batches: [OfflineUploadBatch]) -> [OfflineUploadBatch] {
+        let contexts = batches.compactMap(\.timeContext)
+        guard !contexts.isEmpty else { return batches }
+        let starts = contexts.compactMap(\.recordingStartUTC)
+        let ends = contexts.compactMap(\.recordingEndUTC)
+        guard let sessionStart = starts.min(), let sessionEnd = ends.max(), sessionEnd >= sessionStart else {
+            return batches
+        }
+
+        return batches.map { batch in
+            guard let ctx = batch.timeContext else { return batch }
+            let unified = UploadChunkTimeContext(
+                recordingStartUTC: sessionStart,
+                recordingEndUTC: sessionEnd,
+                fileCreatedAtDevice: sessionStart,
+                fileClosedAtDevice: sessionEnd,
+                deviceLocalTimeAtFetch: ctx.deviceLocalTimeAtFetch,
+                deviceTimezoneOffset: ctx.deviceTimezoneOffset,
+                clockSyncState: ctx.clockSyncState,
+                clockDriftEstimate: ctx.clockDriftEstimate,
+                sourceAppOrigin: ctx.sourceAppOrigin,
+                sensorRecordingID: ctx.sensorRecordingID,
+                fetchStartedAtCollector: ctx.fetchStartedAtCollector,
+                fetchCompletedAtCollector: ctx.fetchCompletedAtCollector
+            )
+            return OfflineUploadBatch(
+                stream: batch.stream,
+                sourcePath: batch.sourcePath,
+                samples: batch.samples,
+                timeContext: unified
+            )
+        }
     }
 
     private func tryResumeConnectIfReady(forceAfterReadinessTimeout: Bool = false) {
@@ -1732,6 +1831,41 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
                 }
             }()
             return (stream, [], "skipped: unsupported payload")
+        }
+    }
+
+    private static func estimatedOfflineRecordingEndUTC(
+        stream: CollectorStream,
+        startUTC: Date?,
+        samples: [HeartRateSample]
+    ) -> Date? {
+        guard let startUTC else { return nil }
+        guard samples.count > 1 else { return startUTC }
+
+        switch stream {
+        case .heartRate:
+            return startUTC.addingTimeInterval(Double(samples.count - 1))
+        case .ppi:
+            var totalSeconds: TimeInterval = 0
+            for sample in samples.dropLast() {
+                guard case .ppi(let ppiData) = sample.payload else {
+                    totalSeconds += 1
+                    continue
+                }
+                if ppiData.ppiMs > 0 {
+                    totalSeconds += TimeInterval(ppiData.ppiMs) / 1000.0
+                } else {
+                    totalSeconds += 1
+                }
+            }
+            return startUTC.addingTimeInterval(totalSeconds)
+        default:
+            let timestamps = samples.compactMap { $0.deviceTimeNS }.sorted()
+            guard let first = timestamps.first, let last = timestamps.last, last >= first else {
+                return nil
+            }
+            let deltaNs = last - first
+            return startUTC.addingTimeInterval(TimeInterval(deltaNs) / 1_000_000_000.0)
         }
     }
 

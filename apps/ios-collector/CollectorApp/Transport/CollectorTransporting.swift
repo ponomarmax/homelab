@@ -14,7 +14,8 @@ protocol CollectorTransporting {
         streamDescriptor: StreamDescriptor,
         streamProfile: StreamMetadataProfile,
         chunkSequenceNumber: Int,
-        samples: [HeartRateSample]
+        samples: [HeartRateSample],
+        timeContext: UploadChunkTimeContext?
     ) -> UploadChunk?
 
     func upload(chunk: UploadChunk) async throws -> UploadAck

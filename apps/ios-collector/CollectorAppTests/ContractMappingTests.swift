@@ -72,7 +72,21 @@ final class ContractMappingTests: XCTestCase {
             ],
             collectionMode: .live,
             streamProfile: PolarStreamProfile.hrLive,
-            sourceDeviceID: "h10-123"
+            sourceDeviceID: "h10-123",
+            timeContext: UploadChunkTimeContext(
+                recordingStartUTC: Date(timeIntervalSince1970: 900),
+                recordingEndUTC: Date(timeIntervalSince1970: 960),
+                fileCreatedAtDevice: Date(timeIntervalSince1970: 900),
+                fileClosedAtDevice: Date(timeIntervalSince1970: 960),
+                deviceLocalTimeAtFetch: Date(timeIntervalSince1970: 900),
+                deviceTimezoneOffset: 0,
+                clockSyncState: "unknown",
+                clockDriftEstimate: 12.5,
+                sourceAppOrigin: "our_app",
+                sensorRecordingID: "recording-123",
+                fetchStartedAtCollector: Date(timeIntervalSince1970: 900),
+                fetchCompletedAtCollector: Date(timeIntervalSince1970: 1002)
+            )
         )
 
         let request = try XCTUnwrap(
@@ -92,6 +106,15 @@ final class ContractMappingTests: XCTestCase {
         XCTAssertEqual(request.transport.payloadVersion, "1.0")
         XCTAssertEqual(request.time.firstSampleReceivedAtCollector, "1970-01-01T00:16:40.000Z")
         XCTAssertEqual(request.time.deviceTimeReference, "collector:collectorObserved")
+        XCTAssertEqual(request.time.sourceAppOrigin, "our_app")
+        XCTAssertEqual(request.time.clockSyncState, "unknown")
+        XCTAssertEqual(request.time.clockDriftEstimate, 12.5)
+        XCTAssertEqual(request.time.recordingStartUTC, "1970-01-01T00:15:00.000Z")
+        XCTAssertEqual(request.time.recordingEndUTC, "1970-01-01T00:16:00.000Z")
+        XCTAssertEqual(request.time.fileCreatedAtDevice, "1970-01-01T00:15:00.000Z")
+        XCTAssertEqual(request.time.fileClosedAtDevice, "1970-01-01T00:16:00.000Z")
+        XCTAssertEqual(request.time.sensorRecordingID, "recording-123")
+        XCTAssertEqual(request.time.fetchStartedAtCollector, "1970-01-01T00:15:00.000Z")
 
         guard case .hr(let payload) = request.payload else {
             return XCTFail("Expected hr payload")

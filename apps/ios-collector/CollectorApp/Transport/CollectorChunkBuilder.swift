@@ -7,6 +7,7 @@ struct CollectorChunkBuilder {
         streamProfile: StreamMetadataProfile,
         chunkSequenceNumber: Int,
         samples: [HeartRateSample],
+        timeContext: UploadChunkTimeContext? = nil,
         createdAtUTC: Date = Date()
     ) -> UploadChunk? {
         guard !samples.isEmpty else { return nil }
@@ -22,7 +23,8 @@ struct CollectorChunkBuilder {
             samples: samples,
             collectionMode: session.collectionMode,
             streamProfile: streamProfile,
-            sourceDeviceID: session.deviceID.isEmpty ? nil : session.deviceID
+            sourceDeviceID: session.deviceID.isEmpty ? nil : session.deviceID,
+            timeContext: timeContext
         )
     }
 }

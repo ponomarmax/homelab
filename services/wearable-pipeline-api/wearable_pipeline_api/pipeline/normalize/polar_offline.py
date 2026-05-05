@@ -227,9 +227,17 @@ class PolarVerityOfflineNormalizer:
             return AlignmentDecision(level="L1", basis="payload.samples[].timeStamp", details=l1.reason, confidence=l1.quality, shift_ns=shift_ns), warnings
 
         if _is_plausible_window(l4.start, l4.end):
-            warnings.append("fallback_to_collector_server_time_L4")
-            return AlignmentDecision(level="L4", basis="reconstructed_from_collector_and_cadence", details=l4.reason, confidence="low", shift_ns=None), warnings
+            # We have a plausible anchor window but no trustworthy absolute sample mapping.
+            # Reconstruct on cadence from a weak anchor => L3.
+            return AlignmentDecision(
+                level="L3",
+                basis="reconstructed_from_collector_and_cadence",
+                details="cadence_based_from_collector_anchor",
+                confidence="low",
+                shift_ns=None,
+            ), warnings
 
+        warnings.append("fallback_to_collector_server_time_L4")
         warnings.append("unable_to_establish_session_time_basis")
         return AlignmentDecision(level="L4", basis="unresolved", details="no_valid_candidate", confidence="low", shift_ns=None), warnings
 
@@ -468,6 +476,9 @@ class PolarVerityOfflineNormalizer:
             "selected_reason": decision.details,
             "source_app_origin": source_app_origin,
         }
+        hard_fail_reasons: list[str] = []
+        if decision.level == "L4" and decision.basis == "unresolved":
+            hard_fail_reasons.append("no_valid_time_basis")
 
         report = {
             "session_id": session_id,
@@ -484,7 +495,7 @@ class PolarVerityOfflineNormalizer:
             "per_stream_start": start_iso,
             "per_stream_end": end_iso,
             "warnings": warnings,
-            "hard_fail_reasons": [],
+            "hard_fail_reasons": hard_fail_reasons,
             # backward-compatible keys
             "alignment_basis": decision.basis,
             "epoch_offset_decision": decision.details,

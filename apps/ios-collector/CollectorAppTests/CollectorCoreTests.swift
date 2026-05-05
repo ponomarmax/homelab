@@ -39,14 +39,16 @@ final class CollectorCoreTests: XCTestCase {
             streamDescriptor: StreamDescriptor,
             streamProfile: StreamMetadataProfile,
             chunkSequenceNumber: Int,
-            samples: [HeartRateSample]
+            samples: [HeartRateSample],
+            timeContext: UploadChunkTimeContext?
         ) -> UploadChunk? {
             chunkBuilder.buildChunk(
                 session: session,
                 streamDescriptor: streamDescriptor,
                 streamProfile: streamProfile,
                 chunkSequenceNumber: chunkSequenceNumber,
-                samples: samples
+                samples: samples,
+                timeContext: timeContext
             )
         }
 
@@ -1020,7 +1022,8 @@ final class CollectorCoreTests: XCTestCase {
                 OfflineUploadBatch(
                     stream: .heartRate,
                     sourcePath: "/U/0/HR/1.rec",
-                    samples: [makeSample(hr: 61, receivedAt: Date(timeIntervalSince1970: 100), sequence: 1)]
+                    samples: [makeSample(hr: 61, receivedAt: Date(timeIntervalSince1970: 100), sequence: 1)],
+                    timeContext: nil
                 ),
                 OfflineUploadBatch(
                     stream: .ppi,
@@ -1043,7 +1046,8 @@ final class CollectorCoreTests: XCTestCase {
                                 )
                             )
                         )
-                    ]
+                    ],
+                    timeContext: nil
                 )
             ],
             messagesByStream: [.hr: "fetched", .ppi: "fetched"]
@@ -1067,7 +1071,7 @@ final class CollectorCoreTests: XCTestCase {
         )
         adapter.nextOfflinePreparationResult = OfflineUploadPreparationResult(
             batches: [
-                OfflineUploadBatch(stream: .heartRate, sourcePath: "/U/0/HR/1.rec", samples: [makeSample(hr: 60, receivedAt: Date(timeIntervalSince1970: 100), sequence: 1)]),
+                OfflineUploadBatch(stream: .heartRate, sourcePath: "/U/0/HR/1.rec", samples: [makeSample(hr: 60, receivedAt: Date(timeIntervalSince1970: 100), sequence: 1)], timeContext: nil),
                 OfflineUploadBatch(stream: .accelerometer, sourcePath: "/U/0/ACC/1.rec", samples: [
                     HeartRateSample(
                         stream: .accelerometer,
@@ -1078,7 +1082,7 @@ final class CollectorCoreTests: XCTestCase {
                             PolarAccSampleData(deviceTimeNS: 10, xMg: 1, yMg: 2, zMg: 3, sampleRateHz: nil, rangeMg: nil)
                         )
                     )
-                ])
+                ], timeContext: nil)
             ],
             messagesByStream: [.hr: "fetched", .acc: "fetched"]
         )

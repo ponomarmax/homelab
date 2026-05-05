@@ -30,7 +30,8 @@ final class TransportTests: XCTestCase {
             streamDescriptor: streamDescriptor,
             streamProfile: PolarStreamProfile.hrLive,
             chunkSequenceNumber: 1,
-            samples: []
+            samples: [],
+            timeContext: nil
         )
 
         XCTAssertNil(chunk)
