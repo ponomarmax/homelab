@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "chunk_id": "ae066cd2-8a88-4827-9bc2-8c740f691d0d",
+  "session_id": "6c787e4d-6beb-4e40-afe5-a6411e81ce2a",
+  "stream_id": "stream-offline-gyro-6c787e4d-6beb-4e40-afe5-a6411e81ce2a",
+  "stream_type": "gyro",
+  "sequence": 3,
+  "source": {
+    "vendor": "polar",
+    "device_model": "verity_sense",
+    "device_id": "B15B5829"
+  },
+  "collection": {
+    "mode": "offline_recording"
+  },
+  "time": {
+    "device_time_reference": "polar",
+    "first_sample_received_at_collector": "2026-04-30T16:19:54.276Z",
+    "uploaded_at_collector": "2026-04-30T16:20:11.896Z",
+    "received_at_server": "2026-04-30T16:20:12.066545Z"
+  },
+  "transport": {
+    "payload_schema": "polar.offline.gyro",
+    "encoding": "json",
+    "compression": "none",
+    "payload_version": "1.0"
+  },
+  "payload": {
+    "type": "GYRO",
+    "source": "polar_verity_sense_offline",
+    "samples": [
+      {"timeStamp": 545998020094014464, "x": -1.33, "y": 0.14, "z": -0.07},
+      {"timeStamp": 545998020113245248, "x": -1.05, "y": -0.35, "z": -0.35},
+      {"timeStamp": 545998062747871192, "x": -0.77, "y": 15.190001, "z": 0.21000001}
+    ]
+  }
+}

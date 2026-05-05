@@ -25,5 +25,6 @@ This registry lists sensor-specific payload contracts that may be referenced by 
 - Ingestion validates the transport envelope only; payload content remains opaque at ingest boundary.
 - Deep sensor parsing belongs after raw ingestion.
 - `polar.device_battery` is a known device-status stream and is supported by the wearable processing pipeline via a dedicated battery handler.
+- Legacy offline gyro inputs (`payload.type=GYR`, `transport.payload_schema=polar.offline.gyr`, `payload_version=v1-draft`) must be normalized at collector/adapter edge to canonical `GYRO` / `polar.offline.gyro` / `1.0`.
 - `polar.offline.*` payloads preserve raw offline fields (including raw/zero timestamps) and do not define canonical `ts_utc`.
 - Sensor payloads may include optional `stream_settings` to preserve SDK-negotiated runtime stream configuration as raw metadata.
