@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "chunk_id": "848e5988-aa5a-479b-9a3c-57071ee5bb2a",
+  "session_id": "6c787e4d-6beb-4e40-afe5-a6411e81ce2a",
+  "stream_id": "stream-offline-ppg-6c787e4d-6beb-4e40-afe5-a6411e81ce2a",
+  "stream_type": "ppg",
+  "sequence": 3,
+  "source": {
+    "vendor": "polar",
+    "device_model": "verity_sense",
+    "device_id": "B15B5829"
+  },
+  "collection": {
+    "mode": "offline_recording"
+  },
+  "time": {
+    "device_time_reference": "polar",
+    "first_sample_received_at_collector": "2026-04-30T16:19:54.276Z",
+    "uploaded_at_collector": "2026-04-30T16:20:11.586Z",
+    "received_at_server": "2026-04-30T16:20:11.853144Z"
+  },
+  "transport": {
+    "encoding": "json",
+    "compression": "none",
+    "payload_schema": "polar.offline.ppg",
+    "payload_version": "1.0"
+  },
+  "payload": {
+    "type": "PPG",
+    "source": "polar_verity_sense_offline",
+    "samples": [
+      {
+        "timeStamp": 545998023721673024,
+        "ppg0": 376243,
+        "ppg1": 420259,
+        "ppg2": 470240,
+        "ambient": 3233,
+        "channelSamples": [376243, 420259, 470240, 3233]
+      },
+      {
+        "timeStamp": 545998065121622268,
+        "ppg0": 378619,
+        "ppg1": 390833,
+        "ppg2": 427982,
+        "ambient": 2254,
+        "channelSamples": [378619, 390833, 427982, 2254]
+      }
+    ]
+  }
+}
