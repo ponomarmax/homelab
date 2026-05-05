@@ -75,8 +75,9 @@ Linux host
 
 The wearable path is based on one collector app with multiple sensor adapters.
 
-Initial:
-- Polar Verity Sense adapter
+Current:
+- Polar H10 online adapter path
+- Polar Verity Sense online/offline adapter paths
 
 Planned:
 - Muse Athena adapter

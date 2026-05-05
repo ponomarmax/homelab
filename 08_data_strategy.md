@@ -30,9 +30,10 @@ Sleep / physiology:
 - future EEG / PPG exploration
 - related derived metrics
 
-Current strict wearable MVP:
-- HR only
-- Polar Verity Sense
+Current wearable baseline:
+- Polar H10 online: `hr`, `acc`, `ecg`, `battery`
+- Polar Verity Sense online: `hr`
+- Polar Verity Sense offline: `hr`, `acc`, `gyro`, `mag`, `ppg`, `ppi`
 - session-based collection
 - raw JSONL first, then normalized and aggregated layers
 

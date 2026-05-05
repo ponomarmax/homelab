@@ -105,7 +105,7 @@ Goal:
 Scope:
 - `normalize_hr`
 - `build_window_features`
-- `build_nightly_summary`
+- `build_session_summary`
 - `generate_llm_report`
 - `send_telegram`
 
@@ -149,7 +149,7 @@ This is especially important for:
 - raw persistence
 - timestamp normalization
 - feature window generation
-- nightly summary generation
+- session summary generation
 
 ---
 

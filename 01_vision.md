@@ -70,10 +70,10 @@ The system should support:
 - normalized analytical layers
 - future feature extraction and ML experimentation
 
-Near-term MVP architecture:
-- Polar Verity Sense HR only
-- iOS Collector -> ingestion API -> raw JSONL -> nightly orchestrator
-- deterministic normalization, feature building, and nightly summary
+Near-term implemented baseline:
+- Polar multi-stream contracts normalized across H10 online and Verity Sense online/offline
+- iOS Collector -> ingestion API -> raw JSONL -> deterministic processing pipeline
+- deterministic normalization, window features, and session summary artifacts
 - LLM interpretation only after deterministic summary artifacts exist
 
 ---

@@ -48,11 +48,11 @@ Break the work into small observable vertical slices.
 - time alignment decisions are inspectable
 
 ## CP8 — Build features
-- first HR window features are produced
+- first session-level multi-stream window features are produced
 - feature artifacts are readable and verifiable
 
-## CP9 — Build nightly summary
-- deterministic nightly summary is produced
+## CP9 — Build session summary
+- deterministic session summary is produced
 - summary remains independent from LLM interpretation
 
 ## CP10 — Orchestrator job

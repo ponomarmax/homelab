@@ -1,6 +1,6 @@
 # Roadmap
 
-## Wearable HR MVP checkpoint order
+## Wearable MVP checkpoint order
 
 0. docs
 1. iOS skeleton
@@ -107,10 +107,10 @@ Status: planned
 
 ---
 
-## Stage 8 — Wearable HR MVP Pipeline
+## Stage 8 — Wearable Pipeline
 
 Goal:
-Deliver a strict HR-only end-to-end pipeline with raw-first storage and deterministic nightly processing.
+Deliver a deterministic multi-stream wearable pipeline with raw-first storage and session-based processing.
 
 Planned sequence:
 - CP0: document HR MVP architecture, testing strategy, and time alignment
@@ -122,11 +122,15 @@ Planned sequence:
 - CP6: persist raw JSONL
 - CP7: normalize to clean Parquet
 - CP8: build window features (session-based multi-stream processing)
-- CP9: build deterministic session summary
+- CP9: build deterministic session summary (done)
 - CP10: add single-container orchestrator
 - CP11: add downstream insights / LLM interpretation layer
 - CP12: add communication delivery, starting with Telegram
 - CP13: run full smoke validation
+
+Status:
+- transport + payload contract normalization for Polar H10 online and Polar Verity Sense online/offline: done
+- deterministic normalize/features/session summary flow: done
 
 Rules:
 - no agent frameworks
