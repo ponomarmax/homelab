@@ -127,6 +127,31 @@ The normalizer should follow this order of intent:
 
 This keeps alignment explicit, reproducible, and reviewable.
 
+### Session-Level Confidence Ladder (L0-L4)
+
+Use one deterministic policy registry for every offline session:
+
+1. `L0` device-native recording metadata:
+   - `recording_start_utc`, `recording_end_utc`
+   - optional validators: `file_created_at_device`, `file_closed_at_device`
+2. `L1` sample timestamps + validated clock mapping:
+   - `samples[].timeStamp`
+   - `clock_sync_state` must be `synced` for high confidence
+   - `clock_drift_estimate` above `100 ppm` degrades confidence
+3. `L2` cross-stream anchoring:
+   - reliable stream priority: `acc -> hr -> gyro -> mag -> ppg -> ppi`
+4. `L3` cadence reconstruction:
+   - infer from sample order + stream nominal rate
+5. `L4` collector/server fallback:
+   - `fetch_started_at_collector` / `fetch_completed_at_collector`
+   - legacy fallback: `first_sample_received_at_collector` / `uploaded_at_collector`
+
+Quality gates:
+- reject implausible absolute years outside `[2018, current_year+1]`
+- reject session duration `> 48h`
+- degrade confidence for mixed valid/invalid timestamps
+- treat `ppi` zero timestamps as recoverable (warning + degradation), not hard fail
+
 ---
 
 ## Confidence Levels

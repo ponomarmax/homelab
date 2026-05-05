@@ -17,6 +17,18 @@ class UploadChunkTime(ContractModel):
         ..., description="Collector receive time for the first sample in this chunk."
     )
     uploaded_at_collector: datetime = Field(..., description="Collector upload time.")
+    recording_start_utc: datetime | None = Field(default=None, description="Device-native recording start time in UTC.")
+    recording_end_utc: datetime | None = Field(default=None, description="Device-native recording end time in UTC.")
+    file_created_at_device: datetime | None = Field(default=None, description="Device file creation time.")
+    file_closed_at_device: datetime | None = Field(default=None, description="Device file close time.")
+    device_local_time_at_fetch: datetime | None = Field(default=None, description="Device local clock when collector fetch started.")
+    device_timezone_offset: int | None = Field(default=None, description="Device timezone offset in minutes at fetch time.")
+    clock_sync_state: Literal["synced", "unsynced", "unknown"] | None = Field(default=None, description="Device clock sync state.")
+    clock_drift_estimate: float | None = Field(default=None, description="Estimated device clock drift in ppm.")
+    source_app_origin: Literal["our_app", "third_party", "unknown"] | None = Field(default=None, description="Origin app for recording.")
+    sensor_recording_id: str | None = Field(default=None, min_length=1, description="Stable sensor recording identifier.")
+    fetch_started_at_collector: datetime | None = Field(default=None, description="Collector fetch start time.")
+    fetch_completed_at_collector: datetime | None = Field(default=None, description="Collector fetch completion time.")
 
 
 class UploadChunkSource(ContractModel):

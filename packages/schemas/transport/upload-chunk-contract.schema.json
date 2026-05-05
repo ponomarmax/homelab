@@ -99,6 +99,58 @@
           "type": "string",
           "format": "date-time"
         },
+        "recording_start_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "recording_end_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "file_created_at_device": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "file_closed_at_device": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "device_local_time_at_fetch": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "device_timezone_offset": {
+          "type": "integer"
+        },
+        "clock_sync_state": {
+          "enum": [
+            "synced",
+            "unsynced",
+            "unknown"
+          ]
+        },
+        "clock_drift_estimate": {
+          "type": "number"
+        },
+        "source_app_origin": {
+          "enum": [
+            "our_app",
+            "third_party",
+            "unknown"
+          ]
+        },
+        "sensor_recording_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fetch_started_at_collector": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "fetch_completed_at_collector": {
+          "type": "string",
+          "format": "date-time"
+        },
         "received_at_server": {
           "type": "string",
           "format": "date-time"

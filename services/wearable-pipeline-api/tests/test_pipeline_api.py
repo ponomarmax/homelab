@@ -295,6 +295,7 @@ class PipelineApiTests(unittest.TestCase):
         last_ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce").max()
         self.assertEqual(first_ts.isoformat().replace("+00:00", "Z"), "2026-04-25T09:59:59Z")
         self.assertEqual(last_ts.isoformat().replace("+00:00", "Z"), "2026-04-25T10:00:00Z")
+        self.assertEqual(output.report["alignment_basis_level"], "L4")
 
     def test_verity_offline_ppi_zero_timestamp_fallback(self) -> None:
         raw_path = write_raw_stream(
@@ -377,11 +378,60 @@ class PipelineApiTests(unittest.TestCase):
 
         normalizer = PolarVerityOfflineNormalizer(StreamSpec(stream_type="ppi", payload_schema="polar.offline.ppi", time_field="timeStamp"))
         output = normalizer.handle(raw_path)
-        self.assertEqual(output.report.get("epoch_offset_decision"), "polar_epoch_ns_shifted_to_collector")
+        self.assertEqual(output.report.get("alignment_basis_level"), "L1")
         min_ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce").min()
         max_ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce").max()
         self.assertEqual(min_ts.year, 2026)
         self.assertEqual(max_ts.year, 2026)
+        self.assertIn("mixed_valid_invalid_timestamps", output.report.get("warnings", []))
+
+    def test_verity_offline_prefers_l0_recording_window(self) -> None:
+        chunk = build_chunk(
+            chunk_id="chunk-offline-acc-l0-1",
+            sequence=1,
+            stream_type="acc",
+            payload_schema="polar.offline.acc",
+            stream_id="stream-offline-acc-l0-001",
+            device_model="verity_sense",
+            payload={
+                "type": "ACC",
+                "samples": [
+                    {"timeStamp": 545998017227188608, "x": -272, "y": -780, "z": -542},
+                    {"timeStamp": 545998061572134724, "x": -542, "y": -780, "z": -299},
+                ],
+            },
+        )
+        chunk["time"]["recording_start_utc"] = "2026-04-20T10:00:00Z"
+        chunk["time"]["recording_end_utc"] = "2026-04-20T10:00:01Z"
+        chunk["time"]["source_app_origin"] = "third_party"
+        raw_path = write_raw_stream(self.raw_root, session_id="session-verity-offline-l0", stream_type="acc", chunks=[chunk])
+
+        output = PolarVerityOfflineNormalizer(StreamSpec(stream_type="acc", payload_schema="polar.offline.acc", time_field="timeStamp")).handle(raw_path)
+        self.assertEqual(output.report.get("alignment_basis_level"), "L0")
+        self.assertEqual(output.report.get("confidence"), "high")
+        min_ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce").min()
+        self.assertEqual(min_ts.year, 2026)
+
+    def test_verity_offline_rejects_implausible_l1_and_falls_back_l4(self) -> None:
+        chunk = build_chunk(
+            chunk_id="chunk-offline-acc-implausible-1",
+            sequence=1,
+            stream_type="acc",
+            payload_schema="polar.offline.acc",
+            stream_id="stream-offline-acc-implausible-001",
+            device_model="verity_sense",
+            payload={
+                "type": "ACC",
+                "samples": [
+                    {"timeStamp": 2272149572738560000, "x": -272, "y": -780, "z": -542},
+                    {"timeStamp": 2272149573738560000, "x": -542, "y": -780, "z": -299},
+                ],
+            },
+        )
+        raw_path = write_raw_stream(self.raw_root, session_id="session-verity-offline-implausible", stream_type="acc", chunks=[chunk])
+        output = PolarVerityOfflineNormalizer(StreamSpec(stream_type="acc", payload_schema="polar.offline.acc", time_field="timeStamp")).handle(raw_path)
+        self.assertEqual(output.report.get("alignment_basis_level"), "L4")
+        self.assertIn("fallback_to_collector_server_time_L4", output.report.get("warnings", []))
 
     def test_battery_normalizer_supports_nested_battery_payload(self) -> None:
         battery_path = write_raw_stream(
