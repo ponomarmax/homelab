@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://homelab.local/schemas/payloads/polar/polar.offline.gyr.v1-draft.schema.json",
-  "title": "polar.offline.gyr v1-draft",
+  "$id": "https://homelab.local/schemas/payloads/polar/polar.offline.gyro.v1-draft.schema.json",
+  "title": "polar.offline.gyro v1-draft",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -21,7 +21,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "const": "GYR"
+          "const": "GYRO"
         },
         "source": {
           "type": "string",

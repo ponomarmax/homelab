@@ -6,7 +6,7 @@ final class DeviceAdapterTests: XCTestCase {
     func testMockAdapterScanReturnsConfiguredDevice() async throws {
         let device = CollectorDevice(
             id: "mock-1",
-            name: "Mock Polar Verity Sense",
+            name: "Mock verity_sense",
             vendor: "Polar",
             model: "Verity Sense"
         )
@@ -154,7 +154,7 @@ final class DeviceAdapterTests: XCTestCase {
     func testPolarCapabilitiesVeritySenseIncludesOfflineCandidates() {
         let device = CollectorDevice(
             id: "polar-vs",
-            name: "Polar Verity Sense 12345",
+            name: "verity_sense 12345",
             vendor: "Polar",
             model: "Verity Sense"
         )
@@ -167,14 +167,14 @@ final class DeviceAdapterTests: XCTestCase {
         XCTAssertEqual(caps.family, .veritySense)
         XCTAssertEqual(
             caps.availableOfflineStreams,
-            [.hr, .ppi, .acc, .ppg, .mag, .gyr]
+            [.hr, .ppi, .acc, .ppg, .mag, .gyro]
         )
     }
 
     func testPolarCapabilitiesH10OfflineUnavailable() {
         let device = CollectorDevice(
             id: "polar-h10",
-            name: "Polar H10 A1B2",
+            name: "h10 A1B2",
             vendor: "Polar",
             model: "H10"
         )
@@ -208,7 +208,7 @@ final class DeviceAdapterTests: XCTestCase {
     func testPolarCapabilitiesManualTimeSyncFlagPassesThrough() {
         let device = CollectorDevice(
             id: "polar-vs",
-            name: "Polar Verity Sense",
+            name: "verity_sense",
             vendor: "Polar",
             model: "Verity Sense"
         )

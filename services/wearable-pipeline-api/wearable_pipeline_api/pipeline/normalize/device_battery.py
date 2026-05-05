@@ -93,7 +93,7 @@ class PolarDeviceBatteryNormalizer:
         report = {
             "session_id": session_id,
             "stream_id": stream_id,
-            "stream_type": "device_battery",
+            "stream_type": "battery",
             "payload_schema": self.payload_schema,
             "user_id": user_id,
             "alignment_basis": "payload.received_at_collector",

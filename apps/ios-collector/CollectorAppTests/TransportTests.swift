@@ -103,7 +103,7 @@ final class TransportTests: XCTestCase {
 
         XCTAssertEqual(decoded["stream_type"] as? String, "hr")
         XCTAssertEqual(source["vendor"] as? String, "polar")
-        XCTAssertEqual(source["device_model"] as? String, "Polar H10")
+        XCTAssertEqual(source["device_model"] as? String, "h10")
         XCTAssertEqual(collection["mode"] as? String, "online_live")
         XCTAssertNil(time["received_at_server"])
     }

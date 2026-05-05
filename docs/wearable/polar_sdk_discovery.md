@@ -134,9 +134,9 @@ Generic BLE HR alone gives only a narrow HR profile. Polar BLE SDK adds:
 
 Conclusion: generic BLE HR is insufficient for multi-stream raw-first ingestion and offline sync use cases.
 
-## 3) Device Comparison: Polar H10 vs Polar Verity Sense
+## 3) Device Comparison: h10 vs verity_sense
 
-| Capability | Polar H10 | Polar Verity Sense |
+| Capability | h10 | verity_sense |
 | --- | --- | --- |
 | HR | Yes, bpm, ~1 Hz stream in product notes | Yes |
 | RR / PPI / PP interval | RR via HR stream (`rrsMs`); no optical PPI mode | PPI/PP interval supported (with quality flags) |

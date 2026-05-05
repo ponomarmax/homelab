@@ -28,7 +28,7 @@ enum CollectorStream: String, CaseIterable, Identifiable, Codable, Sendable {
         case .magnetometer:
             return "MAG"
         case .gyroscope:
-            return "GYR"
+            return "GYRO"
         case .eeg:
             return "EEG"
         case .battery:

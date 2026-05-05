@@ -45,9 +45,9 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
         case "polar.offline.mag":
             guard let magPayload = makeOfflineMagPayload(samples: samples) else { return nil }
             payload = .offlineMag(magPayload)
-        case "polar.offline.gyr", "polar.offline.gyro":
-            guard let gyrPayload = makeOfflineGyrPayload(samples: samples) else { return nil }
-            payload = .offlineGyr(gyrPayload)
+        case "polar.offline.gyro":
+            guard let gyroPayload = makeOfflineGyroPayload(samples: samples) else { return nil }
+            payload = .offlineGyro(gyroPayload)
         case "polar.device_battery":
             guard let batteryPayload = makeBatteryPayload(samples: samples) else { return nil }
             payload = .battery(batteryPayload)
@@ -244,13 +244,13 @@ struct UploadChunk: Identifiable, Equatable, Codable, Sendable {
         return CanonicalPolarOfflineMagPayload(type: "MAG", source: "polar_verity_sense_offline", samples: payloadSamples)
     }
 
-    private func makeOfflineGyrPayload(samples: [HeartRateSample]) -> CanonicalPolarOfflineGyrPayload? {
-        let payloadSamples = samples.compactMap { sample -> CanonicalPolarOfflineGyrSample? in
-            guard case .gyr(let gyrData) = sample.payload else { return nil }
-            return CanonicalPolarOfflineGyrSample(timeStamp: gyrData.deviceTimeNS, xDps: gyrData.xDps, yDps: gyrData.yDps, zDps: gyrData.zDps)
+    private func makeOfflineGyroPayload(samples: [HeartRateSample]) -> CanonicalPolarOfflineGyroPayload? {
+        let payloadSamples = samples.compactMap { sample -> CanonicalPolarOfflineGyroSample? in
+            guard case .gyro(let gyrData) = sample.payload else { return nil }
+            return CanonicalPolarOfflineGyroSample(timeStamp: gyrData.deviceTimeNS, xDps: gyrData.xDps, yDps: gyrData.yDps, zDps: gyrData.zDps)
         }
         guard !payloadSamples.isEmpty else { return nil }
-        return CanonicalPolarOfflineGyrPayload(type: "GYR", source: "polar_verity_sense_offline", samples: payloadSamples)
+        return CanonicalPolarOfflineGyroPayload(type: "GYRO", source: "polar_verity_sense_offline", samples: payloadSamples)
     }
 
     private func makeBatteryPayload(samples: [HeartRateSample]) -> CanonicalPolarDeviceBatteryPayload? {
@@ -526,7 +526,7 @@ struct CanonicalPolarOfflineMagPayload: Equatable, Codable, Sendable {
     let samples: [CanonicalPolarOfflineMagSample]
 }
 
-struct CanonicalPolarOfflineGyrSample: Equatable, Codable, Sendable {
+struct CanonicalPolarOfflineGyroSample: Equatable, Codable, Sendable {
     let timeStamp: UInt64
     let xDps: Float
     let yDps: Float
@@ -540,10 +540,10 @@ struct CanonicalPolarOfflineGyrSample: Equatable, Codable, Sendable {
     }
 }
 
-struct CanonicalPolarOfflineGyrPayload: Equatable, Codable, Sendable {
+struct CanonicalPolarOfflineGyroPayload: Equatable, Codable, Sendable {
     let type: String
     let source: String
-    let samples: [CanonicalPolarOfflineGyrSample]
+    let samples: [CanonicalPolarOfflineGyroSample]
 }
 
 struct CanonicalPolarDeviceBatteryPayload: Equatable, Codable, Sendable {
@@ -593,7 +593,7 @@ enum CanonicalPayload: Equatable, Codable, Sendable {
     case offlineAcc(CanonicalPolarOfflineAccPayload)
     case offlinePpg(CanonicalPolarOfflinePpgPayload)
     case offlineMag(CanonicalPolarOfflineMagPayload)
-    case offlineGyr(CanonicalPolarOfflineGyrPayload)
+    case offlineGyro(CanonicalPolarOfflineGyroPayload)
     case battery(CanonicalPolarDeviceBatteryPayload)
 
     func encode(to encoder: Encoder) throws {
@@ -615,7 +615,7 @@ enum CanonicalPayload: Equatable, Codable, Sendable {
             try container.encode(value)
         case .offlineMag(let value):
             try container.encode(value)
-        case .offlineGyr(let value):
+        case .offlineGyro(let value):
             try container.encode(value)
         case .battery(let value):
             try container.encode(value)
@@ -656,8 +656,8 @@ enum CanonicalPayload: Equatable, Codable, Sendable {
             self = .offlineMag(value)
             return
         }
-        if let value = try? container.decode(CanonicalPolarOfflineGyrPayload.self) {
-            self = .offlineGyr(value)
+        if let value = try? container.decode(CanonicalPolarOfflineGyroPayload.self) {
+            self = .offlineGyro(value)
             return
         }
         if let value = try? container.decode(CanonicalPolarDeviceBatteryPayload.self) {

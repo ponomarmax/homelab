@@ -1519,7 +1519,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         case .acc: return .acc
         case .ppg: return .ppg
         case .mag: return .magnetometer
-        case .gyr: return .gyro
+        case .gyro: return .gyro
         }
     }
 
@@ -1530,7 +1530,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         case .acc: return .acc
         case .ppg: return .ppg
         case .magnetometer: return .mag
-        case .gyro: return .gyr
+        case .gyro: return .gyro
         default: return nil
         }
     }
@@ -1678,7 +1678,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         }
     }
 
-    private static func makeGyrSamples(from data: PolarGyroData, collectorTimestamp: Date, settings: PolarSensorSetting) -> [HeartRateSample] {
+    private static func makeGyroSamples(from data: PolarGyroData, collectorTimestamp: Date, settings: PolarSensorSetting) -> [HeartRateSample] {
         let streamSettings = mapStreamSettings(from: settings)
         return data.enumerated().map { index, sample in
             HeartRateSample(
@@ -1687,8 +1687,8 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
                 deviceTimestampRaw: nil,
                 sourceTimestampKind: .deviceReported,
                 sampleSequenceNumber: index + 1,
-                payload: .gyr(
-                    PolarGyrSampleData(deviceTimeNS: sample.timeStamp, xDps: sample.x, yDps: sample.y, zDps: sample.z)
+                payload: .gyro(
+                    PolarGyroSampleData(deviceTimeNS: sample.timeStamp, xDps: sample.x, yDps: sample.y, zDps: sample.z)
                 ),
                 streamSettings: streamSettings
             )
@@ -1717,7 +1717,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             let samples = makeMagSamples(from: magData, collectorTimestamp: fetchStartedAt, settings: settings)
             return (.magnetometer, samples, samples.isEmpty ? "skipped: no samples" : "uploaded-ready: \(samples.count)")
         case .gyroOfflineRecordingData(let gyrData, _, let settings):
-            let samples = makeGyrSamples(from: gyrData, collectorTimestamp: fetchStartedAt, settings: settings)
+            let samples = makeGyroSamples(from: gyrData, collectorTimestamp: fetchStartedAt, settings: settings)
             return (.gyroscope, samples, samples.isEmpty ? "skipped: no samples" : "uploaded-ready: \(samples.count)")
         default:
             let stream: CollectorStream = {

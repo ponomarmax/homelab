@@ -1,9 +1,9 @@
 
-# Polar Verity Sense
+# verity_sense
 
 ## Role in the project
 
-Polar Verity Sense is the initial production baseline for:
+verity_sense is the initial production baseline for:
 - heart rate
 - PPI / RR-like timing when available
 - accelerometer

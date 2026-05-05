@@ -9,7 +9,7 @@ from .hr import EXPECTED_WINDOW_SIZES, HrSummaryOutput, _safe_float
 
 class DeviceBatterySummaryHandler:
     name = "DeviceBatterySummaryHandler"
-    stream_type = "device_battery"
+    stream_type = "battery"
 
     def _empty_summary(self, generated_summary_path: str, source_paths: list[str], warnings: list[str]) -> HrSummaryOutput:
         summary = {

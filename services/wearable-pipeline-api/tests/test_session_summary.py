@@ -255,7 +255,7 @@ class SessionSummaryStepTests(unittest.TestCase):
         write_window_features(
             self.processed_root,
             session_id=session_id,
-            stream_dir="unknown",
+            stream_dir="battery",
             rows=[
                 {
                     "window_size": "30s",
@@ -269,7 +269,7 @@ class SessionSummaryStepTests(unittest.TestCase):
                     "level_first": 90.0,
                     "level_last": 90.0,
                     "drain_per_hour": None,
-                    "stream_type": "unknown",
+                    "stream_type": "battery",
                     "payload_schema": "polar.device_battery",
                     "source_vendor": "polar",
                     "device_model": "h10",
@@ -287,7 +287,7 @@ class SessionSummaryStepTests(unittest.TestCase):
                     "level_first": 90.0,
                     "level_last": 90.0,
                     "drain_per_hour": None,
-                    "stream_type": "unknown",
+                    "stream_type": "battery",
                     "payload_schema": "polar.device_battery",
                     "source_vendor": "polar",
                     "device_model": "h10",
@@ -305,7 +305,7 @@ class SessionSummaryStepTests(unittest.TestCase):
                     "level_first": 90.0,
                     "level_last": 88.0,
                     "drain_per_hour": 4.0,
-                    "stream_type": "unknown",
+                    "stream_type": "battery",
                     "payload_schema": "polar.device_battery",
                     "source_vendor": "polar",
                     "device_model": "h10",
@@ -331,14 +331,14 @@ class SessionSummaryStepTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "success")
         self.assertEqual(payload["status"], "success")
-        self.assertEqual(sorted(payload["streams_present"]), ["acc", "device_battery", "ecg", "hr"])
+        self.assertEqual(sorted(payload["streams_present"]), ["acc", "battery", "ecg", "hr"])
         self.assertEqual(payload["streams_missing"], [])
         self.assertEqual(payload["stream_summaries"]["acc"]["status"], "success")
         self.assertEqual(payload["stream_summaries"]["ecg"]["status"], "success")
-        self.assertEqual(payload["stream_summaries"]["device_battery"]["status"], "success")
-        self.assertEqual(payload["stream_summaries"]["device_battery"]["battery"]["first_level"], 90.0)
-        self.assertEqual(payload["stream_summaries"]["device_battery"]["battery"]["last_level"], 88.0)
-        self.assertEqual(payload["stream_summaries"]["device_battery"]["battery"]["charge_states_observed"], ["discharging"])
+        self.assertEqual(payload["stream_summaries"]["battery"]["status"], "success")
+        self.assertEqual(payload["stream_summaries"]["battery"]["battery"]["first_level"], 90.0)
+        self.assertEqual(payload["stream_summaries"]["battery"]["battery"]["last_level"], 88.0)
+        self.assertEqual(payload["stream_summaries"]["battery"]["battery"]["charge_states_observed"], ["discharging"])
 
     def test_battery_recognized_by_payload_schema_not_stream_type(self) -> None:
         session_id = "session-battery-schema"
@@ -353,7 +353,7 @@ class SessionSummaryStepTests(unittest.TestCase):
         write_window_features(
             self.processed_root,
             session_id=session_id,
-            stream_dir="unknown",
+            stream_dir="battery",
             rows=[
                 {
                     "window_size": "30s",
@@ -367,7 +367,7 @@ class SessionSummaryStepTests(unittest.TestCase):
                     "level_first": 87.0,
                     "level_last": 86.0,
                     "drain_per_hour": 4.0,
-                    "stream_type": "unknown",
+                    "stream_type": "battery",
                     "payload_schema": "polar.device_battery",
                     "source_vendor": "polar",
                     "device_model": "h10",
@@ -380,9 +380,9 @@ class SessionSummaryStepTests(unittest.TestCase):
         payload = self._read_summary(session_id)
 
         self.assertEqual(result["status"], "partial")
-        self.assertIn("device_battery", payload["streams_present"])
+        self.assertIn("battery", payload["streams_present"])
         self.assertNotIn("unknown", payload["streams_present"])
-        self.assertEqual(payload["stream_summaries"]["device_battery"]["status"], "partial")
+        self.assertEqual(payload["stream_summaries"]["battery"]["status"], "partial")
 
     def test_cross_midnight_session_discovery_requested_date_and_previous_day(self) -> None:
         session_id = "session-cross-midnight"
@@ -455,7 +455,7 @@ class SessionSummaryStepTests(unittest.TestCase):
         self.assertNotEqual(payload["status"], "failed")
         self.assertIn("acc", payload["streams_missing"])
         self.assertIn("ecg", payload["streams_missing"])
-        self.assertIn("device_battery", payload["streams_missing"])
+        self.assertIn("battery", payload["streams_missing"])
 
     def test_summary_does_not_read_or_modify_raw_jsonl(self) -> None:
         write_window_features(self.processed_root, session_id="session-no-raw", stream_dir="hr", rows=build_hr_rows())
@@ -502,7 +502,7 @@ class SessionSummaryStepTests(unittest.TestCase):
             "overall_quality",
         ]
         self.assertEqual(list(payload.keys()), expected_top_level_keys)
-        self.assertEqual(list(payload["stream_summaries"].keys()), ["hr", "acc", "ecg", "device_battery"])
+        self.assertEqual(list(payload["stream_summaries"].keys()), ["hr", "acc", "ecg", "battery"])
         self.assertEqual(set(payload["inputs"].keys()), {"window_feature_paths", "available_window_sizes"})
 
 

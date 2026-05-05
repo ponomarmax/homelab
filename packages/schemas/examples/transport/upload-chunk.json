@@ -3,7 +3,16 @@
   "chunk_id": "chunk-hr-000001",
   "session_id": "session-2026-04-23T09-30-00Z-polar-001",
   "stream_id": "stream-hr-001",
+  "stream_type": "hr",
   "sequence": 1,
+  "source": {
+    "vendor": "polar",
+    "device_model": "h10",
+    "device_id": "polar-h10-demo"
+  },
+  "collection": {
+    "mode": "online_live"
+  },
   "time": {
     "device_time_reference": "polar-device-tick-000001",
     "first_sample_received_at_collector": "2026-04-23T09:30:01Z",

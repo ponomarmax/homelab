@@ -45,12 +45,14 @@
         "ppi",
         "ppg",
         "acc",
+        "ecg",
         "gyro",
         "mag",
         "eeg",
         "optics",
         "fnirs",
         "marker",
+        "battery",
         "unknown"
       ]
     },

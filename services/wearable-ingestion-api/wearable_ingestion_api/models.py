@@ -105,12 +105,14 @@ class StreamDescriptor(ContractModel):
         "ppi",
         "ppg",
         "acc",
+        "ecg",
         "gyro",
         "mag",
         "eeg",
         "optics",
         "fnirs",
         "marker",
+        "battery",
         "unknown",
     ]
     origin: Literal["raw", "vendor_processed", "server_derived"]

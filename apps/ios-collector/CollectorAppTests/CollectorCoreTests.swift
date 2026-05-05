@@ -146,7 +146,7 @@ final class CollectorCoreTests: XCTestCase {
     final class PostConnectStreamsAdapter: CollectorDeviceAdapter {
         let deviceIdentity: CollectorDevice = CollectorDevice(
             id: "post-connect-device",
-            name: "Polar H10",
+            name: "h10",
             vendor: "Polar",
             model: "H10"
         )
@@ -217,7 +217,7 @@ final class CollectorCoreTests: XCTestCase {
             self.scanDevicesSequence = scanDevicesSequence
             self.deviceIdentity = scanDevicesSequence.last?.last ?? CollectorDevice(
                 id: "progressive-default",
-                name: "Polar Verity Sense",
+                name: "verity_sense",
                 vendor: "Polar",
                 model: "Verity Sense"
             )
@@ -736,7 +736,7 @@ final class CollectorCoreTests: XCTestCase {
     func testDiscoveredDevicesUseCachedBatteryStatusWhenAvailable() async {
         let device = CollectorDevice(
             id: "mock-status-device",
-            name: "Mock Polar H10",
+            name: "Mock h10",
             vendor: "Polar",
             model: "H10"
         )
@@ -769,7 +769,7 @@ final class CollectorCoreTests: XCTestCase {
     func testDiscoveredDevicesShowUnavailableBatteryCleanly() async {
         let device = CollectorDevice(
             id: "mock-unavailable-device",
-            name: "Mock Polar Verity Sense",
+            name: "Mock verity_sense",
             vendor: "Polar",
             model: "Verity Sense"
         )
@@ -914,7 +914,7 @@ final class CollectorCoreTests: XCTestCase {
         core.toggleOfflineStream(.ppi)
         core.toggleOfflineStream(.ppg)
         core.toggleOfflineStream(.mag)
-        core.toggleOfflineStream(.gyr)
+        core.toggleOfflineStream(.gyro)
 
         await core.startOfflineSelected()
 
@@ -934,7 +934,7 @@ final class CollectorCoreTests: XCTestCase {
 
         await core.startOfflineAllSupported()
 
-        XCTAssertEqual(adapter.lastStartedOfflineStreams.sorted { $0.rawValue < $1.rawValue }, [.acc, .gyr, .hr, .mag, .ppg, .ppi])
+        XCTAssertEqual(adapter.lastStartedOfflineStreams.sorted { $0.rawValue < $1.rawValue }, [.acc, .gyro, .hr, .mag, .ppg, .ppi])
     }
 
     func testStopSelectedAndAllOfflineMappings() async {
@@ -950,13 +950,13 @@ final class CollectorCoreTests: XCTestCase {
         core.toggleOfflineStream(.ppi)
         core.toggleOfflineStream(.ppg)
         core.toggleOfflineStream(.mag)
-        core.toggleOfflineStream(.gyr)
+        core.toggleOfflineStream(.gyro)
 
         await core.stopOfflineSelected()
         XCTAssertEqual(adapter.lastStoppedOfflineStreams.sorted { $0.rawValue < $1.rawValue }, [.acc, .hr])
 
         await core.stopOfflineAllSupported()
-        XCTAssertEqual(adapter.lastStoppedOfflineStreams.sorted { $0.rawValue < $1.rawValue }, [.acc, .gyr, .hr, .mag, .ppg, .ppi])
+        XCTAssertEqual(adapter.lastStoppedOfflineStreams.sorted { $0.rawValue < $1.rawValue }, [.acc, .gyro, .hr, .mag, .ppg, .ppi])
     }
 
     func testListOfflineRecordingsStateMapping() async {
@@ -1002,7 +1002,7 @@ final class CollectorCoreTests: XCTestCase {
         core.toggleOfflineStream(.ppi)
         core.toggleOfflineStream(.ppg)
         core.toggleOfflineStream(.mag)
-        core.toggleOfflineStream(.gyr)
+        core.toggleOfflineStream(.gyro)
 
         await core.startOfflineSelected()
 
@@ -1218,7 +1218,7 @@ final class CollectorCoreTests: XCTestCase {
             .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
             .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
             .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
-            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+            .gyro: OfflineStreamCapability(stream: .gyro, isSupported: false, reason: "Unsupported")
         ]
         adapter.offlineStatusByStream = [.hr: .ready, .acc: .ready]
         let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
@@ -1239,7 +1239,7 @@ final class CollectorCoreTests: XCTestCase {
             .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
             .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
             .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
-            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+            .gyro: OfflineStreamCapability(stream: .gyro, isSupported: false, reason: "Unsupported")
         ]
         adapter.offlineStatusByStream = [.hr: .recording, .acc: .recording]
         adapter.nextOfflineRecordings = [
@@ -1264,7 +1264,7 @@ final class CollectorCoreTests: XCTestCase {
             .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
             .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
             .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
-            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+            .gyro: OfflineStreamCapability(stream: .gyro, isSupported: false, reason: "Unsupported")
         ]
         adapter.offlineStatusByStream = [.hr: .recording]
         let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
@@ -1285,7 +1285,7 @@ final class CollectorCoreTests: XCTestCase {
             .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
             .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
             .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
-            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+            .gyro: OfflineStreamCapability(stream: .gyro, isSupported: false, reason: "Unsupported")
         ]
         adapter.offlineStatusByStream = [.hr: .recording]
         let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
@@ -1320,7 +1320,7 @@ final class CollectorCoreTests: XCTestCase {
             .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
             .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
             .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
-            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+            .gyro: OfflineStreamCapability(stream: .gyro, isSupported: false, reason: "Unsupported")
         ]
         adapter.offlineStatusByStream = [.hr: .ready]
         adapter.offlineListShouldThrowError = ListingError.failed
@@ -1343,7 +1343,7 @@ final class CollectorCoreTests: XCTestCase {
             .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
             .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
             .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
-            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+            .gyro: OfflineStreamCapability(stream: .gyro, isSupported: false, reason: "Unsupported")
         ]
         adapter.offlineStatusByStream = [.hr: .recording]
         let transport = RecordingTransport()
@@ -1372,7 +1372,7 @@ final class CollectorCoreTests: XCTestCase {
         async let second: Void = core.startOfflineAllSupported()
         _ = await (first, second)
 
-        XCTAssertEqual(adapter.lastStartedOfflineStreams.sorted { $0.rawValue < $1.rawValue }, [.acc, .gyr, .hr, .mag, .ppg, .ppi])
+        XCTAssertEqual(adapter.lastStartedOfflineStreams.sorted { $0.rawValue < $1.rawValue }, [.acc, .gyro, .hr, .mag, .ppg, .ppi])
         XCTAssertFalse(core.offlineIsOperationRunning)
     }
 
@@ -1408,7 +1408,7 @@ final class CollectorCoreTests: XCTestCase {
         core.toggleOfflineStream(.ppi)
         core.toggleOfflineStream(.ppg)
         core.toggleOfflineStream(.mag)
-        core.toggleOfflineStream(.gyr)
+        core.toggleOfflineStream(.gyro)
 
         await core.startOfflineSelected()
 
@@ -1447,7 +1447,7 @@ final class CollectorCoreTests: XCTestCase {
             .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
             .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
             .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
-            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+            .gyro: OfflineStreamCapability(stream: .gyro, isSupported: false, reason: "Unsupported")
         ]
         adapter.offlineSettingsByStream[.acc] = .failure(OfflineSettingsFailure(message: "settings query failed"))
         adapter.offlineSettingsByStream[.hr] = .success(
@@ -1476,7 +1476,7 @@ final class CollectorCoreTests: XCTestCase {
             .ppi: OfflineStreamCapability(stream: .ppi, isSupported: false, reason: "Unsupported"),
             .ppg: OfflineStreamCapability(stream: .ppg, isSupported: false, reason: "Unsupported"),
             .mag: OfflineStreamCapability(stream: .mag, isSupported: false, reason: "Unsupported"),
-            .gyr: OfflineStreamCapability(stream: .gyr, isSupported: false, reason: "Unsupported")
+            .gyro: OfflineStreamCapability(stream: .gyro, isSupported: false, reason: "Unsupported")
         ]
         adapter.offlineSettingsByStream[.acc] = .success(
             OfflineStreamSettings(

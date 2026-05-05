@@ -15,7 +15,7 @@
   },
   "source": {
     "vendor": "polar",
-    "device_model": "Polar Verity Sense"
+    "device_model": "verity_sense"
   },
   "transport": {
     "encoding": "json",

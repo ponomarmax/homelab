@@ -20,7 +20,7 @@ class SessionSummaryHandler(Protocol):
 def session_summary_handler_registry() -> dict[str, SessionSummaryHandler]:
     return {
         "acc": AccSummaryHandler(),
-        "device_battery": DeviceBatterySummaryHandler(),
+        "battery": DeviceBatterySummaryHandler(),
         "ecg": EcgSummaryHandler(),
         "hr": HrSummaryHandler(),
     }

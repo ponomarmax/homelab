@@ -85,7 +85,7 @@ final class ContractMappingTests: XCTestCase {
         XCTAssertEqual(request.streamType, "hr")
         XCTAssertEqual(request.sequence, 1)
         XCTAssertEqual(request.source.vendor, "polar")
-        XCTAssertEqual(request.source.deviceModel, "Polar H10")
+        XCTAssertEqual(request.source.deviceModel, "h10")
         XCTAssertEqual(request.source.deviceID, "h10-123")
         XCTAssertEqual(request.collection.mode, "online_live")
         XCTAssertEqual(request.transport.payloadSchema, "polar.hr")
@@ -371,7 +371,7 @@ final class ContractMappingTests: XCTestCase {
         let request = try XCTUnwrap(chunk.makeCanonicalRequest(uploadedAtUTC: Date(timeIntervalSince1970: 5_001)))
         XCTAssertEqual(request.collection.mode, "offline_recording")
         XCTAssertEqual(request.source.vendor, "polar")
-        XCTAssertEqual(request.source.deviceModel, "Polar Verity Sense")
+        XCTAssertEqual(request.source.deviceModel, "verity_sense")
         XCTAssertEqual(request.transport.payloadSchema, "polar.offline.ppi")
         XCTAssertEqual(request.time.firstSampleReceivedAtCollector, "1970-01-01T01:23:20.000Z")
 

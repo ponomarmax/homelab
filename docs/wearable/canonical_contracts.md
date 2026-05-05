@@ -14,7 +14,7 @@ Goals:
 - keep the design extensible for future sensors
 
 Initial implementation target:
-- Polar Verity Sense
+- verity_sense
 
 Planned extension:
 - Muse Athena
@@ -134,7 +134,7 @@ JSON shape
   "stream_id": "string",
   "session_id": "string",
   "stream_family": "cardio | motion | neural | optical | derived | quality | marker | unknown",
-  "stream_type": "hr | ppi | ppg | acc | ecg | gyro | mag | eeg | optics | fnirs | marker | device_battery | unknown",
+  "stream_type": "hr | ppi | ppg | acc | ecg | gyro | mag | eeg | optics | fnirs | marker | battery | unknown",
   "origin": "raw | vendor_processed | server_derived",
   "mode": "online_live | offline_recording | file_import | playback",
   "payload_schema": "string",
@@ -481,7 +481,7 @@ Current rule
 collector timestamps are mandatory
 device time is optional
 server receive time is backend-assigned
-for Polar H10 ACC and ECG payloads, `device_time_ns` is the strongest timing signal when present
+for h10 ACC and ECG payloads, `device_time_ns` is the strongest timing signal when present
 canonical analytical `ts_utc` is assigned only in normalization, never in ingestion
 Why
 

@@ -180,7 +180,7 @@ Important:
   "event_type": "device_time_set",
   "device": {
     "vendor": "polar",
-    "model": "Polar H10",
+    "model": "h10",
     "device_id": "H10_7F31"
   },
   "collection": { "mode": "online_live" },
@@ -201,7 +201,7 @@ Important:
   "event_type": "device_time_read",
   "device": {
     "vendor": "polar",
-    "model": "Polar Verity Sense",
+    "model": "verity_sense",
     "device_id": "A1B2C3D4"
   },
   "collection": { "mode": "offline_recording" },
@@ -221,7 +221,7 @@ Important:
   "event_type": "device_time_verification",
   "device": {
     "vendor": "polar",
-    "model": "Polar Verity Sense",
+    "model": "verity_sense",
     "device_id": "A1B2C3D4"
   },
   "collection": { "mode": "online_live" },

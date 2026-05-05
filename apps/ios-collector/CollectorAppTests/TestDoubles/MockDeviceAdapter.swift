@@ -37,7 +37,7 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
     init(
         deviceIdentity: CollectorDevice = CollectorDevice(
             id: "mock-polar-verity-sense",
-            name: "Mock Polar Verity Sense",
+            name: "Mock verity_sense",
             vendor: "Polar",
             model: "Verity Sense"
         ),

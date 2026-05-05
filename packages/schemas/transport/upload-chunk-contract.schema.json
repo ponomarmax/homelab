@@ -9,7 +9,10 @@
     "chunk_id",
     "session_id",
     "stream_id",
+    "stream_type",
     "sequence",
+    "source",
+    "collection",
     "time",
     "transport",
     "payload"
@@ -30,9 +33,51 @@
       "type": "string",
       "minLength": 1
     },
+    "stream_type": {
+      "type": "string",
+      "minLength": 1
+    },
     "sequence": {
       "type": "integer",
       "minimum": 1
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "vendor",
+        "device_model"
+      ],
+      "properties": {
+        "vendor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "device_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "device_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "time": {
       "type": "object",

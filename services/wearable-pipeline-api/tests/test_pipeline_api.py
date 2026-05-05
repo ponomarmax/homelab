@@ -196,12 +196,12 @@ class PipelineApiTests(unittest.TestCase):
         battery_path = write_raw_stream(
             self.raw_root,
             session_id="session-001",
-            stream_type="unknown",
+            stream_type="battery",
             chunks=[
                 build_chunk(
                     chunk_id="chunk-battery-1",
                     sequence=1,
-                    stream_type="unknown",
+                    stream_type="battery",
                     payload_schema="polar.device_battery",
                     stream_id="stream-battery-001",
                     payload={
@@ -225,18 +225,18 @@ class PipelineApiTests(unittest.TestCase):
 
         battery_df = PolarDeviceBatteryNormalizer().handle(battery_path).dataframe
         self.assertEqual(float(battery_df.iloc[0]["level_percent"]), 87.0)
-        self.assertEqual(str(battery_df.iloc[0]["stream_type"]), "unknown")
+        self.assertEqual(str(battery_df.iloc[0]["stream_type"]), "battery")
 
     def test_battery_normalizer_supports_nested_battery_payload(self) -> None:
         battery_path = write_raw_stream(
             self.raw_root,
             session_id="session-battery-nested",
-            stream_type="unknown",
+            stream_type="battery",
             chunks=[
                 build_chunk(
                     chunk_id="chunk-battery-nested-1",
                     sequence=1,
-                    stream_type="unknown",
+                    stream_type="battery",
                     payload_schema="polar.device_battery",
                     stream_id="stream-battery-nested-001",
                     payload={
@@ -320,12 +320,12 @@ class PipelineApiTests(unittest.TestCase):
         write_raw_stream(
             self.raw_root,
             session_id="session-001",
-            stream_type="unknown",
+            stream_type="battery",
             chunks=[
                 build_chunk(
                     chunk_id="chunk-battery-1",
                     sequence=1,
-                    stream_type="unknown",
+                    stream_type="battery",
                     payload_schema="polar.device_battery",
                     stream_id="stream-battery-001",
                     payload={
@@ -346,7 +346,7 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(results["hr"]["status"], "success")
         self.assertEqual(results["acc"]["status"], "success")
         self.assertEqual(results["ecg"]["status"], "success")
-        self.assertEqual(results["unknown"]["status"], "success")
+        self.assertEqual(results["battery"]["status"], "success")
 
     def test_multi_stream_support_with_vendor_prefixed_device_model(self) -> None:
         write_raw_stream(
@@ -413,12 +413,12 @@ class PipelineApiTests(unittest.TestCase):
         write_raw_stream(
             self.raw_root,
             session_id="session-prefixed-model",
-            stream_type="unknown",
+            stream_type="battery",
             chunks=[
                 build_chunk(
                     chunk_id="chunk-battery-prefixed-1",
                     sequence=1,
-                    stream_type="unknown",
+                    stream_type="battery",
                     payload_schema="polar.device_battery",
                     stream_id="stream-battery-prefixed-001",
                     device_model="polar h10",
@@ -440,13 +440,13 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(normalize_results["hr"]["status"], "success")
         self.assertEqual(normalize_results["acc"]["status"], "success")
         self.assertEqual(normalize_results["ecg"]["status"], "success")
-        self.assertEqual(normalize_results["unknown"]["status"], "success")
+        self.assertEqual(normalize_results["battery"]["status"], "success")
 
         feature_results = {item["stream_type"]: item for item in summary["window_feature_runs"][0]["per_stream_results"]}
         self.assertEqual(feature_results["hr"]["status"], "success")
         self.assertEqual(feature_results["acc"]["status"], "success")
         self.assertEqual(feature_results["ecg"]["status"], "success")
-        self.assertEqual(feature_results["unknown"]["status"], "success")
+        self.assertEqual(feature_results["battery"]["status"], "success")
 
     def test_unsupported_only_stream_marks_partial_without_crash(self) -> None:
         write_raw_stream(
@@ -679,12 +679,12 @@ class PipelineApiTests(unittest.TestCase):
         write_raw_stream(
             self.raw_root,
             session_id=session_id,
-            stream_type="unknown",
+            stream_type="battery",
             chunks=[
                 build_chunk(
                     chunk_id="chunk-battery-1",
                     sequence=1,
-                    stream_type="unknown",
+                    stream_type="battery",
                     payload_schema="polar.device_battery",
                     stream_id="stream-battery-001",
                     payload={
@@ -699,7 +699,7 @@ class PipelineApiTests(unittest.TestCase):
                 build_chunk(
                     chunk_id="chunk-battery-2",
                     sequence=2,
-                    stream_type="unknown",
+                    stream_type="battery",
                     payload_schema="polar.device_battery",
                     stream_id="stream-battery-001",
                     payload={
@@ -720,7 +720,7 @@ class PipelineApiTests(unittest.TestCase):
         by_stream = {item["stream_type"]: item for item in feature_results}
         self.assertEqual(by_stream["acc"]["status"], "success")
         self.assertEqual(by_stream["ecg"]["status"], "success")
-        self.assertEqual(by_stream["unknown"]["status"], "success")
+        self.assertEqual(by_stream["battery"]["status"], "success")
 
         acc_df = pd.read_parquet(Path(by_stream["acc"]["output_path"]))
         self.assertIn("activity_energy", acc_df.columns)
@@ -730,7 +730,7 @@ class PipelineApiTests(unittest.TestCase):
         self.assertIn("amplitude_range", ecg_df.columns)
         self.assertIn("abs_mean", ecg_df.columns)
 
-        battery_df = pd.read_parquet(Path(by_stream["unknown"]["output_path"]))
+        battery_df = pd.read_parquet(Path(by_stream["battery"]["output_path"]))
         self.assertIn("samples_count", battery_df.columns)
         self.assertIn("drain_per_hour", battery_df.columns)
 

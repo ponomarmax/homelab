@@ -4,17 +4,17 @@ This registry lists sensor-specific payload contracts that may be referenced by 
 
 | Payload schema | Version | Sensor | Stream type | Status | Schema file | Example |
 | --- | --- | --- | --- | --- | --- | --- |
-| `polar.hr` | `1.0` | Polar H10 | `hr` | accepted | `packages/schemas/payloads/polar/polar.hr.v1.schema.json` | `packages/schemas/examples/payloads/polar.hr.v1.json` |
-| `polar.ppi` | `1.0` | Polar Verity Sense | `ppi` | accepted | `packages/schemas/payloads/polar/polar.ppi.v1.schema.json` | `packages/schemas/examples/payloads/polar.ppi.v1.json` |
-| `polar.acc` | `1.0` | Polar H10 | `acc` | accepted | `packages/schemas/payloads/polar/polar.acc.v1.schema.json` | `packages/schemas/examples/payloads/polar.acc.v1.json` |
-| `polar.ecg` | `1.0` | Polar H10 | `ecg` | accepted | `packages/schemas/payloads/polar/polar.ecg.v1.schema.json` | `packages/schemas/examples/payloads/polar.ecg.v1.json` |
-| `polar.device_battery` | `1.0` | Polar H10 | `battery` | accepted | `packages/schemas/payloads/polar/polar.device_battery.v1.schema.json` | `packages/schemas/examples/payloads/polar.device_battery.v1.json` |
-| `polar.offline.hr` | `1.0-draft` | Polar Verity Sense | `hr` | draft | `packages/schemas/payloads/polar/polar.offline.hr.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.hr.v1-draft.json` |
-| `polar.offline.ppi` | `1.0-draft` | Polar Verity Sense | `ppi` | draft | `packages/schemas/payloads/polar/polar.offline.ppi.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.ppi.v1-draft.json` |
-| `polar.offline.acc` | `1.0-draft` | Polar Verity Sense | `acc` | draft | `packages/schemas/payloads/polar/polar.offline.acc.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.acc.v1-draft.json` |
-| `polar.offline.ppg` | `1.0-draft` | Polar Verity Sense | `ppg` | draft | `packages/schemas/payloads/polar/polar.offline.ppg.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.ppg.v1-draft.json` |
-| `polar.offline.mag` | `1.0-draft` | Polar Verity Sense | `mag` | draft | `packages/schemas/payloads/polar/polar.offline.mag.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.mag.v1-draft.json` |
-| `polar.offline.gyr` | `1.0-draft` | Polar Verity Sense | `gyro` | draft | `packages/schemas/payloads/polar/polar.offline.gyr.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.gyr.v1-draft.json` |
+| `polar.hr` | `1.0` | h10 | `hr` | accepted | `packages/schemas/payloads/polar/polar.hr.v1.schema.json` | `packages/schemas/examples/payloads/polar.hr.v1.json` |
+| `polar.ppi` | `1.0` | verity_sense | `ppi` | accepted | `packages/schemas/payloads/polar/polar.ppi.v1.schema.json` | `packages/schemas/examples/payloads/polar.ppi.v1.json` |
+| `polar.acc` | `1.0` | h10 | `acc` | accepted | `packages/schemas/payloads/polar/polar.acc.v1.schema.json` | `packages/schemas/examples/payloads/polar.acc.v1.json` |
+| `polar.ecg` | `1.0` | h10 | `ecg` | accepted | `packages/schemas/payloads/polar/polar.ecg.v1.schema.json` | `packages/schemas/examples/payloads/polar.ecg.v1.json` |
+| `polar.device_battery` | `1.0` | h10 | `battery` | accepted | `packages/schemas/payloads/polar/polar.device_battery.v1.schema.json` | `packages/schemas/examples/payloads/polar.device_battery.v1.json` |
+| `polar.offline.hr` | `1.0-draft` | verity_sense | `hr` | draft | `packages/schemas/payloads/polar/polar.offline.hr.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.hr.v1-draft.json` |
+| `polar.offline.ppi` | `1.0-draft` | verity_sense | `ppi` | draft | `packages/schemas/payloads/polar/polar.offline.ppi.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.ppi.v1-draft.json` |
+| `polar.offline.acc` | `1.0-draft` | verity_sense | `acc` | draft | `packages/schemas/payloads/polar/polar.offline.acc.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.acc.v1-draft.json` |
+| `polar.offline.ppg` | `1.0-draft` | verity_sense | `ppg` | draft | `packages/schemas/payloads/polar/polar.offline.ppg.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.ppg.v1-draft.json` |
+| `polar.offline.mag` | `1.0-draft` | verity_sense | `mag` | draft | `packages/schemas/payloads/polar/polar.offline.mag.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.mag.v1-draft.json` |
+| `polar.offline.gyro` | `1.0-draft` | verity_sense | `gyro` | draft | `packages/schemas/payloads/polar/polar.offline.gyro.v1-draft.schema.json` | `packages/schemas/examples/payloads/polar.offline.gyro.v1-draft.json` |
 | `muse.eeg` | `1.0-draft` | Muse Athena | `eeg` | draft | `packages/schemas/payloads/muse/muse.eeg.v1-draft.schema.json` | `packages/schemas/examples/payloads/muse.eeg.v1-draft.json` |
 | `muse.ppg` | `1.0-draft` | Muse Athena | `ppg` | draft | `packages/schemas/payloads/muse/muse.ppg.v1-draft.schema.json` | `packages/schemas/examples/payloads/muse.ppg.v1-draft.json` |
 

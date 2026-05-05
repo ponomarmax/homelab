@@ -1,6 +1,6 @@
 {
   "recording": {
-    "type": "GYR",
+    "type": "GYRO",
     "source": "polar_verity_sense_offline"
   },
   "units": {

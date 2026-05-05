@@ -5,7 +5,7 @@ Status: documentation spike only. No runtime integration changes in this checkpo
 ## Scope
 
 Цей документ пояснює, як отримувати battery-статус через Polar BLE SDK:
-- для Polar H10 і Polar Verity Sense
+- для h10 і verity_sense
 - у контексті `online_live`, `offline_recording`, `sdk_mode`
 - з прикладами payload-ів для інтеграції в HomeLab transport/raw ingestion
 
@@ -115,7 +115,7 @@ Recommended adapter responsibility:
 
 Option A (no transport enum change now):
 - `stream_family = quality`
-- `stream_type = unknown`
+- `stream_type = battery`
 - `transport.payload_schema = polar.device_battery`
 
 Option B (future explicit transport extension):
@@ -166,11 +166,11 @@ Important:
   "chunk_id": "chunk_batt_000123",
   "session_id": "sess_20260426_1500",
   "stream_id": "stream_battery_main",
-  "stream_type": "unknown",
+  "stream_type": "battery",
   "sequence": 123,
   "source": {
     "vendor": "polar",
-    "device_model": "Polar Verity Sense",
+    "device_model": "verity_sense",
     "device_id": "A1B2C3D4"
   },
   "collection": {
@@ -216,11 +216,11 @@ Important:
   "chunk_id": "chunk_batt_000987",
   "session_id": "sess_20260426_sync_01",
   "stream_id": "stream_battery_sync",
-  "stream_type": "unknown",
+  "stream_type": "battery",
   "sequence": 7,
   "source": {
     "vendor": "polar",
-    "device_model": "Polar H10",
+    "device_model": "h10",
     "device_id": "H10_7F31"
   },
   "collection": {

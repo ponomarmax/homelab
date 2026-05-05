@@ -11,7 +11,7 @@
   },
   "device": {
     "vendor": "polar",
-    "model": "Polar Verity Sense",
+    "model": "verity_sense",
     "device_id": "polar-verity-sense-demo"
   },
   "time": {

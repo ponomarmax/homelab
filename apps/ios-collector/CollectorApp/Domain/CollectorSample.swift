@@ -157,7 +157,7 @@ struct PolarMagSampleData: Equatable, Codable, Sendable {
     }
 }
 
-struct PolarGyrSampleData: Equatable, Codable, Sendable {
+struct PolarGyroSampleData: Equatable, Codable, Sendable {
     let deviceTimeNS: UInt64
     let xDps: Float
     let yDps: Float
@@ -202,7 +202,7 @@ enum CollectorSamplePayload: Equatable, Codable, Sendable {
     case ppi(PolarPpiSampleData)
     case ppg(PolarPpgSampleData)
     case mag(PolarMagSampleData)
-    case gyr(PolarGyrSampleData)
+    case gyro(PolarGyroSampleData)
     case battery(PolarBatteryData)
 }
 
@@ -250,7 +250,7 @@ struct CollectorSample: Equatable, Codable, Sendable {
             return ppgData.deviceTimeNS
         case .mag(let magData):
             return magData.deviceTimeNS
-        case .gyr(let gyrData):
+        case .gyro(let gyrData):
             return gyrData.deviceTimeNS
         case .hr, .ppi, .battery:
             return nil
