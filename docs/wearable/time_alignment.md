@@ -95,6 +95,7 @@ Expected characteristics:
 Typical alignment basis:
 - source session timing and per-sample offsets
 - device-export timing if provided
+- for Polar Verity Sense offline ACC/PPG/MAG/GYRO/PPI payloads, use payload `samples[].timeStamp` as the strongest source time signal
 
 ### 3. Batch Expansion
 
@@ -117,6 +118,7 @@ The normalizer should follow this order of intent:
 1. Preserve raw timestamp fields untouched.
 2. Determine the strongest available time reference.
    - for ACC and ECG, prefer `device_time_ns`
+   - for Polar Verity Sense offline ACC/PPG/MAG/GYRO/PPI, prefer `samples[].timeStamp`
    - for HR event samples, use collector event time
 3. Expand any batch payload to sample-level records.
 4. Assign `ts_utc` to each sample.
