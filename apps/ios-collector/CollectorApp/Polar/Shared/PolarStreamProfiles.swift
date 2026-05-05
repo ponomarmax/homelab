@@ -30,7 +30,7 @@ enum PolarStreamProfile {
             deviceID: nil
         ),
         collection: StreamMetadataProfile.Collection(mode: "online_live"),
-        deviceTimeReference: "polar:ns_since_2000_epoch",
+        deviceTimeReference: "polar",
         transport: StreamMetadataProfile.Transport(
             encoding: "json",
             compression: "none",
@@ -49,7 +49,7 @@ enum PolarStreamProfile {
             deviceID: nil
         ),
         collection: StreamMetadataProfile.Collection(mode: "online_live"),
-        deviceTimeReference: "polar:ns_since_2000_epoch",
+        deviceTimeReference: "polar",
         transport: StreamMetadataProfile.Transport(
             encoding: "json",
             compression: "none",

@@ -1,11 +1,11 @@
 {
   "sample_rate_hz": 200,
-  "range_mg": 8000,
+  "range_mg": 8,
   "stream_settings": {
     "sdk_mode": "online_live",
     "selected": {
       "sampleRate": 200,
-      "range": 8000,
+      "range": 8,
       "resolution": 16,
       "channels": 3
     },
@@ -14,7 +14,7 @@
         200
       ],
       "range": [
-        8000
+        8
       ],
       "resolution": [
         16

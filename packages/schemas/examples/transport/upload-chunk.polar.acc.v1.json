@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "chunk_id": "c8649a05-1859-4b29-b4a6-79e22c6f0af4",
+  "session_id": "3f948715-3a84-40e0-9ddb-0490647b6953",
+  "stream_id": "stream-acc-3f948715-3a84-40e0-9ddb-0490647b6953",
+  "stream_type": "acc",
+  "sequence": 3,
+  "source": {
+    "vendor": "polar",
+    "device_model": "h10",
+    "device_id": "83871A2D"
+  },
+  "collection": {
+    "mode": "online_live"
+  },
+  "time": {
+    "device_time_reference": "polar",
+    "first_sample_received_at_collector": "2026-04-27T18:29:39.605Z",
+    "uploaded_at_collector": "2026-04-27T18:29:39.617Z",
+    "received_at_server": "2026-04-27T18:29:39.622817Z"
+  },
+  "transport": {
+    "encoding": "json",
+    "compression": "none",
+    "payload_schema": "polar.acc",
+    "payload_version": "1.0"
+  },
+  "payload": {
+    "sample_rate_hz": 200,
+    "range_mg": 8,
+    "stream_settings": {
+      "sdk_mode": "online_live",
+      "selected": {
+        "range": 8,
+        "resolution": 16,
+        "sampleRate": 200
+      },
+      "available": {
+        "range": [8],
+        "resolution": [16],
+        "sampleRate": [200]
+      }
+    },
+    "units": {
+      "x_mg": "mg",
+      "y_mg": "mg",
+      "z_mg": "mg",
+      "device_time_ns": "ns_since_2000_epoch"
+    },
+    "samples": [
+      {
+        "device_time_ns": 830640579396167040,
+        "received_at_collector": "2026-04-27T18:29:39.605Z",
+        "x_mg": -107,
+        "y_mg": 39,
+        "z_mg": 986
+      },
+      {
+        "device_time_ns": 830640579567750244,
+        "received_at_collector": "2026-04-27T18:29:39.605Z",
+        "x_mg": -8,
+        "y_mg": -38,
+        "z_mg": 954
+      }
+    ]
+  }
+}
