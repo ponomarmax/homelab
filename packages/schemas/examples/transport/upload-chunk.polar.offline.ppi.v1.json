@@ -3,9 +3,10 @@
   "chunk_id": "chunk-polar-offline-ppi-000001",
   "session_id": "session-2026-04-30-verity-offline-001",
   "stream_id": "stream-polar-offline-ppi-001",
+  "stream_type": "ppi",
   "sequence": 1,
   "time": {
-    "device_time_reference": "polar-offline-recording-reference-001",
+    "device_time_reference": "polar",
     "first_sample_received_at_collector": "2026-04-30T08:30:01Z",
     "uploaded_at_collector": "2026-04-30T08:30:05Z",
     "received_at_server": "2026-04-30T08:30:06Z"
@@ -15,33 +16,27 @@
   },
   "source": {
     "vendor": "polar",
-    "device_model": "verity_sense"
+    "device_model": "verity_sense",
+    "device_id": "B15B5829"
   },
   "transport": {
     "encoding": "json",
     "compression": "none",
     "payload_schema": "polar.offline.ppi",
-    "payload_version": "1.0-draft"
+    "payload_version": "1.0"
   },
   "payload": {
-    "recording": {
-      "type": "PPI",
-      "source": "polar_verity_sense_offline"
-    },
-    "units": {
-      "raw_timestamp_ns": "ns",
-      "ppi_ms": "ms"
-    },
+    "type": "PPI",
+    "source": "polar_verity_sense_offline",
     "samples": [
       {
-        "sample_index": 0,
-        "raw_timestamp_ns": 0,
-        "ppi_ms": 840,
+        "timeStamp": 0,
         "hr": 71,
-        "error_estimate": 7,
-        "blocker_bit": 0,
-        "skin_contact_support": true,
-        "skin_contact_status": true
+        "ppInMs": 840,
+        "ppErrorEstimate": 7,
+        "blockerBit": 0,
+        "skinContactStatus": 1,
+        "skinContactSupported": 1
       }
     ]
   }

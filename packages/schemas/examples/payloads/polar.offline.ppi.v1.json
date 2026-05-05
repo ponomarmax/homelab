@@ -1,0 +1,15 @@
+{
+  "type": "PPI",
+  "source": "polar_verity_sense_offline",
+  "samples": [
+    {
+      "timeStamp": 0,
+      "hr": 71,
+      "ppInMs": 840,
+      "ppErrorEstimate": 7,
+      "blockerBit": 0,
+      "skinContactStatus": 1,
+      "skinContactSupported": 1
+    }
+  ]
+}

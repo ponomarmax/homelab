@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "chunk_id": "c786a291-7e92-4305-b2ea-8bda0c9b16a4",
+  "session_id": "6c787e4d-6beb-4e40-afe5-a6411e81ce2a",
+  "stream_id": "stream-offline-acc-6c787e4d-6beb-4e40-afe5-a6411e81ce2a",
+  "stream_type": "acc",
+  "sequence": 3,
+  "source": {
+    "vendor": "polar",
+    "device_model": "verity_sense",
+    "device_id": "B15B5829"
+  },
+  "collection": {
+    "mode": "offline_recording"
+  },
+  "time": {
+    "device_time_reference": "polar",
+    "first_sample_received_at_collector": "2026-04-30T16:19:54.276Z",
+    "uploaded_at_collector": "2026-04-30T16:20:09.665Z",
+    "received_at_server": "2026-04-30T16:20:09.820351Z"
+  },
+  "transport": {
+    "encoding": "json",
+    "compression": "none",
+    "payload_schema": "polar.offline.acc",
+    "payload_version": "1.0"
+  },
+  "payload": {
+    "type": "ACC",
+    "source": "polar_verity_sense_offline",
+    "samples": [
+      {"timeStamp": 545998017227188608, "x": -272, "y": -780, "z": -542},
+      {"timeStamp": 545998061572134724, "x": -542, "y": -780, "z": -299}
+    ]
+  }
+}

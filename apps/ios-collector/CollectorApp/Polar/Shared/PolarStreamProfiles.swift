@@ -83,8 +83,8 @@ enum PolarStreamProfile {
         streamIDPrefix: "offline-hr",
         source: .init(vendor: "polar", deviceModel: "verity_sense", deviceID: nil),
         collection: .init(mode: "offline_recording"),
-        deviceTimeReference: "collector:collectorObserved",
-        transport: .init(encoding: "json", compression: "none", payloadSchema: "polar.offline.hr", payloadVersion: "v1-draft")
+        deviceTimeReference: "polar",
+        transport: .init(encoding: "json", compression: "none", payloadSchema: "polar.offline.hr", payloadVersion: "1.0")
     )
 
     static let ppiOffline = StreamMetadataProfile(
@@ -93,8 +93,8 @@ enum PolarStreamProfile {
         streamIDPrefix: "offline-ppi",
         source: .init(vendor: "polar", deviceModel: "verity_sense", deviceID: nil),
         collection: .init(mode: "offline_recording"),
-        deviceTimeReference: "polar:offline_recording",
-        transport: .init(encoding: "json", compression: "none", payloadSchema: "polar.offline.ppi", payloadVersion: "v1-draft")
+        deviceTimeReference: "polar",
+        transport: .init(encoding: "json", compression: "none", payloadSchema: "polar.offline.ppi", payloadVersion: "1.0")
     )
 
     static let accOffline = StreamMetadataProfile(
@@ -103,8 +103,8 @@ enum PolarStreamProfile {
         streamIDPrefix: "offline-acc",
         source: .init(vendor: "polar", deviceModel: "verity_sense", deviceID: nil),
         collection: .init(mode: "offline_recording"),
-        deviceTimeReference: "polar:ns_since_2000_epoch",
-        transport: .init(encoding: "json", compression: "none", payloadSchema: "polar.offline.acc", payloadVersion: "v1-draft")
+        deviceTimeReference: "polar",
+        transport: .init(encoding: "json", compression: "none", payloadSchema: "polar.offline.acc", payloadVersion: "1.0")
     )
 
     static let ppgOffline = StreamMetadataProfile(
@@ -113,8 +113,8 @@ enum PolarStreamProfile {
         streamIDPrefix: "offline-ppg",
         source: .init(vendor: "polar", deviceModel: "verity_sense", deviceID: nil),
         collection: .init(mode: "offline_recording"),
-        deviceTimeReference: "polar:ns_since_2000_epoch",
-        transport: .init(encoding: "json", compression: "none", payloadSchema: "polar.offline.ppg", payloadVersion: "v1-draft")
+        deviceTimeReference: "polar",
+        transport: .init(encoding: "json", compression: "none", payloadSchema: "polar.offline.ppg", payloadVersion: "1.0")
     )
 
     static let magOffline = StreamMetadataProfile(
@@ -123,8 +123,8 @@ enum PolarStreamProfile {
         streamIDPrefix: "offline-mag",
         source: .init(vendor: "polar", deviceModel: "verity_sense", deviceID: nil),
         collection: .init(mode: "offline_recording"),
-        deviceTimeReference: "polar:ns_since_2000_epoch",
-        transport: .init(encoding: "json", compression: "none", payloadSchema: "polar.offline.mag", payloadVersion: "v1-draft")
+        deviceTimeReference: "polar",
+        transport: .init(encoding: "json", compression: "none", payloadSchema: "polar.offline.mag", payloadVersion: "1.0")
     )
 
     static let gyrOffline = StreamMetadataProfile(
@@ -133,7 +133,7 @@ enum PolarStreamProfile {
         streamIDPrefix: "offline-gyro",
         source: .init(vendor: "polar", deviceModel: "verity_sense", deviceID: nil),
         collection: .init(mode: "offline_recording"),
-        deviceTimeReference: "polar:ns_since_2000_epoch",
-        transport: .init(encoding: "json", compression: "none", payloadSchema: "polar.offline.gyro", payloadVersion: "v1-draft")
+        deviceTimeReference: "polar",
+        transport: .init(encoding: "json", compression: "none", payloadSchema: "polar.offline.gyro", payloadVersion: "1.0")
     )
 }

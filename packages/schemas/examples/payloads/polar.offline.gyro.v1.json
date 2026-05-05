@@ -1,0 +1,12 @@
+{
+  "type": "GYRO",
+  "source": "polar_verity_sense_offline",
+  "samples": [
+    {
+      "timeStamp": 545998017227188608,
+      "x": 1.42,
+      "y": -0.31,
+      "z": 0.08
+    }
+  ]
+}

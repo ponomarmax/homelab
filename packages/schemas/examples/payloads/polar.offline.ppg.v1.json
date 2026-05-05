@@ -1,0 +1,14 @@
+{
+  "type": "PPG",
+  "source": "polar_verity_sense_offline",
+  "samples": [
+    {
+      "timeStamp": 545998017227188608,
+      "ppg0": 98321,
+      "ppg1": 97388,
+      "ppg2": 96540,
+      "ambient": 226,
+      "channelSamples": [98321, 97388, 96540, 226]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homelab.local/schemas/payloads/polar/polar.offline.ppg.v1.schema.json",
+  "title": "polar.offline.ppg v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "source", "samples"],
+  "properties": {
+    "type": { "const": "PPG" },
+    "source": { "const": "polar_verity_sense_offline" },
+    "samples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["timeStamp", "channelSamples"],
+        "properties": {
+          "timeStamp": { "type": "integer", "minimum": 0 },
+          "ppg0": { "type": ["integer", "null"] },
+          "ppg1": { "type": ["integer", "null"] },
+          "ppg2": { "type": ["integer", "null"] },
+          "ambient": { "type": ["integer", "null"] },
+          "channelSamples": { "type": "array", "items": { "type": "integer" } }
+        }
+      }
+    }
+  }
+}

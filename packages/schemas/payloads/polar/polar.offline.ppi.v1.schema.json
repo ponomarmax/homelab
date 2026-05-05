@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homelab.local/schemas/payloads/polar/polar.offline.ppi.v1.schema.json",
+  "title": "polar.offline.ppi v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "source", "samples"],
+  "properties": {
+    "type": { "const": "PPI" },
+    "source": { "const": "polar_verity_sense_offline" },
+    "samples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["timeStamp", "hr", "ppInMs", "ppErrorEstimate", "blockerBit", "skinContactStatus", "skinContactSupported"],
+        "properties": {
+          "timeStamp": { "type": "integer", "minimum": 0 },
+          "hr": { "type": "integer", "minimum": 0 },
+          "ppInMs": { "type": "integer", "minimum": 0 },
+          "ppErrorEstimate": { "type": "integer", "minimum": 0 },
+          "blockerBit": { "type": "integer", "minimum": 0 },
+          "skinContactStatus": { "type": "integer", "minimum": 0 },
+          "skinContactSupported": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

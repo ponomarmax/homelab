@@ -1,0 +1,18 @@
+{
+  "type": "ACC",
+  "source": "polar_verity_sense_offline",
+  "samples": [
+    {
+      "timeStamp": 545998017227188608,
+      "x": -272,
+      "y": -780,
+      "z": -542
+    },
+    {
+      "timeStamp": 545998061572134724,
+      "x": -542,
+      "y": -780,
+      "z": -299
+    }
+  ]
+}

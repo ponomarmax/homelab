@@ -1,0 +1,16 @@
+{
+  "type": "HR",
+  "source": "polar_verity_sense_offline",
+  "samples": [
+    {
+      "sample_index": 0,
+      "hr": 67,
+      "ppg_quality": 3,
+      "corrected_hr": 67,
+      "rrs_ms": [896],
+      "rr_available": true,
+      "contact_status": true,
+      "contact_status_supported": true
+    }
+  ]
+}
