@@ -307,12 +307,12 @@ struct CanonicalPolarHrSample: Equatable, Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case receivedAtCollector = "received_at_collector"
         case hr
-        case ppgQuality
-        case correctedHr
-        case rrsMs
-        case rrAvailable
-        case contactStatus
-        case contactStatusSupported
+        case ppgQuality = "ppg_quality"
+        case correctedHr = "corrected_hr"
+        case rrsMs = "rrs_ms"
+        case rrAvailable = "rr_available"
+        case contactStatus = "contact_status"
+        case contactStatusSupported = "contact_status_supported"
     }
 }
 

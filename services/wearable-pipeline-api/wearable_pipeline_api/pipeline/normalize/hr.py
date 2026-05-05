@@ -86,9 +86,21 @@ class PolarHrNormalizer:
                         "source_line_number": line_number,
                         "alignment_confidence": "medium",
                         "hr": int(hr_value),
-                        "rrs_ms": sample.get("rrsMs") if isinstance(sample.get("rrsMs"), list) else [],
-                        "contact_status": sample.get("contactStatus"),
-                        "rr_available": sample.get("rrAvailable"),
+                        "rrs_ms": (
+                            sample.get("rrs_ms")
+                            if isinstance(sample.get("rrs_ms"), list)
+                            else (sample.get("rrsMs") if isinstance(sample.get("rrsMs"), list) else [])
+                        ),
+                        "contact_status": (
+                            sample.get("contact_status")
+                            if sample.get("contact_status") is not None
+                            else sample.get("contactStatus")
+                        ),
+                        "rr_available": (
+                            sample.get("rr_available")
+                            if sample.get("rr_available") is not None
+                            else sample.get("rrAvailable")
+                        ),
                     }
                 )
 

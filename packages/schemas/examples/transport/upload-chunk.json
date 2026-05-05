@@ -30,12 +30,12 @@
       {
         "received_at_collector": "2026-04-23T09:30:01.357Z",
         "hr": 71,
-        "ppgQuality": 0,
-        "correctedHr": 0,
-        "rrsMs": [],
-        "rrAvailable": false,
-        "contactStatus": false,
-        "contactStatusSupported": false
+        "ppg_quality": 0,
+        "corrected_hr": 0,
+        "rrs_ms": [],
+        "rr_available": false,
+        "contact_status": false,
+        "contact_status_supported": false
       }
     ]
   }

@@ -3,22 +3,22 @@
     {
       "received_at_collector": "2026-04-25T11:56:27.357Z",
       "hr": 71,
-      "ppgQuality": 0,
-      "correctedHr": 0,
-      "rrsMs": [],
-      "rrAvailable": false,
-      "contactStatus": false,
-      "contactStatusSupported": false
+      "ppg_quality": 0,
+      "corrected_hr": 0,
+      "rrs_ms": [],
+      "rr_available": false,
+      "contact_status": false,
+      "contact_status_supported": false
     },
     {
       "received_at_collector": "2026-04-25T11:56:28.121Z",
       "hr": 72,
-      "ppgQuality": 0,
-      "correctedHr": 0,
-      "rrsMs": [],
-      "rrAvailable": false,
-      "contactStatus": false,
-      "contactStatusSupported": false
+      "ppg_quality": 0,
+      "corrected_hr": 0,
+      "rrs_ms": [],
+      "rr_available": false,
+      "contact_status": false,
+      "contact_status_supported": false
     }
   ]
 }
