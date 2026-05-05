@@ -1,5 +1,79 @@
 import Foundation
 
+enum ManagedSessionOrigin: String, Codable, Sendable {
+    case ourApp = "our_app"
+    case externalApp = "external_app"
+    case unknown = "unknown"
+}
+
+enum ManagedSessionLifecycle: String, Codable, Sendable {
+    case started
+    case stopped
+    case stoppedExternal
+    case uploaded
+    case partiallyUploaded
+    case orphaned
+}
+
+struct ManagedSessionFile: Codable, Equatable, Hashable, Sendable {
+    let path: String
+    let stream: String
+    let startedAtUTC: Date?
+    let sizeBytes: UInt?
+}
+
+struct ManagedSessionRecord: Codable, Equatable, Identifiable, Sendable {
+    let id: UUID
+    let clientSessionID: String
+    let deviceID: String
+    let deviceType: String
+    let collectionMode: CollectionMode
+    var origin: ManagedSessionOrigin
+    var lifecycle: ManagedSessionLifecycle
+    let startedAtUTC: Date
+    var stoppedAtUTC: Date?
+    var linkedFiles: [ManagedSessionFile]
+    var notes: String?
+}
+
+private struct ManagedSessionSnapshot: Codable {
+    var sessions: [ManagedSessionRecord]
+}
+
+@MainActor
+final class SessionLedgerStore {
+    private let storageURL: URL
+    private let encoder: JSONEncoder
+    private let decoder: JSONDecoder
+
+    init(fileManager: FileManager = .default) {
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        let dir = appSupport.appendingPathComponent("CollectorApp", isDirectory: true)
+        if !fileManager.fileExists(atPath: dir.path) {
+            try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        self.storageURL = dir.appendingPathComponent("session-ledger.json")
+        self.encoder = JSONEncoder()
+        self.encoder.dateEncodingStrategy = .iso8601
+        self.encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        self.decoder = JSONDecoder()
+        self.decoder.dateDecodingStrategy = .iso8601
+    }
+
+    func loadSessions() -> [ManagedSessionRecord] {
+        guard let data = try? Data(contentsOf: storageURL) else { return [] }
+        guard let snapshot = try? decoder.decode(ManagedSessionSnapshot.self, from: data) else { return [] }
+        return snapshot.sessions.sorted { $0.startedAtUTC > $1.startedAtUTC }
+    }
+
+    func saveSessions(_ sessions: [ManagedSessionRecord]) {
+        let snapshot = ManagedSessionSnapshot(sessions: sessions.sorted { $0.startedAtUTC > $1.startedAtUTC })
+        guard let data = try? encoder.encode(snapshot) else { return }
+        try? data.write(to: storageURL, options: .atomic)
+    }
+}
+
 @MainActor
 final class CollectorCore: ObservableObject {
     private enum FlushTrigger: Equatable {
@@ -63,6 +137,7 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var lastDeviceTimeSyncResult: String = "Not synced"
     @Published private(set) var lastDeviceTimeDeltaSeconds: TimeInterval?
     @Published private(set) var operationalTimeEvents: [DeviceTimeOperationalEvent] = []
+    @Published private(set) var managedSessions: [ManagedSessionRecord] = []
 
     let defaultCollectionMode: CollectionMode = .live
 
@@ -72,6 +147,7 @@ final class CollectorCore: ObservableObject {
     private let nowProvider: @Sendable () -> Date
     private let sleepProvider: @Sendable (UInt64) async -> Void
     private let debugExporter = HrSampleDebugExporter()
+    private let sessionLedgerStore = SessionLedgerStore()
     private let isVerboseLoggingEnabled: Bool
 
     private var pendingUploadChunks: [UploadChunk] = []
@@ -105,6 +181,7 @@ final class CollectorCore: ObservableObject {
         let environment = ProcessInfo.processInfo.environment
         self.isVerboseLoggingEnabled = environment["COLLECTOR_VERBOSE_LOGS"] == "1"
             || environment["COLLECTOR_LOG_LEVEL"]?.lowercased() == "debug"
+        self.managedSessions = sessionLedgerStore.loadSessions()
 
         log("Collector initialized", category: "core")
         log("Upload target: \(transport.uploadDestinationDescription)", category: "transport")
@@ -170,6 +247,7 @@ final class CollectorCore: ObservableObject {
 
     func appDidBecomeActive() {
         log("App became active", category: "lifecycle")
+        reconcileOpenSessionsAfterLifecycleEvent()
     }
 
     func appDidEnterBackground() {
@@ -414,6 +492,17 @@ final class CollectorCore: ObservableObject {
 
         activeProviders = providers
         activeSession = session
+        upsertManagedSession(
+            id: session.sessionID,
+            clientSessionID: session.clientSessionID,
+            mode: session.collectionMode,
+            origin: .ourApp,
+            lifecycle: .started,
+            startedAtUTC: session.startedAtUTC,
+            stoppedAtUTC: nil,
+            linkedFiles: [],
+            notes: "started_in_app"
+        )
 
         for provider in providers {
             streamDescriptorsByType[provider.streamType] = transport.makeStreamDescriptor(
@@ -763,6 +852,17 @@ final class CollectorCore: ObservableObject {
         }
 
         ensureUploadSessionIfNeeded(for: preparation.batches.map(\.stream))
+        if let session = activeSession {
+            let files = preparation.batches.map {
+                ManagedSessionFile(
+                    path: $0.sourcePath,
+                    stream: $0.stream.transportType,
+                    startedAtUTC: $0.timeContext?.recordingStartUTC,
+                    sizeBytes: nil
+                )
+            }
+            linkFilesToManagedSession(id: session.sessionID, files: files)
+        }
 
         for batch in preparation.batches {
             var samples = bufferedSamplesByStream[batch.stream] ?? []
@@ -783,6 +883,14 @@ final class CollectorCore: ObservableObject {
             offlineLifecycleState = .completed
             offlineStatusMessage = "Offline recordings uploaded"
             offlineLastSuccessAction = "Uploaded offline recordings"
+            if let session = activeSession {
+                updateManagedSessionLifecycle(
+                    id: session.sessionID,
+                    lifecycle: .uploaded,
+                    stoppedAtUTC: session.stoppedAtUTC,
+                    notes: "offline_upload_success"
+                )
+            }
             for stream in selectedOfflineStreams {
                 offlineStreamRunStates[stream] = .uploaded
             }
@@ -790,6 +898,14 @@ final class CollectorCore: ObservableObject {
             offlineLifecycleState = .failed
             offlineStatusMessage = "Offline upload failed"
             offlineLastErrorMessage = offlineStatusMessage
+            if let session = activeSession {
+                updateManagedSessionLifecycle(
+                    id: session.sessionID,
+                    lifecycle: .partiallyUploaded,
+                    stoppedAtUTC: session.stoppedAtUTC,
+                    notes: "offline_upload_failed"
+                )
+            }
             for stream in selectedOfflineStreams {
                 offlineStreamRunStates[stream] = .failed
             }
@@ -906,6 +1022,14 @@ final class CollectorCore: ObservableObject {
         debugExporter.stopSession()
         if activeSession != nil {
             activeSession?.markStopped(at: Date())
+            if let session = activeSession {
+                updateManagedSessionLifecycle(
+                    id: session.sessionID,
+                    lifecycle: .stopped,
+                    stoppedAtUTC: session.stoppedAtUTC,
+                    notes: "stopped_in_app"
+                )
+            }
         }
         status = selectedDevice == nil ? .disconnected : .stopped
         activityMessage = "Collection stopped"
@@ -1394,6 +1518,17 @@ final class CollectorCore: ObservableObject {
             )
             activeSession = session
             prepareDebugExport(for: session)
+            upsertManagedSession(
+                id: session.sessionID,
+                clientSessionID: session.clientSessionID,
+                mode: session.collectionMode,
+                origin: .ourApp,
+                lifecycle: .started,
+                startedAtUTC: session.startedAtUTC,
+                stoppedAtUTC: nil,
+                linkedFiles: [],
+                notes: "offline_upload_session_bootstrap"
+            )
         }
 
         for stream in Set(streams) {
@@ -1673,6 +1808,98 @@ final class CollectorCore: ObservableObject {
         case .gyroscope: return PolarStreamProfile.gyrOffline
         case .ecg, .eeg, .battery:
             return uploadConfiguration.streamProfile(for: stream)
+        }
+    }
+
+    private func upsertManagedSession(
+        id: UUID,
+        clientSessionID: String,
+        mode: CollectionMode,
+        origin: ManagedSessionOrigin,
+        lifecycle: ManagedSessionLifecycle,
+        startedAtUTC: Date,
+        stoppedAtUTC: Date?,
+        linkedFiles: [ManagedSessionFile],
+        notes: String?
+    ) {
+        if let index = managedSessions.firstIndex(where: { $0.id == id }) {
+            var existing = managedSessions[index]
+            existing.lifecycle = lifecycle
+            existing.stoppedAtUTC = stoppedAtUTC
+            existing.origin = origin
+            existing.notes = notes ?? existing.notes
+            existing.linkedFiles = Array(Set(existing.linkedFiles + linkedFiles))
+            managedSessions[index] = existing
+        } else {
+            managedSessions.append(
+                ManagedSessionRecord(
+                    id: id,
+                    clientSessionID: clientSessionID,
+                    deviceID: adapter.deviceIdentity.id,
+                    deviceType: "\(adapter.deviceIdentity.vendor) \(adapter.deviceIdentity.model)",
+                    collectionMode: mode,
+                    origin: origin,
+                    lifecycle: lifecycle,
+                    startedAtUTC: startedAtUTC,
+                    stoppedAtUTC: stoppedAtUTC,
+                    linkedFiles: linkedFiles,
+                    notes: notes
+                )
+            )
+        }
+        managedSessions.sort { $0.startedAtUTC > $1.startedAtUTC }
+        sessionLedgerStore.saveSessions(managedSessions)
+    }
+
+    private func updateManagedSessionLifecycle(
+        id: UUID,
+        lifecycle: ManagedSessionLifecycle,
+        stoppedAtUTC: Date?,
+        notes: String?
+    ) {
+        guard let index = managedSessions.firstIndex(where: { $0.id == id }) else { return }
+        managedSessions[index].lifecycle = lifecycle
+        if let stoppedAtUTC {
+            managedSessions[index].stoppedAtUTC = stoppedAtUTC
+        }
+        if let notes, !notes.isEmpty {
+            managedSessions[index].notes = notes
+        }
+        sessionLedgerStore.saveSessions(managedSessions)
+    }
+
+    private func linkFilesToManagedSession(id: UUID, files: [ManagedSessionFile]) {
+        guard let index = managedSessions.firstIndex(where: { $0.id == id }) else { return }
+        let existing = managedSessions[index].linkedFiles
+        let merged = Array(Set(existing + files))
+        managedSessions[index].linkedFiles = merged.sorted { $0.path < $1.path }
+        sessionLedgerStore.saveSessions(managedSessions)
+    }
+
+    private func reconcileOpenSessionsAfterLifecycleEvent() {
+        // M1 recovery: if app restarted while we had open sessions and device no longer records,
+        // mark those sessions as externally stopped to keep state deterministic for upload flows.
+        guard adapter.connectionState == .connected else { return }
+        let open = managedSessions.filter { $0.lifecycle == .started }
+        guard !open.isEmpty else { return }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let statusByStream = await self.adapter.offlineRecordingStatus()
+            let hasActiveRecording = statusByStream.values.contains(.recording)
+            guard !hasActiveRecording else { return }
+            let now = self.nowProvider()
+            for session in open {
+                self.updateManagedSessionLifecycle(
+                    id: session.id,
+                    lifecycle: .stoppedExternal,
+                    stoppedAtUTC: session.stoppedAtUTC ?? now,
+                    notes: "auto_recovered_stopped_externally"
+                )
+            }
+            if !open.isEmpty {
+                self.log("Recovered \(open.count) open session(s) as externally stopped", category: "session")
+            }
         }
     }
 
