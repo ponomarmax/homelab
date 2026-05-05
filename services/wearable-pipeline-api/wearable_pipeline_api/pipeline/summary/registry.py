@@ -6,6 +6,7 @@ from typing import Protocol
 from .acc import AccSummaryHandler
 from .device_battery import DeviceBatterySummaryHandler
 from .ecg import EcgSummaryHandler
+from .generic import GenericWindowSummaryHandler
 from .hr import HrSummaryHandler, HrSummaryOutput
 
 
@@ -23,4 +24,8 @@ def session_summary_handler_registry() -> dict[str, SessionSummaryHandler]:
         "battery": DeviceBatterySummaryHandler(),
         "ecg": EcgSummaryHandler(),
         "hr": HrSummaryHandler(),
+        "ppi": GenericWindowSummaryHandler("ppi"),
+        "gyro": GenericWindowSummaryHandler("gyro"),
+        "mag": GenericWindowSummaryHandler("mag"),
+        "ppg": GenericWindowSummaryHandler("ppg"),
     }

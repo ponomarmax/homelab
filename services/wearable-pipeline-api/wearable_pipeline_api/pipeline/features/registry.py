@@ -8,6 +8,8 @@ from .acc_window import AccWindowFeatureBuilder
 from .battery_window import BatteryWindowFeatureBuilder
 from .ecg_window import EcgWindowFeatureBuilder
 from .hr_window import FeatureHandlerOutput, HrWindowFeatureBuilder
+from .ppg_window import PpgWindowFeatureBuilder
+from .vector_window import VectorWindowFeatureBuilder
 
 
 class FeatureHandler(Protocol):
@@ -27,4 +29,10 @@ def feature_handler_registry() -> dict[HandlerKey, FeatureHandler]:
         ("polar", "h10", "polar.ecg"): EcgWindowFeatureBuilder(),
         ("polar", "h10", "polar.device_battery"): BatteryWindowFeatureBuilder(),
         ("polar", "verity_sense", "polar.hr"): HrWindowFeatureBuilder(),
+        ("polar", "verity_sense", "polar.offline.hr"): HrWindowFeatureBuilder(),
+        ("polar", "verity_sense", "polar.offline.ppi"): HrWindowFeatureBuilder(),
+        ("polar", "verity_sense", "polar.offline.acc"): VectorWindowFeatureBuilder(),
+        ("polar", "verity_sense", "polar.offline.gyro"): VectorWindowFeatureBuilder(),
+        ("polar", "verity_sense", "polar.offline.mag"): VectorWindowFeatureBuilder(),
+        ("polar", "verity_sense", "polar.offline.ppg"): PpgWindowFeatureBuilder(),
     }

@@ -149,8 +149,12 @@ def _discover_pipeline_container(config: RemoteConfig) -> str | None:
     return name or None
 
 
-def _discover_session_paths_host(config: RemoteConfig, user_id: int | str, session_id: str | None = None) -> list[str]:
-    user_segment = f"user_id={user_id}"
+def _discover_session_paths_host(
+    config: RemoteConfig,
+    user_id: int | str | None = None,
+    session_id: str | None = None,
+) -> list[str]:
+    user_segment = f"user_id={user_id}" if user_id is not None else "user_id=*"
     session_filter = f"session_id={session_id}" if session_id else "session_id=*"
 
     processed_root = f"{config.remote_base_path.rstrip('/')}/processed"
@@ -173,11 +177,11 @@ def _container_data_root() -> str:
 def _discover_session_paths_container(
     config: RemoteConfig,
     container: str,
-    user_id: int | str,
+    user_id: int | str | None = None,
     session_id: str | None = None,
 ) -> list[str]:
     data_root = _container_data_root()
-    user_segment = f"user_id={user_id}"
+    user_segment = f"user_id={user_id}" if user_id is not None else "user_id=*"
     session_filter = f"session_id={session_id}" if session_id else "session_id=*"
 
     processed_root = f"{data_root}/processed"
@@ -195,7 +199,11 @@ def _discover_session_paths_container(
     return sorted({f"{CONTAINER_PREFIX}{container}{path}" for path in raw_paths})
 
 
-def _discover_session_paths(config: RemoteConfig, user_id: int | str, session_id: str | None = None) -> list[str]:
+def _discover_session_paths(
+    config: RemoteConfig,
+    user_id: int | str | None = None,
+    session_id: str | None = None,
+) -> list[str]:
     host_paths = _discover_session_paths_host(config, user_id=user_id, session_id=session_id)
     if host_paths:
         LOGGER.info("session_discovery_mode", extra={"mode": "host_fs", "count": len(host_paths)})
@@ -436,8 +444,8 @@ def _sync_paths(
 
 
 def get_session_by_id(
-    user_id: int | str,
     session_id: str,
+    user_id: int | str | None = None,
     local_cache_root: str | os.PathLike[str] = "notebooks/data_cache",
     config: RemoteConfig | None = None,
     env_path: str | os.PathLike[str] | None = None,
@@ -450,9 +458,14 @@ def get_session_by_id(
 
     remote_paths = _discover_session_paths(cfg, user_id=user_id, session_id=session_id)
     if not remote_paths:
+        if user_id is None:
+            raise RemoteSyncError(f"No remote data found for session_id={session_id}.")
         raise RemoteSyncError(f"No remote data found for user_id={user_id}, session_id={session_id}.")
 
-    LOGGER.info("session_sync_start", extra={"user_id": str(user_id), "session_id": session_id})
+    LOGGER.info(
+        "session_sync_start",
+        extra={"user_id": ("any" if user_id is None else str(user_id)), "session_id": session_id},
+    )
     session_cache = _sync_paths(
         config=cfg,
         local_cache_root=Path(local_cache_root),
@@ -475,8 +488,8 @@ def get_latest_session(
 
     latest = sessions[0]
     return get_session_by_id(
-        user_id=user_id,
         session_id=str(latest["session_id"]),
+        user_id=user_id,
         local_cache_root=local_cache_root,
         config=config,
         env_path=env_path,

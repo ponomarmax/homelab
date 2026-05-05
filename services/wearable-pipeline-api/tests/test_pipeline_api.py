@@ -23,6 +23,8 @@ try:
         PolarDeviceBatteryNormalizer,
         PolarEcgNormalizer,
         PolarHrNormalizer,
+        PolarVerityOfflineNormalizer,
+        StreamSpec,
     )
     from wearable_pipeline_api.server import create_app
 
@@ -226,6 +228,69 @@ class PipelineApiTests(unittest.TestCase):
         battery_df = PolarDeviceBatteryNormalizer().handle(battery_path).dataframe
         self.assertEqual(float(battery_df.iloc[0]["level_percent"]), 87.0)
         self.assertEqual(str(battery_df.iloc[0]["stream_type"]), "battery")
+
+    def test_verity_offline_normalization_and_alignment(self) -> None:
+        raw_path = write_raw_stream(
+            self.raw_root,
+            session_id="session-verity-offline",
+            stream_type="acc",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-offline-acc-1",
+                    sequence=1,
+                    stream_type="acc",
+                    payload_schema="polar.offline.acc",
+                    stream_id="stream-offline-acc-001",
+                    device_model="verity_sense",
+                    payload={
+                        "type": "ACC",
+                        "source": "polar_verity_sense_offline",
+                        "samples": [
+                            {"timeStamp": 545998017227188608, "x": -272, "y": -780, "z": -542},
+                            {"timeStamp": 545998061572134724, "x": -542, "y": -780, "z": -299},
+                        ],
+                    },
+                )
+            ],
+        )
+
+        normalizer = PolarVerityOfflineNormalizer(StreamSpec(stream_type="acc", payload_schema="polar.offline.acc", time_field="timeStamp"))
+        output = normalizer.handle(raw_path)
+        self.assertEqual(len(output.dataframe.index), 2)
+        self.assertIn("raw_sample_timestamp_ns", output.dataframe.columns)
+        self.assertIn(output.report["confidence"], {"high", "medium"})
+        self.assertIn("epoch_offset_decision", output.report)
+
+    def test_verity_offline_hr_fallback_reconstruction(self) -> None:
+        raw_path = write_raw_stream(
+            self.raw_root,
+            session_id="session-verity-offline-hr",
+            stream_type="hr",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-offline-hr-1",
+                    sequence=1,
+                    stream_type="hr",
+                    payload_schema="polar.offline.hr",
+                    stream_id="stream-offline-hr-001",
+                    device_model="verity_sense",
+                    payload={
+                        "type": "HR",
+                        "source": "polar_verity_sense_offline",
+                        "samples": [
+                            {"sample_index": 0, "hr": 67, "ppg_quality": 3, "corrected_hr": 67, "rrs_ms": [896], "rr_available": True, "contact_status": True, "contact_status_supported": True},
+                            {"sample_index": 1, "hr": 68, "ppg_quality": 3, "corrected_hr": 68, "rrs_ms": [880], "rr_available": True, "contact_status": True, "contact_status_supported": True},
+                        ],
+                    },
+                )
+            ],
+        )
+
+        normalizer = PolarVerityOfflineNormalizer(StreamSpec(stream_type="hr", payload_schema="polar.offline.hr", time_field=None))
+        output = normalizer.handle(raw_path)
+        self.assertEqual(len(output.dataframe.index), 2)
+        self.assertEqual(output.report["alignment_basis"], "reconstructed_from_collector_and_cadence")
+        self.assertEqual(output.report["confidence"], "low")
 
     def test_battery_normalizer_supports_nested_battery_payload(self) -> None:
         battery_path = write_raw_stream(
@@ -760,7 +825,7 @@ class PipelineApiTests(unittest.TestCase):
         )
         client = TestClient(create_app(settings))
 
-        response = client.post("/api/v1/pipeline/normalize/hr")
+        response = client.post("/api/v1/pipeline/run")
         self.assertEqual(response.status_code, 200)
 
         payload = response.json()
@@ -768,6 +833,54 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(len(payload["normalize_runs"]), 1)
         self.assertEqual(len(payload["window_feature_runs"]), 1)
         self.assertEqual(len(payload["session_summary_runs"]), 1)
+
+    def test_api_endpoint_can_target_single_session(self) -> None:
+        write_raw_stream(
+            self.raw_root,
+            session_id="session-001",
+            stream_type="hr",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-1",
+                    sequence=1,
+                    stream_type="hr",
+                    payload_schema="polar.hr",
+                    samples=[{"received_at_collector": "2026-04-25T10:00:00.100Z", "hr": 70}],
+                )
+            ],
+        )
+        write_raw_stream(
+            self.raw_root,
+            session_id="session-002",
+            stream_type="hr",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-2",
+                    sequence=1,
+                    stream_type="hr",
+                    payload_schema="polar.hr",
+                    samples=[{"received_at_collector": "2026-04-25T11:00:00.100Z", "hr": 71}],
+                    stream_id="stream-hr-002",
+                )
+            ],
+        )
+
+        settings = Settings(
+            host="127.0.0.1",
+            port=8091,
+            raw_root=self.raw_root,
+            processed_root=self.processed_root,
+            pipeline_state_root=self.state_root,
+            log_level="INFO",
+        )
+        client = TestClient(create_app(settings))
+
+        response = client.post("/api/v1/pipeline/run", json={"session_id": "session-002"})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["sessions_discovered"], 1)
+        self.assertEqual(len(payload["normalize_runs"]), 1)
+        self.assertEqual(payload["normalize_runs"][0]["session_id"], "session-002")
 
 
 if __name__ == "__main__":

@@ -56,6 +56,7 @@ jupyter lab
 Open notebooks in order:
 - `00_runbook.ipynb`
 - `01_h10_multistream_eda.ipynb`
+- `02_verity_offline_runbook.ipynb`
 
 ## 5. Data Cache
 
@@ -77,3 +78,9 @@ Open notebooks in order:
   - stream-level plots and feature trends
   - cross-stream exploratory joins and correlations
   - ML-readiness checklist and optional local report save
+- `02_verity_offline_runbook.ipynb` is an operator + QA runbook for Polar Verity Sense offline sessions:
+  - discover/select offline Verity sessions
+  - trigger pipeline and sync artifacts
+  - inspect `time_alignment_report.json` per stream
+  - verify counts, durations, timestamp sanity, and stream warnings
+  - quick stream-level tables and plots for `hr/ppi/acc/gyro/mag/ppg`

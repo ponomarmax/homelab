@@ -16,12 +16,18 @@ from .registry import session_summary_handler_registry
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_SESSION_STREAMS = ("hr", "acc", "ecg", "battery")
+SUPPORTED_SESSION_STREAMS = ("hr", "acc", "ecg", "battery", "ppi", "gyro", "mag", "ppg")
 STREAM_KEY_BY_PAYLOAD_SCHEMA = {
     "polar.hr": "hr",
     "polar.acc": "acc",
     "polar.ecg": "ecg",
     "polar.device_battery": "battery",
+    "polar.offline.hr": "hr",
+    "polar.offline.acc": "acc",
+    "polar.offline.ppi": "ppi",
+    "polar.offline.gyro": "gyro",
+    "polar.offline.mag": "mag",
+    "polar.offline.ppg": "ppg",
 }
 
 

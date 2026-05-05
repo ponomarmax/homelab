@@ -26,8 +26,10 @@ class SessionPipelineRunner:
             state_store=self.state_store,
         )
 
-    def run(self) -> dict[str, Any]:
+    def run(self, session_id: str | None = None) -> dict[str, Any]:
         sessions = discover_session_streams(self.raw_root)
+        if session_id:
+            sessions = {session_id: sessions.get(session_id, [])} if session_id in sessions else {}
         normalize_runs: list[dict[str, Any]] = []
         window_feature_runs: list[dict[str, Any]] = []
         session_summary_runs: list[dict[str, Any]] = []

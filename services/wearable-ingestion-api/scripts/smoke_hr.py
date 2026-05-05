@@ -27,8 +27,16 @@ def main() -> int:
             "chunk_id": "smoke-chunk-001",
             "session_id": "smoke-session-001",
             "stream_id": "stream-hr-001",
+            "stream_type": "hr",
             "sequence": 1,
+            "source": {
+                "vendor": "polar",
+                "device_model": "h10",
+                "device_id": "smoke-dev-001",
+            },
+            "collection": {"mode": "online_live"},
             "time": {
+                "device_time_reference": "smoke-ref-001",
                 "first_sample_received_at_collector": "2026-04-25T11:00:00Z",
                 "uploaded_at_collector": "2026-04-25T11:00:01Z",
             },

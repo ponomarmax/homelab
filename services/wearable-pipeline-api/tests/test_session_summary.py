@@ -329,10 +329,13 @@ class SessionSummaryStepTests(unittest.TestCase):
         result = self.runner.run_for_session("session-all")
         payload = self._read_summary("session-all")
 
-        self.assertEqual(result["status"], "success")
-        self.assertEqual(payload["status"], "success")
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(payload["status"], "partial")
         self.assertEqual(sorted(payload["streams_present"]), ["acc", "battery", "ecg", "hr"])
-        self.assertEqual(payload["streams_missing"], [])
+        self.assertIn("ppi", payload["streams_missing"])
+        self.assertIn("gyro", payload["streams_missing"])
+        self.assertIn("mag", payload["streams_missing"])
+        self.assertIn("ppg", payload["streams_missing"])
         self.assertEqual(payload["stream_summaries"]["acc"]["status"], "success")
         self.assertEqual(payload["stream_summaries"]["ecg"]["status"], "success")
         self.assertEqual(payload["stream_summaries"]["battery"]["status"], "success")
@@ -502,8 +505,50 @@ class SessionSummaryStepTests(unittest.TestCase):
             "overall_quality",
         ]
         self.assertEqual(list(payload.keys()), expected_top_level_keys)
-        self.assertEqual(list(payload["stream_summaries"].keys()), ["hr", "acc", "ecg", "battery"])
+        self.assertEqual(list(payload["stream_summaries"].keys()), ["hr", "acc", "ecg", "battery", "ppi", "gyro", "mag", "ppg"])
         self.assertEqual(set(payload["inputs"].keys()), {"window_feature_paths", "available_window_sizes"})
+
+    def test_verity_offline_streams_summary_included(self) -> None:
+        session_id = "session-verity-offline"
+        base = {
+            "source_vendor": "polar",
+            "device_model": "verity_sense",
+        }
+        write_window_features(
+            self.processed_root,
+            session_id=session_id,
+            stream_dir="ppi",
+            source="polar_verity_sense",
+            rows=[{"window_size": "30s", "window_start_utc": "2026-04-25T10:00:00Z", "window_end_utc": "2026-04-25T10:00:30Z", "sample_count": 6, "stream_type": "ppi", "payload_schema": "polar.offline.ppi", **base}],
+        )
+        write_window_features(
+            self.processed_root,
+            session_id=session_id,
+            stream_dir="gyro",
+            source="polar_verity_sense",
+            rows=[{"window_size": "30s", "window_start_utc": "2026-04-25T10:00:00Z", "window_end_utc": "2026-04-25T10:00:30Z", "sample_count": 120, "stream_type": "gyro", "payload_schema": "polar.offline.gyro", **base}],
+        )
+        write_window_features(
+            self.processed_root,
+            session_id=session_id,
+            stream_dir="mag",
+            source="polar_verity_sense",
+            rows=[{"window_size": "30s", "window_start_utc": "2026-04-25T10:00:00Z", "window_end_utc": "2026-04-25T10:00:30Z", "sample_count": 120, "stream_type": "mag", "payload_schema": "polar.offline.mag", **base}],
+        )
+        write_window_features(
+            self.processed_root,
+            session_id=session_id,
+            stream_dir="ppg",
+            source="polar_verity_sense",
+            rows=[{"window_size": "30s", "window_start_utc": "2026-04-25T10:00:00Z", "window_end_utc": "2026-04-25T10:00:30Z", "sample_count": 120, "stream_type": "ppg", "payload_schema": "polar.offline.ppg", **base}],
+        )
+
+        result = self.runner.run_for_session(session_id)
+        payload = self._read_summary(session_id)
+        self.assertEqual(result["status"], "partial")
+        for stream in ["ppi", "gyro", "mag", "ppg"]:
+            self.assertIn(stream, payload["streams_present"])
+            self.assertEqual(payload["stream_summaries"][stream]["status"], "partial")
 
 
 if __name__ == "__main__":

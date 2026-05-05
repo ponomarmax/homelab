@@ -6,7 +6,8 @@ from pathlib import Path
 
 SERVICE_NAME = "wearable-pipeline-api"
 HEALTH_PATH = "/health"
-NORMALIZE_HR_PATH = "/api/v1/pipeline/normalize/hr"
+PIPELINE_RUN_PATH = "/api/v1/pipeline/run"
+LEGACY_NORMALIZE_HR_PATH = "/api/v1/pipeline/normalize/hr"
 
 ENV_HOST = "WEARABLE_PIPELINE_API_HOST"
 ENV_PORT = "WEARABLE_PIPELINE_API_PORT"

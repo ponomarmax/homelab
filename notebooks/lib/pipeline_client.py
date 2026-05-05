@@ -17,7 +17,7 @@ from run_state_viewer import format_run_line, summarize_pipeline_for_session, su
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_PIPELINE_API_BASE_URL = "http://127.0.0.1:18091"
-DEFAULT_PIPELINE_PATH = "/api/v1/pipeline/normalize/hr"
+DEFAULT_PIPELINE_PATH = "/api/v1/pipeline/run"
 DEFAULT_SERVER_PIPELINE_PORT = "18091"
 
 
@@ -109,13 +109,20 @@ def _derive_pipeline_base_url() -> str:
     return DEFAULT_PIPELINE_API_BASE_URL
 
 
-def _post_pipeline_via_ssh(env_path: str | os.PathLike[str] | None, timeout_seconds: int) -> dict[str, Any]:
+def _post_pipeline_via_ssh(
+    env_path: str | os.PathLike[str] | None,
+    timeout_seconds: int,
+    session_id: str | None = None,
+) -> dict[str, Any]:
     cfg = load_remote_config(env_path=env_path)
     port = _pipeline_port_from_env()
+    payload = {"session_id": session_id} if session_id else {}
+    payload_json = json.dumps(payload)
     cmd = (
         "curl -fsS -X POST "
         + "-H 'accept: application/json' "
         + "-H 'content-type: application/json' "
+        + f"-d {shlex.quote(payload_json)} "
         + f"http://127.0.0.1:{port}{DEFAULT_PIPELINE_PATH}"
     )
     output = run_ssh_command(cfg, cmd, retries=max(1, int(timeout_seconds // 15)))
@@ -222,7 +229,7 @@ def run_full_pipeline(
     poll_interval_seconds: float = 3.0,
     request_timeout_seconds: int = 1200,
     env_path: str | os.PathLike[str] | None = None,
-    live_progress: bool = True,
+    live_progress: bool = False,
 ) -> dict[str, Any]:
     """Trigger pipeline run and print progress while running."""
     _load_default_env_sources(env_path)
@@ -237,12 +244,20 @@ def run_full_pipeline(
 
     def _runner() -> None:
         try:
-            result_holder["response"] = _post_json(url, payload={}, timeout_seconds=request_timeout_seconds)
+            result_holder["response"] = _post_json(
+                url,
+                payload={"session_id": str(session_id)},
+                timeout_seconds=request_timeout_seconds,
+            )
         except BaseException as direct_exc:  # noqa: BLE001
             LOGGER.warning("pipeline_http_trigger_failed", extra={"error": str(direct_exc), "url": url})
             try:
                 # Fallback: trigger directly on the server over SSH.
-                result_holder["response"] = _post_pipeline_via_ssh(env_path=env_path, timeout_seconds=request_timeout_seconds)
+                result_holder["response"] = _post_pipeline_via_ssh(
+                    env_path=env_path,
+                    timeout_seconds=request_timeout_seconds,
+                    session_id=str(session_id),
+                )
             except BaseException as ssh_exc:  # noqa: BLE001
                 error_holder["error"] = ssh_exc
 
@@ -250,10 +265,13 @@ def run_full_pipeline(
     worker.start()
 
     seen_progress: set[tuple[str, str, str]] = set()
+    poll_failures = 0
+    max_poll_failures = 3
     while worker.is_alive():
         if live_progress:
             try:
                 state_records = _fetch_remote_state_records(session_id=session_id, env_path=env_path)
+                poll_failures = 0
                 for record in state_records:
                     summary = summarize_run(record)
                     marker = (
@@ -266,7 +284,11 @@ def run_full_pipeline(
                     seen_progress.add(marker)
                     print(format_run_line(summary))
             except Exception as exc:  # noqa: BLE001
+                poll_failures += 1
                 LOGGER.warning("pipeline_progress_poll_failed", extra={"error": str(exc)})
+                if poll_failures >= max_poll_failures:
+                    live_progress = False
+                    print("Progress polling disabled after repeated SSH failures. Waiting for pipeline response...")
 
         time.sleep(max(0.5, float(poll_interval_seconds)))
 

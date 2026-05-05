@@ -10,7 +10,8 @@ Pipeline flow:
 ## Endpoints
 
 - `GET /health`
-- `POST /api/v1/pipeline/normalize/hr`
+- `POST /api/v1/pipeline/run`
+  - Optional JSON body: `{"session_id": "<session-id>"}` to run a single session only
 
 ## Environment
 
