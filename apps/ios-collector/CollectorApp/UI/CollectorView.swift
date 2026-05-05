@@ -238,6 +238,36 @@ struct CollectorView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
+                    Text("Unassigned Recordings")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Found: \(collectorCore.unassignedOfflineRecordings.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 8) {
+                        Button("Assign as one session") {
+                            collectorCore.assignUnassignedAsSingleSession()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(collectorCore.unassignedOfflineRecordings.isEmpty)
+
+                        Button("Assign by clusters") {
+                            collectorCore.assignUnassignedByClusters()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(collectorCore.unassignedRecordingGroups.isEmpty)
+                    }
+
+                    if !collectorCore.unassignedRecordingGroups.isEmpty {
+                        ForEach(collectorCore.unassignedRecordingGroups) { group in
+                            Text("\(group.id): \(group.entries.count) file(s)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Storage")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.red)

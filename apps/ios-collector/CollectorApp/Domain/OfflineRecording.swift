@@ -149,3 +149,10 @@ struct OfflineUploadPreparationResult: Equatable, Sendable {
     let batches: [OfflineUploadBatch]
     let messagesByStream: [PolarOfflineStream: String]
 }
+
+struct UnassignedRecordingGroup: Identifiable, Equatable, Sendable {
+    let id: String
+    let entries: [OfflineRecordingEntry]
+    let startAtUTC: Date?
+    let endAtUTC: Date?
+}

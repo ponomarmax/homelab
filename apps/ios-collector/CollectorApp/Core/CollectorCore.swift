@@ -130,6 +130,8 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var offlineLastErrorMessage: String?
     @Published private(set) var offlineRecordErrorsByID: [String: String] = [:]
     @Published private(set) var deletingOfflineRecordingIDs: Set<String> = []
+    @Published private(set) var unassignedOfflineRecordings: [OfflineRecordingEntry] = []
+    @Published private(set) var unassignedRecordingGroups: [UnassignedRecordingGroup] = []
     @Published private(set) var deviceTimeSyncState: DeviceTimeSyncState = .idle
     @Published private(set) var deviceTimeStatusMessage: String = "Not synced"
     @Published private(set) var deviceTimeDebugDetails: String = "Stream timestamp verification not performed"
@@ -149,6 +151,7 @@ final class CollectorCore: ObservableObject {
     private let debugExporter = HrSampleDebugExporter()
     private let sessionLedgerStore = SessionLedgerStore()
     private let isVerboseLoggingEnabled: Bool
+    private let unassignedClusterGapSeconds: TimeInterval
 
     private var pendingUploadChunks: [UploadChunk] = []
     private var bufferedSamplesByStream: [CollectorStream: [HeartRateSample]] = [:]
@@ -181,7 +184,9 @@ final class CollectorCore: ObservableObject {
         let environment = ProcessInfo.processInfo.environment
         self.isVerboseLoggingEnabled = environment["COLLECTOR_VERBOSE_LOGS"] == "1"
             || environment["COLLECTOR_LOG_LEVEL"]?.lowercased() == "debug"
+        self.unassignedClusterGapSeconds = TimeInterval(environment["COLLECTOR_UNASSIGNED_CLUSTER_GAP_SECONDS"] ?? "") ?? 180
         self.managedSessions = sessionLedgerStore.loadSessions()
+        refreshUnassignedRecordingGroups()
 
         log("Collector initialized", category: "core")
         log("Upload target: \(transport.uploadDestinationDescription)", category: "transport")
@@ -248,6 +253,7 @@ final class CollectorCore: ObservableObject {
     func appDidBecomeActive() {
         log("App became active", category: "lifecycle")
         reconcileOpenSessionsAfterLifecycleEvent()
+        refreshUnassignedRecordingGroups()
     }
 
     func appDidEnterBackground() {
@@ -809,6 +815,7 @@ final class CollectorCore: ObservableObject {
         do {
             let entries = try await adapter.listOfflineRecordings()
             offlineRecordings = entries
+            refreshUnassignedRecordingGroups()
             offlineLifecycleState = .completed
             offlineStatusMessage = entries.isEmpty ? "No recordings found" : "Loaded \(entries.count) recording(s)"
             offlineLastSuccessAction = "Listed offline recordings"
@@ -822,6 +829,21 @@ final class CollectorCore: ObservableObject {
     func refreshOfflineData() async {
         await refreshOfflineCapabilities()
         await listOfflineRecordings()
+        refreshUnassignedRecordingGroups()
+    }
+
+    func assignUnassignedAsSingleSession() {
+        guard !unassignedOfflineRecordings.isEmpty else { return }
+        createExternalManagedSession(from: unassignedOfflineRecordings, note: "manual_merge_single_session")
+        refreshUnassignedRecordingGroups()
+    }
+
+    func assignUnassignedByClusters() {
+        guard !unassignedRecordingGroups.isEmpty else { return }
+        for group in unassignedRecordingGroups where !group.entries.isEmpty {
+            createExternalManagedSession(from: group.entries, note: "manual_split_by_time_cluster")
+        }
+        refreshUnassignedRecordingGroups()
     }
 
     func uploadOfflineRecordings() async {
@@ -929,6 +951,7 @@ final class CollectorCore: ObservableObject {
         do {
             try await adapter.removeOfflineRecording(path: entry.path)
             offlineRecordings.removeAll { $0.id == entry.id }
+            refreshUnassignedRecordingGroups()
             offlineRecordErrorsByID[entry.id] = nil
             offlineLifecycleState = .completed
             offlineStatusMessage = "Deleted recording"
@@ -975,6 +998,7 @@ final class CollectorCore: ObservableObject {
             offlineStatusMessage = "No recordings to delete"
             offlineLastSuccessAction = "Deleted all offline recordings"
             offlineRecordings = []
+            refreshUnassignedRecordingGroups()
             return
         }
 
@@ -997,6 +1021,7 @@ final class CollectorCore: ObservableObject {
         }
 
         offlineRecordings.removeAll { deletedIDs.contains($0.id) }
+        refreshUnassignedRecordingGroups()
         if failed.isEmpty {
             offlineLifecycleState = .completed
             offlineStatusMessage = "Deleted \(entries.count) recording(s)"
@@ -1849,6 +1874,7 @@ final class CollectorCore: ObservableObject {
         }
         managedSessions.sort { $0.startedAtUTC > $1.startedAtUTC }
         sessionLedgerStore.saveSessions(managedSessions)
+        refreshUnassignedRecordingGroups()
     }
 
     private func updateManagedSessionLifecycle(
@@ -1866,6 +1892,7 @@ final class CollectorCore: ObservableObject {
             managedSessions[index].notes = notes
         }
         sessionLedgerStore.saveSessions(managedSessions)
+        refreshUnassignedRecordingGroups()
     }
 
     private func linkFilesToManagedSession(id: UUID, files: [ManagedSessionFile]) {
@@ -1874,6 +1901,80 @@ final class CollectorCore: ObservableObject {
         let merged = Array(Set(existing + files))
         managedSessions[index].linkedFiles = merged.sorted { $0.path < $1.path }
         sessionLedgerStore.saveSessions(managedSessions)
+        refreshUnassignedRecordingGroups()
+    }
+
+    private func refreshUnassignedRecordingGroups() {
+        let assignedPaths = Set(managedSessions.flatMap { $0.linkedFiles.map(\.path) })
+        let unassigned = offlineRecordings.filter { !assignedPaths.contains($0.path) }
+        unassignedOfflineRecordings = unassigned.sorted {
+            ($0.startedAt ?? .distantPast) < ($1.startedAt ?? .distantPast)
+        }
+        unassignedRecordingGroups = clusterUnassignedRecordings(unassignedOfflineRecordings)
+    }
+
+    private func clusterUnassignedRecordings(_ entries: [OfflineRecordingEntry]) -> [UnassignedRecordingGroup] {
+        guard !entries.isEmpty else { return [] }
+        let sorted = entries.sorted { ($0.startedAt ?? .distantPast) < ($1.startedAt ?? .distantPast) }
+        var groups: [[OfflineRecordingEntry]] = []
+        var current: [OfflineRecordingEntry] = []
+
+        for entry in sorted {
+            guard let last = current.last else {
+                current = [entry]
+                continue
+            }
+            guard let left = last.startedAt, let right = entry.startedAt else {
+                groups.append(current)
+                current = [entry]
+                continue
+            }
+            if abs(right.timeIntervalSince(left)) <= unassignedClusterGapSeconds {
+                current.append(entry)
+            } else {
+                groups.append(current)
+                current = [entry]
+            }
+        }
+        if !current.isEmpty {
+            groups.append(current)
+        }
+
+        return groups.enumerated().map { index, items in
+            let starts = items.compactMap(\.startedAt)
+            return UnassignedRecordingGroup(
+                id: "cluster-\(index + 1)",
+                entries: items,
+                startAtUTC: starts.min(),
+                endAtUTC: starts.max()
+            )
+        }
+    }
+
+    private func createExternalManagedSession(from entries: [OfflineRecordingEntry], note: String) {
+        guard !entries.isEmpty else { return }
+        let start = entries.compactMap(\.startedAt).min() ?? nowProvider()
+        let stop = entries.compactMap(\.startedAt).max() ?? start
+        let sessionUUID = UUID()
+        let linkedFiles = entries.map {
+            ManagedSessionFile(
+                path: $0.path,
+                stream: $0.stream?.rawValue ?? "unknown",
+                startedAtUTC: $0.startedAt,
+                sizeBytes: $0.sizeBytes
+            )
+        }
+        upsertManagedSession(
+            id: sessionUUID,
+            clientSessionID: CollectionSession.makeClientSessionID(startedAtUTC: start, sessionID: sessionUUID),
+            mode: .offlineRecording,
+            origin: .externalApp,
+            lifecycle: .stopped,
+            startedAtUTC: start,
+            stoppedAtUTC: stop,
+            linkedFiles: linkedFiles,
+            notes: note
+        )
     }
 
     private func reconcileOpenSessionsAfterLifecycleEvent() {
