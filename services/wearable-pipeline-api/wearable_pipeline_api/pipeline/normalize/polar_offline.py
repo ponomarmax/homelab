@@ -45,6 +45,15 @@ def _parse_ts(value: Any) -> pd.Timestamp | None:
     return None if pd.isna(ts) else ts
 
 
+def _ppi_step_seconds(sample: dict[str, Any], default_rate_hz: float) -> float:
+    pp_ms = sample.get("ppInMs")
+    if isinstance(pp_ms, (int, float)) and pp_ms > 0:
+        return float(pp_ms) / 1000.0
+    if default_rate_hz > 0:
+        return 1.0 / default_rate_hz
+    return 1.0
+
+
 @dataclass(frozen=True)
 class StreamSpec:
     stream_type: str
@@ -52,13 +61,32 @@ class StreamSpec:
     time_field: str | None
 
 
+@dataclass(frozen=True)
+class TimelineStrategy:
+    sample_timestamp_required: bool
+    cadence_anchor: str
+    max_direct_delta_seconds: float
+    degrade_confidence_on_fallback: bool = False
+
+
+TIMELINE_STRATEGIES: dict[str, TimelineStrategy] = {
+    "hr": TimelineStrategy(sample_timestamp_required=False, cadence_anchor="end", max_direct_delta_seconds=24 * 60 * 60),
+    "ppi": TimelineStrategy(sample_timestamp_required=True, cadence_anchor="start", max_direct_delta_seconds=6 * 60 * 60, degrade_confidence_on_fallback=True),
+    "acc": TimelineStrategy(sample_timestamp_required=True, cadence_anchor="start", max_direct_delta_seconds=24 * 60 * 60),
+    "gyro": TimelineStrategy(sample_timestamp_required=True, cadence_anchor="start", max_direct_delta_seconds=24 * 60 * 60),
+    "mag": TimelineStrategy(sample_timestamp_required=True, cadence_anchor="start", max_direct_delta_seconds=24 * 60 * 60),
+    "ppg": TimelineStrategy(sample_timestamp_required=True, cadence_anchor="start", max_direct_delta_seconds=24 * 60 * 60),
+}
+
+
 class PolarVerityOfflineNormalizer:
     name = "PolarVerityOfflineNormalizer"
 
     def __init__(self, spec: StreamSpec) -> None:
         self.spec = spec
+        self.timeline = TIMELINE_STRATEGIES.get(spec.stream_type, TimelineStrategy(sample_timestamp_required=True, cadence_anchor="start", max_direct_delta_seconds=PLAUSIBLE_DELTA_SECONDS))
 
-    def _alignment_choice(self, sample_timestamps: list[int], collector_hint: pd.Timestamp | None) -> tuple[str, str, str, int | None, list[str]]:
+    def _alignment_choice(self, sample_timestamps: list[int], reference_hint: pd.Timestamp | None) -> tuple[str, str, str, int | None, list[str]]:
         warnings: list[str] = []
         if not sample_timestamps:
             return "reconstructed_from_collector_and_cadence", "no_sample_timestamp", "low", None, warnings
@@ -69,14 +97,14 @@ class PolarVerityOfflineNormalizer:
             return "reconstructed_from_collector_and_cadence", "invalid_sample_timestamp", "low", None, warnings
 
         direct = _parse_ts(direct_iso)
-        if collector_hint is None or direct is None:
+        if reference_hint is None or direct is None:
             return "payload.samples[].timeStamp", "polar_epoch_ns_direct", "high", 0, warnings
 
-        delta_seconds = abs((collector_hint - direct).total_seconds())
-        if delta_seconds <= PLAUSIBLE_DELTA_SECONDS:
+        delta_seconds = abs((reference_hint - direct).total_seconds())
+        if delta_seconds <= self.timeline.max_direct_delta_seconds:
             return "payload.samples[].timeStamp", "polar_epoch_ns_direct", "high", 0, warnings
 
-        shift_ns = int((collector_hint - direct).total_seconds() * 1_000_000_000)
+        shift_ns = int((reference_hint - direct).total_seconds() * 1_000_000_000)
         warnings.append("applied timestamp shift from collector reference due to implausible direct mapping")
         return "payload.samples[].timeStamp", "polar_epoch_ns_shifted_to_collector", "medium", shift_ns, warnings
 
@@ -149,6 +177,7 @@ class PolarVerityOfflineNormalizer:
         epoch_decision = "no_sample_timestamp"
         confidence = "low"
         shift_ns_used: int | None = None
+        ppi_invalid_or_zero_timestamps = 0
 
         for chunk in chunks:
             line_number = int(chunk.get("__line_number") or 0)
@@ -173,17 +202,34 @@ class PolarVerityOfflineNormalizer:
                 continue
 
             collector_hint = _parse_ts(time_info.get("first_sample_received_at_collector"))
+            upload_hint = _parse_ts(time_info.get("uploaded_at_collector"))
+            server_hint = _parse_ts(server.get("received_at_server"))
+            reference_hint = collector_hint or upload_hint or server_hint
             sample_ts_values: list[int] = []
             if self.spec.time_field:
                 for sample in samples:
                     if isinstance(sample, dict) and isinstance(sample.get(self.spec.time_field), int):
-                        sample_ts_values.append(int(sample.get(self.spec.time_field)))
+                        value = int(sample.get(self.spec.time_field))
+                        if self.spec.stream_type == "ppi" and value <= 0:
+                            continue
+                        sample_ts_values.append(value)
             if chunks_count == 1:
-                alignment_basis, epoch_decision, confidence, shift_ns_used, extra_warnings = self._alignment_choice(sample_ts_values, collector_hint)
+                alignment_basis, epoch_decision, confidence, shift_ns_used, extra_warnings = self._alignment_choice(sample_ts_values, reference_hint)
                 warnings.extend(extra_warnings)
 
             stream_rate_hz = _as_float(payload.get("sample_rate_hz")) or OFFLINE_DEFAULT_RATE_HZ.get(self.spec.stream_type, 1.0)
-            start_ts = collector_hint or _parse_ts(time_info.get("uploaded_at_collector")) or _parse_ts(server.get("received_at_server"))
+            start_ts = reference_hint
+            ppi_ts_candidates: dict[int, pd.Timestamp] = {}
+            if self.spec.stream_type == "ppi":
+                for idx, sample in enumerate(samples):
+                    if not isinstance(sample, dict):
+                        continue
+                    raw_ts = sample.get(self.spec.time_field) if self.spec.time_field else None
+                    if isinstance(raw_ts, int) and raw_ts > 0:
+                        iso = self._ts_from_ns(int(raw_ts), shift_ns=shift_ns_used)
+                        parsed = _parse_ts(iso) if iso else None
+                        if parsed is not None:
+                            ppi_ts_candidates[idx] = parsed
 
             for sample_idx, sample in enumerate(samples, start=1):
                 if not isinstance(sample, dict):
@@ -193,11 +239,38 @@ class PolarVerityOfflineNormalizer:
 
                 ts_value: str | None = None
                 raw_sample_ts = sample.get(self.spec.time_field) if self.spec.time_field else None
-                if isinstance(raw_sample_ts, int):
+                if isinstance(raw_sample_ts, int) and (self.spec.stream_type != "ppi" or raw_sample_ts > 0):
                     ts_value = self._ts_from_ns(int(raw_sample_ts), shift_ns=shift_ns_used)
-                elif start_ts is not None and stream_rate_hz and stream_rate_hz > 0:
+                if self.spec.stream_type == "ppi" and isinstance(raw_sample_ts, int) and raw_sample_ts <= 0:
+                    ppi_invalid_or_zero_timestamps += 1
+                if not ts_value and self.spec.stream_type == "ppi":
+                    idx = sample_idx - 1
+                    if idx in ppi_ts_candidates:
+                        ts_value = ppi_ts_candidates[idx].isoformat().replace("+00:00", "Z")
+                    else:
+                        prev_idx = max((k for k in ppi_ts_candidates.keys() if k < idx), default=None)
+                        next_idx = min((k for k in ppi_ts_candidates.keys() if k > idx), default=None)
+                        if prev_idx is not None and next_idx is not None and next_idx > prev_idx:
+                            prev_ts = ppi_ts_candidates[prev_idx]
+                            next_ts = ppi_ts_candidates[next_idx]
+                            fraction = float(idx - prev_idx) / float(next_idx - prev_idx)
+                            interp = prev_ts + (next_ts - prev_ts) * fraction
+                            ts_value = interp.isoformat().replace("+00:00", "Z")
+                        elif prev_idx is not None:
+                            step = _ppi_step_seconds(sample, stream_rate_hz)
+                            derived = ppi_ts_candidates[prev_idx] + pd.to_timedelta(step * (idx - prev_idx), unit="s")
+                            ts_value = derived.isoformat().replace("+00:00", "Z")
+                        elif next_idx is not None:
+                            step = _ppi_step_seconds(sample, stream_rate_hz)
+                            derived = ppi_ts_candidates[next_idx] - pd.to_timedelta(step * (next_idx - idx), unit="s")
+                            ts_value = derived.isoformat().replace("+00:00", "Z")
+                if not ts_value and start_ts is not None and stream_rate_hz and stream_rate_hz > 0:
                     index = int(sample.get("sample_index")) if isinstance(sample.get("sample_index"), int) else (sample_idx - 1)
-                    ts_value = (start_ts + pd.to_timedelta(index / stream_rate_hz, unit="s")).isoformat().replace("+00:00", "Z")
+                    if self.timeline.cadence_anchor == "end":
+                        reverse_offset = max(len(samples) - 1 - index, 0) / stream_rate_hz
+                        ts_value = (start_ts - pd.to_timedelta(reverse_offset, unit="s")).isoformat().replace("+00:00", "Z")
+                    else:
+                        ts_value = (start_ts + pd.to_timedelta(index / stream_rate_hz, unit="s")).isoformat().replace("+00:00", "Z")
 
                 if not ts_value:
                     skipped_samples_count += 1
@@ -244,6 +317,12 @@ class PolarVerityOfflineNormalizer:
         if expected > 0 and duration_delta > max(3.0, expected * 0.35):
             duration_warning = "duration deviates from expected cadence"
             warnings.append(duration_warning)
+        if self.spec.stream_type == "ppi" and ppi_invalid_or_zero_timestamps > 0:
+            warnings.append(
+                "ppi invalid_or_zero_timestamps fallback used for timestamp reconstruction"
+            )
+            if confidence == "high" and self.timeline.degrade_confidence_on_fallback:
+                confidence = "medium"
 
         if start is not None and end is not None and start.tzinfo is not None:
             start_iso = start.tz_convert(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -264,6 +343,7 @@ class PolarVerityOfflineNormalizer:
             "samples_count": int(len(df.index)),
             "chunks_count": chunks_count,
             "skipped_samples_count": skipped_samples_count,
+            "invalid_or_zero_sample_timestamps_count": ppi_invalid_or_zero_timestamps,
             "normalized_time_range": {"start_utc": start_iso, "end_utc": end_iso},
             "duration_sanity": {
                 "duration_seconds": duration,

@@ -291,6 +291,97 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(len(output.dataframe.index), 2)
         self.assertEqual(output.report["alignment_basis"], "reconstructed_from_collector_and_cadence")
         self.assertEqual(output.report["confidence"], "low")
+        first_ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce").min()
+        last_ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce").max()
+        self.assertEqual(first_ts.isoformat().replace("+00:00", "Z"), "2026-04-25T09:59:59Z")
+        self.assertEqual(last_ts.isoformat().replace("+00:00", "Z"), "2026-04-25T10:00:00Z")
+
+    def test_verity_offline_ppi_zero_timestamp_fallback(self) -> None:
+        raw_path = write_raw_stream(
+            self.raw_root,
+            session_id="session-verity-offline-ppi",
+            stream_type="ppi",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-offline-ppi-1",
+                    sequence=1,
+                    stream_type="ppi",
+                    payload_schema="polar.offline.ppi",
+                    stream_id="stream-offline-ppi-001",
+                    device_model="verity_sense",
+                    payload={
+                        "type": "PPI",
+                        "source": "polar_verity_sense_offline",
+                        "samples": [
+                            {
+                                "timeStamp": 0,
+                                "hr": 71,
+                                "ppInMs": 840,
+                                "ppErrorEstimate": 7,
+                                "blockerBit": 0,
+                                "skinContactStatus": 1,
+                                "skinContactSupported": 1,
+                            },
+                            {
+                                "timeStamp": 0,
+                                "hr": 72,
+                                "ppInMs": 830,
+                                "ppErrorEstimate": 6,
+                                "blockerBit": 0,
+                                "skinContactStatus": 1,
+                                "skinContactSupported": 1,
+                            },
+                        ],
+                    },
+                )
+            ],
+        )
+
+        normalizer = PolarVerityOfflineNormalizer(
+            StreamSpec(stream_type="ppi", payload_schema="polar.offline.ppi", time_field="timeStamp")
+        )
+        output = normalizer.handle(raw_path)
+        self.assertEqual(len(output.dataframe.index), 2)
+        self.assertIn("invalid_or_zero_timestamps fallback", " ".join(output.report.get("warnings", [])))
+        self.assertEqual(output.report.get("invalid_or_zero_sample_timestamps_count"), 2)
+        min_ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce").min()
+        self.assertEqual(min_ts.year, 2026)
+
+    def test_verity_offline_ppi_uses_upload_hint_when_collector_hint_missing(self) -> None:
+        chunk = build_chunk(
+            chunk_id="chunk-offline-ppi-upload-hint-1",
+            sequence=1,
+            stream_type="ppi",
+            payload_schema="polar.offline.ppi",
+            stream_id="stream-offline-ppi-upload-hint-001",
+            device_model="verity_sense",
+            payload={
+                "type": "PPI",
+                "source": "polar_verity_sense_offline",
+                "samples": [
+                    {"timeStamp": 0, "hr": 70, "ppInMs": 900},
+                    {"timeStamp": 545998017227188608, "hr": 71, "ppInMs": 860},
+                ],
+            },
+        )
+        chunk["time"]["first_sample_received_at_collector"] = None
+        chunk["time"]["uploaded_at_collector"] = "2026-04-25T10:00:01Z"
+        chunk["server"]["received_at_server"] = "2026-04-25T10:00:02Z"
+
+        raw_path = write_raw_stream(
+            self.raw_root,
+            session_id="session-verity-offline-ppi-upload-hint",
+            stream_type="ppi",
+            chunks=[chunk],
+        )
+
+        normalizer = PolarVerityOfflineNormalizer(StreamSpec(stream_type="ppi", payload_schema="polar.offline.ppi", time_field="timeStamp"))
+        output = normalizer.handle(raw_path)
+        self.assertEqual(output.report.get("epoch_offset_decision"), "polar_epoch_ns_shifted_to_collector")
+        min_ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce").min()
+        max_ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce").max()
+        self.assertEqual(min_ts.year, 2026)
+        self.assertEqual(max_ts.year, 2026)
 
     def test_battery_normalizer_supports_nested_battery_payload(self) -> None:
         battery_path = write_raw_stream(
