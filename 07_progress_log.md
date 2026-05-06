@@ -13,6 +13,60 @@ LinkedIn post idea:
 Date: 2026-05-06
 
 What was done:
+- Added service-level engineering guide `docs/wearable/pipeline_service_best_practices.md` for `wearable-pipeline-api` architecture boundaries, registry dispatch, artifact/run-state expectations, testing, and refactor rules.
+- Added reusable refactor playbook `docs/wearable/refactor_playbook_normalize_features_window.md` with a step-by-step method to apply the same modular refactor style from `normalize` to `features` and window builders.
+- Linked both documents from `docs/wearable/README.md` and `services/wearable-pipeline-api/README.md` for discoverability.
+
+Key insight:
+Refactor quality improves when architecture decisions are codified as operational checklists before touching step internals.
+
+LinkedIn post idea:
+How to turn a one-off pipeline refactor into a repeatable engineering playbook for normalize and window feature layers.
+
+Date: 2026-05-06
+
+What was done:
+- Refactored Verity Sense online normalization into a shared offset-stream orchestrator (`online/common.py`) plus stream-specific PPI policy/field logic in `online/streams/ppi.py`.
+- Refactored H10 online normalization into shared online orchestrators (`h10/online/common.py`) for sample streams and event-like streams.
+- Converted H10 `acc`, `ecg`, and `device_battery` modules into stream-specific wrappers with explicit per-stream policies/field builders.
+- Removed stream-specific branching from shared online runners so stream behavior is now declared in stream-specific modules.
+
+Key insight:
+Keeping online common modules as orchestration-only and pushing stream semantics into stream modules/policies improves extensibility for future Polar streams and modes without touching generic pipeline flow.
+
+LinkedIn post idea:
+How to refactor wearable online normalizers from per-file logic into policy-driven common runners plus stream-specific handlers while preserving deterministic outputs.
+
+Date: 2026-05-06
+
+What was done:
+- Reorganized `wearable-pipeline-api` normalize layout for Polar Verity Sense into explicit `online` and `offline` mode folders with shared `common.py` and per-stream normalizer modules.
+- Added offline per-stream normalizer wrappers for `hr`, `ppi`, `acc`, `gyro`, `mag`, and `ppg` under `normalize/polar/verity_sense/offline/streams/`.
+- Added online stream wrapper for Verity Sense `ppi` under `normalize/polar/verity_sense/online/streams/`.
+- Kept backward-compatible shims (`offline/multi_stream.py`, `online/ppi.py`) so existing imports and tests continue to work while registry now uses explicit per-stream handlers.
+
+Key insight:
+Mode-first and stream-first module boundaries make Verity Sense normalization easier to extend without coupling stream-specific logic to generic pipeline flow.
+
+LinkedIn post idea:
+How to refactor a wearable normalizer from one multi-stream module into mode-first/per-stream modules without breaking deterministic behavior.
+
+Date: 2026-05-06
+
+What was done:
+- Completed CP14 runtime support for `polar.ppi` normalization in `wearable-pipeline-api` using the existing normalize handler registry (device/model/payload-schema dispatch).
+- Added a dedicated `PolarPpiNormalizer` stream handler for `polar.ppi` that preserves available PPI timing/quality fields, normalizes canonical `ts_utc`, and emits report indicators (`invalid_ratio`, `gap_count_gt_2s`, `max_gap_ms`).
+- Extended targeted pipeline tests to validate PPI artifact/report generation, normalize run-state records, deterministic reruns, and raw JSONL immutability before/after rerun.
+
+Key insight:
+CP14 can be completed without generic-pipeline coupling by adding a stream-specific normalizer and keeping timing/quality logic isolated behind the existing registry dispatch boundary.
+
+LinkedIn post idea:
+How to add a new wearable stream (`polar.ppi`) with deterministic normalization, run-state traceability, and raw-data immutability checks while preserving raw-first ingestion boundaries.
+
+Date: 2026-05-06
+
+What was done:
 - Added `docs/wearable/sleep_detection_roadmap.md` as a documentation-only source of truth for CP14-CP21 sleep detection planning.
 - Covered architecture principles, evidence/limitations, Sleep2 and Garmin comparison principles, expected future comparison artifacts, and per-checkpoint definition of done (artifacts, validation commands, manual criteria, out-of-scope).
 - Added short cross-references in `03_roadmap.md`, `08_data_strategy.md`, `docs/wearable/checkpoints.md`, and `docs/wearable/testing_strategy.md` to avoid duplicating roadmap details.

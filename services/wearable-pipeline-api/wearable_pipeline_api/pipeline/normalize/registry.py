@@ -3,12 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
-from .acc import PolarAccNormalizer
-from .base import NormalizeHandlerOutput
-from .device_battery import PolarDeviceBatteryNormalizer
-from .ecg import PolarEcgNormalizer
-from .hr import PolarHrNormalizer
-from .polar_offline import PolarVerityOfflineNormalizer, StreamSpec
+from .polar.common.base import NormalizeHandlerOutput
+from .polar.common.online.hr import PolarHrNormalizer
+from .polar.h10.online.acc import PolarAccNormalizer
+from .polar.h10.online.device_battery import PolarDeviceBatteryNormalizer
+from .polar.h10.online.ecg import PolarEcgNormalizer
+from .polar.verity_sense.offline.streams.acc import VeritySenseOfflineAccNormalizer
+from .polar.verity_sense.offline.streams.gyro import VeritySenseOfflineGyroNormalizer
+from .polar.verity_sense.offline.streams.hr import VeritySenseOfflineHrNormalizer
+from .polar.verity_sense.offline.streams.mag import VeritySenseOfflineMagNormalizer
+from .polar.verity_sense.offline.streams.ppg import VeritySenseOfflinePpgNormalizer
+from .polar.verity_sense.offline.streams.ppi import VeritySenseOfflinePpiNormalizer
+from .polar.verity_sense.online.streams import VeritySenseOnlinePpiNormalizer
 
 
 class NormalizeHandler(Protocol):
@@ -28,10 +34,11 @@ def normalize_handler_registry() -> dict[HandlerKey, NormalizeHandler]:
         ("polar", "h10", "polar.ecg"): PolarEcgNormalizer(),
         ("polar", "h10", "polar.device_battery"): PolarDeviceBatteryNormalizer(),
         ("polar", "verity_sense", "polar.hr"): PolarHrNormalizer(),
-        ("polar", "verity_sense", "polar.offline.hr"): PolarVerityOfflineNormalizer(StreamSpec(stream_type="hr", payload_schema="polar.offline.hr", time_field=None)),
-        ("polar", "verity_sense", "polar.offline.ppi"): PolarVerityOfflineNormalizer(StreamSpec(stream_type="ppi", payload_schema="polar.offline.ppi", time_field="timeStamp")),
-        ("polar", "verity_sense", "polar.offline.acc"): PolarVerityOfflineNormalizer(StreamSpec(stream_type="acc", payload_schema="polar.offline.acc", time_field="timeStamp")),
-        ("polar", "verity_sense", "polar.offline.gyro"): PolarVerityOfflineNormalizer(StreamSpec(stream_type="gyro", payload_schema="polar.offline.gyro", time_field="timeStamp")),
-        ("polar", "verity_sense", "polar.offline.mag"): PolarVerityOfflineNormalizer(StreamSpec(stream_type="mag", payload_schema="polar.offline.mag", time_field="timeStamp")),
-        ("polar", "verity_sense", "polar.offline.ppg"): PolarVerityOfflineNormalizer(StreamSpec(stream_type="ppg", payload_schema="polar.offline.ppg", time_field="timeStamp")),
+        ("polar", "verity_sense", "polar.ppi"): VeritySenseOnlinePpiNormalizer(),
+        ("polar", "verity_sense", "polar.offline.hr"): VeritySenseOfflineHrNormalizer(),
+        ("polar", "verity_sense", "polar.offline.ppi"): VeritySenseOfflinePpiNormalizer(),
+        ("polar", "verity_sense", "polar.offline.acc"): VeritySenseOfflineAccNormalizer(),
+        ("polar", "verity_sense", "polar.offline.gyro"): VeritySenseOfflineGyroNormalizer(),
+        ("polar", "verity_sense", "polar.offline.mag"): VeritySenseOfflineMagNormalizer(),
+        ("polar", "verity_sense", "polar.offline.ppg"): VeritySenseOfflinePpgNormalizer(),
     }

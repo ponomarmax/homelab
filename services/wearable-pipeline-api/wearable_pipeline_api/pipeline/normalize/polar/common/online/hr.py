@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .base import BASE_COLUMNS, NormalizeHandlerOutput, finalize_rows, parse_jsonl_chunks
+from ..base import BASE_COLUMNS, NormalizeHandlerOutput, finalize_rows, parse_jsonl_chunks
 
 HR_COLUMNS = BASE_COLUMNS + [
     "hr",

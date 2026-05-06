@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
 import tempfile
 import unittest
@@ -23,6 +24,7 @@ try:
         PolarDeviceBatteryNormalizer,
         PolarEcgNormalizer,
         PolarHrNormalizer,
+        PolarPpiNormalizer,
         PolarVerityOfflineNormalizer,
         StreamSpec,
     )
@@ -747,6 +749,55 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(feature_results["battery"]["status"], "success")
 
     def test_unsupported_only_stream_marks_partial_without_crash(self) -> None:
+        raw_path = write_raw_stream(
+            self.raw_root,
+            session_id="session-unsupported-only",
+            stream_type="ppi",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-ppi-only-1",
+                    sequence=1,
+                    stream_type="ppi",
+                    payload_schema="polar.ppi",
+                    samples=[{"offset_ns": 0, "ppi_ms": 840, "pp_error_estimate_ms": 7, "skin_contact": 1, "skin_contact_supported": 1}],
+                    stream_id="stream-ppi-only-001",
+                    device_model="verity_sense",
+                )
+            ],
+        )
+
+        normalized = PolarPpiNormalizer().handle(raw_path)
+        self.assertEqual(len(normalized.dataframe.index), 1)
+        self.assertIn("invalid_ratio", normalized.report)
+        self.assertIn("gap_count_gt_2s", normalized.report)
+
+        summary = self._runner().run()
+        normalize_run = summary["normalize_runs"][0]
+        self.assertEqual(normalize_run["status"], "success")
+        self.assertEqual(normalize_run["per_stream_results"][0]["status"], "success")
+
+        output_path = Path(normalize_run["per_stream_results"][0]["output_path"])
+        report_path = output_path.with_name("time_alignment_report.json")
+        self.assertTrue(output_path.exists())
+        self.assertTrue(report_path.exists())
+        report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertIn("normalized_time_range", report_payload)
+        self.assertIn("invalid_ratio", report_payload)
+        self.assertIn("gap_count_gt_2s", report_payload)
+
+        raw_before = hashlib.sha256(raw_path.read_bytes()).hexdigest()
+        summary_second = self._runner().run()
+        raw_after = hashlib.sha256(raw_path.read_bytes()).hexdigest()
+        self.assertEqual(raw_before, raw_after)
+        self.assertEqual(summary_second["normalize_runs"][0]["status"], "success")
+
+        normalize_state_files = sorted((self.state_root / "normalize").glob("*.json"))
+        self.assertGreaterEqual(len(normalize_state_files), 2)
+        latest_state = json.loads(normalize_state_files[-1].read_text(encoding="utf-8"))
+        self.assertEqual(latest_state.get("step_name"), "normalize")
+        self.assertEqual(latest_state.get("session_id"), "session-unsupported-only")
+
+    def test_unsupported_only_stream_marks_partial_without_crash_legacy_unknown_model(self) -> None:
         write_raw_stream(
             self.raw_root,
             session_id="session-unsupported-only",
@@ -759,6 +810,7 @@ class PipelineApiTests(unittest.TestCase):
                     payload_schema="polar.ppi",
                     samples=[{"received_at_collector": "2026-04-25T10:00:00.100Z", "x": 1}],
                     stream_id="stream-ppi-only-001",
+                    device_model="h10",
                 )
             ],
         )

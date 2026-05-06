@@ -15,6 +15,10 @@ Detailed wearable transport/payload contracts and device notes.
 - `packages/schemas/payloads/*`
 - `packages/schemas/examples/*`
 
+## Pipeline Engineering Docs
+- `docs/wearable/pipeline_service_best_practices.md`
+- `docs/wearable/refactor_playbook_normalize_features_window.md`
+
 ## Canonical Stream Taxonomy
 - Online `verity_sense`: `hr`
 - Online `h10`: `hr`, `acc`, `ecg`, `battery`

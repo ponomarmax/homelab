@@ -44,3 +44,8 @@ python3 app.py --host 127.0.0.1 --port 18091
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
+
+## Engineering Guidance
+
+- Best practices: `docs/wearable/pipeline_service_best_practices.md`
+- Refactor playbook (normalize -> features/window): `docs/wearable/refactor_playbook_normalize_features_window.md`

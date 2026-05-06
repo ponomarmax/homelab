@@ -20,6 +20,7 @@ PHASE 1 — ANALYSIS
 - polar_device_time_sync_guide.md
 - polar_battery_status_modes.md
 - polar_sdk_discovery.md
+- sleep_detection_roadmap.md
 - repo_tree.md
 - AGENTS.md
 - AGENTS.light.md
