@@ -213,6 +213,7 @@ CP2 extension:
 - extend smoke coverage
 - add more stream handlers without rewriting the main test model
 - add private real-data regression passes
+- for sleep detection checkpoints (CP14-CP21), use `docs/wearable/sleep_detection_roadmap.md` as the source of truth for expected artifacts, validation commands, manual criteria, and out-of-scope boundaries
 
 ---
 

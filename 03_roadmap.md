@@ -131,6 +131,7 @@ Planned sequence:
 Status:
 - transport + payload contract normalization for Polar H10 online and Polar Verity Sense online/offline: done
 - deterministic normalize/features/session summary flow: done
+- sleep detection planning source of truth: `docs/wearable/sleep_detection_roadmap.md` (CP14-CP21)
 
 Rules:
 - no agent frameworks

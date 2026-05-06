@@ -29,6 +29,7 @@ Sleep / physiology:
 - accelerometer-based movement
 - future EEG / PPG exploration
 - related derived metrics
+- sleep detection roadmap source of truth: `docs/wearable/sleep_detection_roadmap.md`
 
 Current wearable baseline:
 - Polar H10 online: `hr`, `acc`, `ecg`, `battery`
@@ -126,6 +127,9 @@ The wearable pipeline should follow these layers:
    - Telegram or other delivery channels
    - final downstream layer
    - downstream of report generation
+
+Sleep checkpoint planning note:
+- CP14-CP21 scope, comparison principles (Sleep2/Garmin), and sleep-stage candidate constraints are defined in `docs/wearable/sleep_detection_roadmap.md`.
 
 ---
 

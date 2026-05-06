@@ -10,6 +10,19 @@ LinkedIn post idea:
 ---
 
 ## Entries
+Date: 2026-05-06
+
+What was done:
+- Added `docs/wearable/sleep_detection_roadmap.md` as a documentation-only source of truth for CP14-CP21 sleep detection planning.
+- Covered architecture principles, evidence/limitations, Sleep2 and Garmin comparison principles, expected future comparison artifacts, and per-checkpoint definition of done (artifacts, validation commands, manual criteria, out-of-scope).
+- Added short cross-references in `03_roadmap.md`, `08_data_strategy.md`, `docs/wearable/checkpoints.md`, and `docs/wearable/testing_strategy.md` to avoid duplicating roadmap details.
+
+Key insight:
+Sleep detection planning is safer when deterministic pipeline boundaries and external-reference comparison rules are fixed before runtime implementation.
+
+LinkedIn post idea:
+How to design a sleep analytics roadmap with deterministic artifact boundaries first, then add consumer-reference comparison (Sleep2/Garmin) without turning comparison tools into hidden ground truth.
+
 Date: 2026-04-27
 
 What was done:

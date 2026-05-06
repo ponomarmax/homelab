@@ -71,5 +71,5 @@ Break the work into small observable vertical slices.
 - minimal end-to-end HR pipeline passes as one coherent flow
 
 Future extension checkpoints:
-- PPI is added without changing the outer contract
-- ACC is added without changing the outer contract
+- sleep detection extension checkpoints CP14-CP21 are defined in `docs/wearable/sleep_detection_roadmap.md`
+- PPI and ACC extension work must follow that roadmap and remain consistent with raw-first boundaries
