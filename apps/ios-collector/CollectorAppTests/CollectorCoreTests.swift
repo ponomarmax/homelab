@@ -31,6 +31,7 @@ final class CollectorCoreTests: XCTestCase {
 
         private(set) var descriptorSourceInputs: [String] = []
         private(set) var uploadedChunks: [UploadChunk] = []
+        private(set) var uploadedManifests: [SessionManifestPayload] = []
 
         init(
             shouldFailUpload: Bool = false,
@@ -98,6 +99,7 @@ final class CollectorCoreTests: XCTestCase {
         }
 
         func uploadSessionManifest(_ manifest: SessionManifestPayload) async throws -> UploadAck {
+            uploadedManifests.append(manifest)
             if remainingFailures > 0 {
                 remainingFailures -= 1
                 throw TestUploadError.rejected
@@ -1633,5 +1635,40 @@ final class CollectorCoreTests: XCTestCase {
         core.appDidBecomeActive()
         let recovered = await waitUntil { core.managedSessions.first?.lifecycle == .stoppedExternal }
         XCTAssertTrue(recovered)
+    }
+
+    func testSessionManifestUsesTransportSessionModeForOfflineRecording() async throws {
+        let adapter = MockDeviceAdapter()
+        let transport = RecordingTransport()
+        let t0 = Date(timeIntervalSince1970: 4_000)
+        adapter.nextOfflinePreparationResult = OfflineUploadPreparationResult(
+            batches: [
+                OfflineUploadBatch(
+                    stream: .heartRate,
+                    sourcePath: "/tmp/M-hr",
+                    samples: [makeSample(hr: 72, receivedAt: t0, sequence: 0)],
+                    timeContext: nil
+                )
+            ],
+            messagesByStream: [.hr: "uploaded-ready: 1"]
+        )
+        adapter.nextOfflineRecordings = [
+            OfflineRecordingEntry(id: "r1", path: "/tmp/M-hr", stream: .hr, sizeBytes: 10, startedAt: t0, status: "available")
+        ]
+        let core = CollectorCore(adapter: adapter, transport: transport)
+
+        core.selectDevice()
+        await core.connectSelectedDevice()
+        await core.refreshOfflineData()
+        core.assignVisibleRecordingsAsSingleSession()
+
+        let sessionID = try XCTUnwrap(core.managedSessions.first?.id)
+        await core.uploadManagedSession(sessionID)
+        await core.retryPendingManifest(for: sessionID)
+
+        let synced = await waitUntil { !transport.uploadedManifests.isEmpty }
+        XCTAssertTrue(synced)
+        let manifest = try XCTUnwrap(transport.uploadedManifests.last)
+        XCTAssertEqual(manifest.sessionMode, "offline_recording")
     }
 }

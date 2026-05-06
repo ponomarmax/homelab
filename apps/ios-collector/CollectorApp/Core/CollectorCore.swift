@@ -2307,7 +2307,7 @@ final class CollectorCore: ObservableObject {
             schemaVersion: "1.0",
             sessionID: record.id.uuidString.lowercased(),
             deviceSessionID: record.clientSessionID,
-            sessionMode: record.collectionMode.rawValue,
+            sessionMode: record.collectionMode.transportValue,
             collector: SessionManifestPayload.Collector(
                 collectorID: "ios-collector",
                 runtimeType: "ios",
