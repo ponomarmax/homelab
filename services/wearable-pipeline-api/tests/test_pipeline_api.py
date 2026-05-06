@@ -387,6 +387,47 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(max_ts.year, 2026)
         self.assertIn("mixed_valid_invalid_timestamps", output.report.get("warnings", []))
 
+    def test_verity_offline_ppi_single_stream_resequences_collapsed_timeline(self) -> None:
+        samples = [{"timeStamp": 0, "hr": 70, "ppInMs": 900}]
+        base = 545998017227188608
+        for idx in range(1, 121):
+            # Keep a very short observed span (~6s) while sample count implies ~120s at default 1Hz.
+            samples.append({"timeStamp": base + (idx // 20) * 1_000_000_000, "hr": 70 + (idx % 2), "ppInMs": 850})
+
+        chunk = build_chunk(
+            chunk_id="chunk-offline-ppi-resequence-1",
+            sequence=1,
+            stream_type="ppi",
+            payload_schema="polar.offline.ppi",
+            stream_id="stream-offline-ppi-resequence-001",
+            device_model="verity_sense",
+            payload={
+                "type": "PPI",
+                "source": "polar_verity_sense_offline",
+                "samples": samples,
+            },
+        )
+        chunk["time"]["fetch_started_at_collector"] = "2026-05-06T07:13:33Z"
+        chunk["time"]["uploaded_at_collector"] = "2026-05-06T07:22:41Z"
+        chunk["server"]["received_at_server"] = "2026-05-06T07:22:42Z"
+
+        raw_path = write_raw_stream(
+            self.raw_root,
+            session_id="session-verity-offline-ppi-resequence",
+            stream_type="ppi",
+            chunks=[chunk],
+        )
+
+        output = PolarVerityOfflineNormalizer(StreamSpec(stream_type="ppi", payload_schema="polar.offline.ppi", time_field="timeStamp")).handle(raw_path)
+        self.assertEqual(output.report.get("alignment_basis_level"), "L2")
+        self.assertEqual(output.report.get("alignment_basis"), "cadence_reconstruction")
+        self.assertIn("timeline_resequenced_from_cadence_anchor", output.report.get("warnings", []))
+        duration = (output.report.get("duration_sanity") or {}).get("duration_seconds")
+        expected = (output.report.get("duration_sanity") or {}).get("expected_seconds_from_default_rate")
+        self.assertIsInstance(duration, float)
+        self.assertIsInstance(expected, float)
+        self.assertLess(abs(duration - expected), 1.0)
+
     def test_verity_offline_prefers_l0_recording_window(self) -> None:
         chunk = build_chunk(
             chunk_id="chunk-offline-acc-l0-1",
@@ -526,6 +567,78 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(hr_report.get("alignment_basis_level"), "L2")
         self.assertEqual(hr_report.get("alignment_basis"), "cross_stream_anchoring")
         self.assertIn("l0_cross_stream_inconsistent", hr_report.get("warnings", []))
+
+    def test_cross_stream_timeline_reconstruction_shifts_implausible_ppi_window(self) -> None:
+        acc_chunk = build_chunk(
+            chunk_id="chunk-offline-acc-anchor-1",
+            sequence=1,
+            stream_type="acc",
+            payload_schema="polar.offline.acc",
+            stream_id="stream-offline-acc-anchor-001",
+            device_model="verity_sense",
+            payload={
+                "type": "ACC",
+                "samples": [
+                    {"timeStamp": 545998017227188608, "x": -272, "y": -780, "z": -542},
+                    {"timeStamp": 545998061572134724, "x": -542, "y": -780, "z": -299},
+                ],
+            },
+        )
+        acc_chunk["time"]["recording_start_utc"] = "2026-05-05T22:00:00Z"
+        acc_chunk["time"]["recording_end_utc"] = "2026-05-05T22:00:01Z"
+
+        ppi_chunk = build_chunk(
+            chunk_id="chunk-offline-ppi-reconstruct-1",
+            sequence=1,
+            stream_type="ppi",
+            payload_schema="polar.offline.ppi",
+            stream_id="stream-offline-ppi-reconstruct-001",
+            device_model="verity_sense",
+            payload={
+                "type": "PPI",
+                "source": "polar_verity_sense_offline",
+                "samples": [
+                    {"timeStamp": 545998017227188608, "hr": 70, "ppInMs": 900},
+                    {"timeStamp": 545998061572134724, "hr": 71, "ppInMs": 860},
+                ],
+            },
+        )
+        ppi_chunk["time"]["first_sample_received_at_collector"] = "2026-05-06T07:13:33Z"
+        ppi_chunk["time"]["fetch_started_at_collector"] = "2026-05-06T07:13:33Z"
+        ppi_chunk["time"]["uploaded_at_collector"] = "2026-05-06T07:22:41Z"
+
+        session_id = "session-verity-offline-timeline-reconstruct"
+        write_raw_stream(self.raw_root, session_id=session_id, stream_type="acc", chunks=[acc_chunk])
+        write_raw_stream(self.raw_root, session_id=session_id, stream_type="ppi", chunks=[ppi_chunk])
+
+        runner = SessionPipelineRunner(
+            raw_root=self.raw_root,
+            processed_root=self.processed_root,
+            state_root=self.state_root,
+            l0_cross_stream_max_start_delta_seconds=5.0,
+            l0_cross_stream_max_end_delta_seconds=5.0,
+            l0_cross_stream_min_overlap_ratio=0.5,
+            l0_cross_stream_min_anchor_streams=1,
+            l0_cross_stream_anchor_streams=("acc",),
+        )
+        summary = runner.run(session_id=session_id)
+        per_stream = {item["stream_type"]: item for item in summary["normalize_runs"][0]["per_stream_results"]}
+        ppi_output_path = Path(per_stream["ppi"]["output_path"])
+        ppi_report_path = ppi_output_path.with_name("time_alignment_report.json")
+        ppi_report = json.loads(ppi_report_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(ppi_report.get("alignment_basis_level"), "L2")
+        self.assertEqual(ppi_report.get("alignment_basis"), "cross_stream_anchoring")
+        self.assertEqual((ppi_report.get("alignment_basis_details") or {}).get("selected_reason"), "timeline_reconstructed_from_cross_stream_anchor")
+        self.assertIn("cross_stream_timeline_reconstructed", ppi_report.get("warnings", []))
+
+        start = pd.to_datetime(ppi_report.get("session_window_start"), utc=True, errors="coerce")
+        expected_start = pd.Timestamp("2026-05-05T22:00:00Z")
+        self.assertLess(abs((start - expected_start).total_seconds()), 0.001)
+
+        ppi_df = pd.read_parquet(ppi_output_path)
+        min_ts = pd.to_datetime(ppi_df["ts_utc"], utc=True, errors="coerce").min()
+        self.assertLess(abs((min_ts - expected_start).total_seconds()), 0.001)
 
     def test_battery_normalizer_supports_nested_battery_payload(self) -> None:
         battery_path = write_raw_stream(

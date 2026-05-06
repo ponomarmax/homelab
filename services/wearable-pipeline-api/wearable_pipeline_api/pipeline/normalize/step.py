@@ -42,6 +42,7 @@ def _status_from_results(results: list[StreamRunResult]) -> str:
 
 class NormalizeStepRunner:
     step_name = "normalize"
+    cross_stream_realign_min_delta_seconds = 300.0
 
     def __init__(
         self,
@@ -159,6 +160,120 @@ class NormalizeStepRunner:
 
         return warnings
 
+    @staticmethod
+    def _to_iso_utc(value: Any) -> str | None:
+        parsed = NormalizeStepRunner._parse_utc(value)
+        if parsed is None:
+            return None
+        return parsed.isoformat().replace("+00:00", "Z")
+
+    def _select_cross_stream_anchor_start(self, reports_by_stream: dict[str, dict[str, Any]]) -> Any:
+        starts: list[Any] = []
+        for report in reports_by_stream.values():
+            level = str(report.get("alignment_basis_level") or "")
+            confidence = str(report.get("confidence") or "")
+            details = report.get("alignment_basis_details")
+            reason = ""
+            if isinstance(details, dict):
+                reason = str(details.get("selected_reason") or "")
+
+            if level == "L0":
+                pass
+            elif level == "L1" and confidence in {"high", "medium"} and reason != "shifted_to_reference_hint":
+                pass
+            else:
+                continue
+
+            start = self._parse_utc(report.get("session_window_start") or (report.get("normalized_time_range") or {}).get("start_utc"))
+            if start is not None:
+                starts.append(start)
+
+        if not starts:
+            return None
+        starts.sort()
+        return starts[len(starts) // 2]
+
+    def _apply_cross_stream_timeline_reconstruction(
+        self,
+        reports_by_stream: dict[str, dict[str, Any]],
+        output_paths_by_stream: dict[str, Path],
+    ) -> list[str]:
+        anchor_start = self._select_cross_stream_anchor_start(reports_by_stream)
+        if anchor_start is None:
+            return []
+
+        warnings: list[str] = []
+        import pandas as pd
+
+        for stream_type, report in reports_by_stream.items():
+            start = self._parse_utc(report.get("session_window_start") or (report.get("normalized_time_range") or {}).get("start_utc"))
+            end = self._parse_utc(report.get("session_window_end") or (report.get("normalized_time_range") or {}).get("end_utc"))
+            if start is None or end is None:
+                continue
+
+            details = report.get("alignment_basis_details")
+            reason = str(details.get("selected_reason") or "") if isinstance(details, dict) else ""
+            level = str(report.get("alignment_basis_level") or "")
+            confidence = str(report.get("confidence") or "")
+            candidate = reason == "shifted_to_reference_hint" or level in {"L3", "L4"} or confidence == "low"
+            if not candidate:
+                continue
+
+            delta = anchor_start - start
+            delta_seconds = float(delta.total_seconds())
+            if abs(delta_seconds) < self.cross_stream_realign_min_delta_seconds:
+                continue
+
+            output_path = output_paths_by_stream.get(stream_type)
+            if output_path is None or not output_path.exists():
+                continue
+
+            df = pd.read_parquet(output_path)
+            if "ts_utc" not in df.columns:
+                continue
+
+            ts = pd.to_datetime(df["ts_utc"], utc=True, errors="coerce")
+            ts = ts + pd.to_timedelta(delta)
+            df["ts_utc"] = ts
+            df.to_parquet(output_path, index=False)
+
+            new_start = start + pd.to_timedelta(delta)
+            new_end = end + pd.to_timedelta(delta)
+            report["session_window_start"] = self._to_iso_utc(new_start)
+            report["session_window_end"] = self._to_iso_utc(new_end)
+            report["per_stream_start"] = report["session_window_start"]
+            report["per_stream_end"] = report["session_window_end"]
+            normalized = report.get("normalized_time_range")
+            if not isinstance(normalized, dict):
+                normalized = {}
+            normalized["start_utc"] = report["session_window_start"]
+            normalized["end_utc"] = report["session_window_end"]
+            report["normalized_time_range"] = normalized
+
+            delta_ns = int(pd.to_timedelta(delta).value)
+            prior_shift = report.get("applied_shift_ns")
+            if isinstance(prior_shift, int):
+                report["applied_shift_ns"] = prior_shift + delta_ns
+            else:
+                report["applied_shift_ns"] = delta_ns
+
+            report["alignment_basis_level"] = "L2"
+            report["alignment_basis"] = "cross_stream_anchoring"
+            report["epoch_offset_decision"] = "timeline_reconstructed_from_cross_stream_anchor"
+            if not isinstance(details, dict):
+                details = {}
+            details["selected_source"] = "cross_stream_anchoring"
+            details["selected_reason"] = "timeline_reconstructed_from_cross_stream_anchor"
+            details["anchor_start_utc"] = self._to_iso_utc(anchor_start)
+            details["applied_delta_seconds"] = round(delta_seconds, 3)
+            report["alignment_basis_details"] = details
+            report.setdefault("warnings", [])
+            if "cross_stream_timeline_reconstructed" not in report["warnings"]:
+                report["warnings"].append("cross_stream_timeline_reconstructed")
+            warnings.append(f"stream {stream_type}: cross_stream_timeline_reconstructed")
+
+        return warnings
+
     def run_for_session(self, session_id: str, streams: list[StreamContext]) -> dict[str, Any]:
         run_id = self.state_store.new_run_id()
         started_at = utc_now_iso()
@@ -166,6 +281,7 @@ class NormalizeStepRunner:
         per_stream_results: list[StreamRunResult] = []
         reports_by_stream: dict[str, dict[str, Any]] = {}
         report_paths_by_stream: dict[str, Path] = {}
+        output_paths_by_stream: dict[str, Path] = {}
 
         for stream in sorted(streams, key=lambda item: item.stream_type):
             raw_path = Path(stream.raw_path)
@@ -198,6 +314,7 @@ class NormalizeStepRunner:
                 warnings.extend(result.warnings)
                 reports_by_stream[stream.stream_type] = result.report
                 report_paths_by_stream[stream.stream_type] = report_path
+                output_paths_by_stream[stream.stream_type] = output_path
                 per_stream_results.append(
                     StreamRunResult(
                         stream_type=stream.stream_type,
@@ -221,6 +338,7 @@ class NormalizeStepRunner:
                 )
 
         warnings.extend(self._apply_l0_cross_stream_gate(reports_by_stream))
+        warnings.extend(self._apply_cross_stream_timeline_reconstruction(reports_by_stream, output_paths_by_stream))
         for stream_type, report in reports_by_stream.items():
             path = report_paths_by_stream.get(stream_type)
             if path is None:

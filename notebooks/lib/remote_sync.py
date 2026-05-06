@@ -153,6 +153,9 @@ def _discover_session_paths_host(
     config: RemoteConfig,
     user_id: int | str | None = None,
     session_id: str | None = None,
+    *,
+    include_processed: bool = True,
+    include_raw: bool = True,
 ) -> list[str]:
     user_segment = f"user_id={user_id}" if user_id is not None else "user_id=*"
     session_filter = f"session_id={session_id}" if session_id else "session_id=*"
@@ -165,8 +168,12 @@ def _discover_session_paths_host(
     )
     raw_cmd = f"find {_quote(raw_root)} -type d -path '*/{user_segment}/*{session_filter}' 2>/dev/null || true"
 
-    processed = [line.strip() for line in run_ssh_command(config, processed_cmd).splitlines() if line.strip()]
-    raw = [line.strip() for line in run_ssh_command(config, raw_cmd).splitlines() if line.strip()]
+    processed: list[str] = []
+    raw: list[str] = []
+    if include_processed:
+        processed = [line.strip() for line in run_ssh_command(config, processed_cmd).splitlines() if line.strip()]
+    if include_raw:
+        raw = [line.strip() for line in run_ssh_command(config, raw_cmd).splitlines() if line.strip()]
     return sorted(set(processed + raw))
 
 
@@ -179,6 +186,9 @@ def _discover_session_paths_container(
     container: str,
     user_id: int | str | None = None,
     session_id: str | None = None,
+    *,
+    include_processed: bool = True,
+    include_raw: bool = True,
 ) -> list[str]:
     data_root = _container_data_root()
     user_segment = f"user_id={user_id}" if user_id is not None else "user_id=*"
@@ -190,10 +200,14 @@ def _discover_session_paths_container(
     processed_find = f"find {_quote(processed_root)} -type d -path '*/{user_segment}/*{session_filter}' 2>/dev/null || true"
     raw_find = f"find {_quote(raw_root)} -type d -path '*/{user_segment}/*{session_filter}' 2>/dev/null || true"
 
-    cmd = (
-        f"docker exec {_quote(container)} sh -lc "
-        + _quote(processed_find + "\n" + raw_find)
-    )
+    find_parts: list[str] = []
+    if include_processed:
+        find_parts.append(processed_find)
+    if include_raw:
+        find_parts.append(raw_find)
+    if not find_parts:
+        return []
+    cmd = (f"docker exec {_quote(container)} sh -lc " + _quote("\n".join(find_parts)))
     out = run_ssh_command(config, cmd)
     raw_paths = [line.strip() for line in out.splitlines() if line.strip()]
     return sorted({f"{CONTAINER_PREFIX}{container}{path}" for path in raw_paths})
@@ -203,8 +217,17 @@ def _discover_session_paths(
     config: RemoteConfig,
     user_id: int | str | None = None,
     session_id: str | None = None,
+    *,
+    include_processed: bool = True,
+    include_raw: bool = True,
 ) -> list[str]:
-    host_paths = _discover_session_paths_host(config, user_id=user_id, session_id=session_id)
+    host_paths = _discover_session_paths_host(
+        config,
+        user_id=user_id,
+        session_id=session_id,
+        include_processed=include_processed,
+        include_raw=include_raw,
+    )
     if host_paths:
         LOGGER.info("session_discovery_mode", extra={"mode": "host_fs", "count": len(host_paths)})
         return host_paths
@@ -218,6 +241,8 @@ def _discover_session_paths(
         container=container,
         user_id=user_id,
         session_id=session_id,
+        include_processed=include_processed,
+        include_raw=include_raw,
     )
     if container_paths:
         LOGGER.info("session_discovery_mode", extra={"mode": "container_fs", "count": len(container_paths)})
@@ -449,6 +474,8 @@ def get_session_by_id(
     local_cache_root: str | os.PathLike[str] = "notebooks/data_cache",
     config: RemoteConfig | None = None,
     env_path: str | os.PathLike[str] | None = None,
+    *,
+    sync_processed: bool = True,
 ) -> Path:
     """Sync processed and matching raw artifacts for one session into local cache."""
     cfg = config or load_remote_config(env_path=env_path)
@@ -456,7 +483,13 @@ def get_session_by_id(
     if not session_id:
         raise RemoteSyncError("session_id must be non-empty")
 
-    remote_paths = _discover_session_paths(cfg, user_id=user_id, session_id=session_id)
+    remote_paths = _discover_session_paths(
+        cfg,
+        user_id=user_id,
+        session_id=session_id,
+        include_processed=sync_processed,
+        include_raw=True,
+    )
     if not remote_paths:
         if user_id is None:
             raise RemoteSyncError(f"No remote data found for session_id={session_id}.")

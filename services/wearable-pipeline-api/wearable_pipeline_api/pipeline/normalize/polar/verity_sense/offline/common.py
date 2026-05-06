@@ -14,6 +14,7 @@ from .alignment import (
     VeritySenseOfflineAlignmentResolver,
     as_float,
     degrade_confidence,
+    is_plausible_window,
     parse_ts,
     ts_to_iso,
 )
@@ -51,6 +52,8 @@ class PolarVerityOfflineNormalizer:
         stream_id = ""
         user_id = ""
         source_app_origin = "unknown"
+        first_time_info: dict[str, Any] | None = None
+        first_server_info: dict[str, Any] | None = None
 
         decision = AlignmentDecision(level="L4", basis="unresolved", details="not_evaluated", confidence="low", shift_ns=None)
         ppi_invalid_or_zero_timestamps = 0
@@ -73,6 +76,10 @@ class PolarVerityOfflineNormalizer:
             payload = context.payload
             samples = context.samples
             source_app_origin = str(time_info.get("source_app_origin") or source_app_origin or "unknown")
+            if first_time_info is None:
+                first_time_info = dict(time_info)
+            if first_server_info is None:
+                first_server_info = dict(server)
 
             if not samples:
                 warnings.append(f"line {line_number}: empty or malformed payload.samples")
@@ -191,6 +198,59 @@ class PolarVerityOfflineNormalizer:
         if self.policy.uses_invalid_zero_timestamp_repair and ppi_invalid_or_zero_timestamps > 0:
             warnings.append("ppi invalid_or_zero_timestamps fallback used for timestamp reconstruction")
             confidence = degrade_confidence(confidence)
+
+        # Generic single-stream fallback: if resolved timestamps clearly collapse expected cadence window,
+        # rebuild a monotonic cadence-aligned timeline anchored to collector/server hints.
+        collapse_detected = (
+            not df.empty
+            and decision.level != "L0"
+            and expected > 0
+            and duration_delta > max(60.0, expected * 0.5)
+            and confidence == "low"
+        )
+        if collapse_detected:
+            time_hint = first_time_info or {}
+            server_hint = first_server_info or {}
+            collector_start = parse_ts(time_hint.get("fetch_started_at_collector") or time_hint.get("first_sample_received_at_collector"))
+            collector_end = parse_ts(
+                time_hint.get("fetch_completed_at_collector")
+                or time_hint.get("uploaded_at_collector")
+                or server_hint.get("received_at_server")
+            )
+            recording_start = parse_ts(time_hint.get("recording_start_utc"))
+            recording_end = parse_ts(time_hint.get("recording_end_utc"))
+            anchor_start = None
+            anchor_end = collector_end
+            if anchor_start is None and recording_start is not None and recording_end is not None and is_plausible_window(recording_start, recording_end):
+                anchor_start = recording_start
+            if anchor_end is None and recording_start is not None and recording_end is not None and is_plausible_window(recording_start, recording_end):
+                anchor_end = recording_end
+            if anchor_start is None and anchor_end is not None:
+                anchor_start = anchor_end - pd.to_timedelta(expected, unit="s")
+            if anchor_end is None and anchor_start is not None:
+                anchor_end = anchor_start + pd.to_timedelta(expected, unit="s")
+            if anchor_start is None and anchor_end is None and collector_start is not None:
+                anchor_start = collector_start
+                anchor_end = collector_start + pd.to_timedelta(expected, unit="s")
+            if anchor_start is not None and anchor_end is not None and anchor_end >= anchor_start:
+                ts_rebuilt = pd.date_range(start=anchor_start, periods=len(df.index), freq=pd.to_timedelta(1.0 / self.policy.default_rate_hz, unit="s"))
+                df = df.copy()
+                df["ts_utc"] = ts_rebuilt
+                start = pd.to_datetime(df["ts_utc"], utc=True, errors="coerce").min()
+                end = pd.to_datetime(df["ts_utc"], utc=True, errors="coerce").max()
+                duration = max(float((end - start).total_seconds()), 0.0) if start is not None and end is not None else 0.0
+                duration_delta = abs(duration - expected)
+                if expected > 0 and duration_delta <= max(3.0, expected * 0.35):
+                    duration_warning = None
+                    warnings = [item for item in warnings if item != "duration deviates from expected cadence"]
+                warnings.append("timeline_resequenced_from_cadence_anchor")
+                decision = AlignmentDecision(
+                    level="L2",
+                    basis="cadence_reconstruction",
+                    details="timeline_resequenced_from_cadence_anchor",
+                    confidence="low",
+                    shift_ns=decision.shift_ns,
+                )
 
         start_iso = ts_to_iso(start.tz_convert(timezone.utc) if start is not None and start.tzinfo is not None else start)
         end_iso = ts_to_iso(end.tz_convert(timezone.utc) if end is not None and end.tzinfo is not None else end)
