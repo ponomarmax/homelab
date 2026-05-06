@@ -21,6 +21,17 @@ Pipeline flow:
 - `LOG_LEVEL` (default: `INFO`)
 - `WEARABLE_PIPELINE_API_HOST` (default: `127.0.0.1`)
 - `WEARABLE_PIPELINE_API_PORT` (default: `8091`)
+- `L0_CROSS_STREAM_MAX_START_DELTA_SECONDS` (default: `10`)
+- `L0_CROSS_STREAM_MAX_END_DELTA_SECONDS` (default: `10`)
+- `L0_CROSS_STREAM_MIN_OVERLAP_RATIO` (default: `0.5`)
+- `L0_CROSS_STREAM_MIN_ANCHOR_STREAMS` (default: `2`)
+- `L0_CROSS_STREAM_ANCHOR_STREAMS` (default: `acc,gyro,mag,ppg`)
+
+## Time Alignment Notes
+
+- Normalization emits `time_alignment_report.json` per processed session.
+- L0-based alignment is cross-validated against anchor streams.
+- If a stream's L0 window is inconsistent with anchor windows, alignment is downgraded to L2 (`cross_stream_anchoring`) with warning `l0_cross_stream_inconsistent`.
 
 ## Local run
 

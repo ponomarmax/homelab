@@ -2,13 +2,16 @@
 
 Initial iOS collector skeleton for the wearable HR MVP.
 
-This checkpoint provides:
+This collector provides:
 - a runnable SwiftUI app foundation
 - test-only mock device adapter
 - test-only mock HR stream provider
 - collector core session lifecycle
 - testable domain models for collection mode and timestamp metadata
-- mock session metadata, stream descriptor, and upload chunk preparation
+- session metadata / stream descriptor / upload chunk preparation
+- persistent session ledger (Application Support JSON)
+- unassigned offline recordings grouping and assignment actions
+- pending server-sync queue for session manifests with retry support
 
 This checkpoint does **not** provide:
 - Polar SDK integration
@@ -31,6 +34,7 @@ Implemented in CP2:
 - `CollectorHTTPTransport` prepares and uploads chunks (or runs local-only mode when endpoint is absent)
 - `CollectionSession`, `StreamDescriptor`, and `UploadChunk` keep the transport-facing model explicit
 - `CollectorChunkBuilder` turns buffered samples into transport-ready chunk payloads
+- `SessionLedgerStore` persists managed session state and pending manifest sync queue
 
 Current stream naming and payload schemas:
 - `hr` -> `polar.hr`
@@ -56,6 +60,8 @@ Collector uses a layered configuration strategy:
 Configured keys:
 - `COLLECTOR_UPLOAD_ENDPOINT` (`String`)  
   Upload destination. If only base URL is provided (for example `http://192.168.0.5:18090/`), collector auto-expands to `/upload-chunk`.
+- `COLLECTOR_UNASSIGNED_CLUSTER_GAP_SECONDS` (`Number`, optional)
+  Time gap threshold (seconds) for clustering unassigned offline recordings. Default is `180`.
 - `COLLECTOR_UPLOAD_FLUSH_INTERVAL_SECONDS` (`Number`, optional)
   Time-based upload cadence override. Default is `60` seconds.
 
@@ -92,7 +98,7 @@ Notes:
 
 Open:
 
-- `apps/ios-collector/ios-collector.xcodeproj`
+- `apps/ios-collector/ios-collector.xcworkspace` (preferred)
 
 App target:
 - `CollectorApp`
@@ -112,7 +118,7 @@ Then run tests with any available iPhone simulator:
 
 ```bash
 xcodebuild test \
-  -project apps/ios-collector/ios-collector.xcodeproj \
+  -workspace apps/ios-collector/ios-collector.xcworkspace \
   -scheme CollectorApp \
   -destination 'platform=iOS Simulator,name=<AVAILABLE_IPHONE_SIMULATOR>'
 ```
@@ -121,7 +127,7 @@ If simulator execution is blocked in the current shell environment, `xcodebuild 
 
 ## Manual Validation
 
-1. Open `apps/ios-collector/ios-collector.xcodeproj` in Xcode.
+1. Open `apps/ios-collector/ios-collector.xcworkspace` in Xcode.
 2. Select an iPhone Simulator target.
 3. Run the `CollectorApp` scheme.
 4. Confirm the main screen opens with title, state, latest HR, total samples, and buffered samples.
@@ -141,7 +147,22 @@ If simulator execution is blocked in the current shell environment, `xcodebuild 
 Optional:
 - run on a real iPhone for UI sanity checking only
 
-Real iPhone is not required for CP2.
+## Offline Session Management (Implemented)
+
+- In-app started sessions are persisted in local session ledger and can be recovered after app restart.
+- If session started in-app but stopped externally, collector marks lifecycle as externally stopped on next reconciliation.
+- Offline files can be linked to existing managed session or grouped from unassigned recordings.
+- Unassigned recordings can be uploaded:
+  - as one merged session
+  - or as multiple sessions by time clusters
+- Session IDs are collector-generated with UTC prefix + short GUID suffix (`S-YYYYMMDD-HHMMSSZ-XXXXXXXX`).
+
+## Pending Server Sync and Retry (Implemented)
+
+- Session manifests are sent to ingestion `POST /session-manifest`.
+- If server is unavailable, manifest sync is queued locally as pending (with retry count and last error).
+- UI shows pending sync entries and allows manual retry.
+- Collector also retries pending manifest sync on app foreground activation.
 
 ## Manual Validation: Locked-Screen BLE HR Collection
 

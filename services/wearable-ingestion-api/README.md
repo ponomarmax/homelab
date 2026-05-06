@@ -4,8 +4,10 @@ Lightweight CP3 backend for wearable HR uploads.
 
 Responsibilities:
 - accept `UploadChunkContract`
+- accept `SessionMetadata` manifest (`POST /session-manifest`)
 - validate transport envelope only (payload is opaque)
 - append accepted raw chunks as JSONL under configured raw path
+- append accepted session manifests as JSONL under session raw path
 - return ACK on success
 - return structured error on failure
 
@@ -29,4 +31,5 @@ Optional env vars:
 Endpoint:
 - `GET /healthz`
 - `POST /upload-chunk`
+- `POST /session-manifest`
 - `GET /docs` (Swagger UI)

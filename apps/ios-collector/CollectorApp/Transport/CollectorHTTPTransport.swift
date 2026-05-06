@@ -97,6 +97,50 @@ struct CollectorHTTPTransport: CollectorTransporting {
         throw CollectorUploadError.rejected(message: "Mock upload failed")
     }
 
+    func uploadSessionManifest(_ manifest: SessionManifestPayload) async throws -> UploadAck {
+        guard let uploadEndpoint else {
+            if shouldSucceedInMockMode {
+                return UploadAck(
+                    accepted: true,
+                    status: "accepted",
+                    chunkID: "manifest-\(manifest.sessionID)",
+                    sessionID: manifest.sessionID,
+                    streamID: "session_manifest",
+                    receivedAtServer: manifest.time.startedAtSource,
+                    storage: UploadAck.UploadStorage(rawPersisted: true, storagePath: "mock/raw/\(manifest.sessionID)/session_manifest.jsonl"),
+                    message: "Mock manifest upload accepted (no network request)"
+                )
+            }
+            throw CollectorUploadError.rejected(message: "Mock manifest upload failed")
+        }
+
+        var components = URLComponents(url: uploadEndpoint, resolvingAgainstBaseURL: false)
+        components?.path = "/session-manifest"
+        guard let endpoint = components?.url else {
+            throw CollectorUploadError.invalidResponse
+        }
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(uploadConfiguration.userIDHeaderValue, forHTTPHeaderField: "X-User-ID")
+        request.httpBody = try JSONEncoder().encode(manifest)
+
+        let (data, response) = try await httpDataProvider(request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CollectorUploadError.invalidResponse
+        }
+        let decoder = JSONDecoder()
+        if (200...299).contains(httpResponse.statusCode), let ack = try? decoder.decode(UploadAck.self, from: data) {
+            return ack
+        }
+        if let errorResponse = try? decoder.decode(UploadErrorResponse.self, from: data) {
+            throw CollectorUploadError.rejected(message: "[\(errorResponse.errorCode)] \(errorResponse.message)")
+        }
+        throw CollectorUploadError.rejected(message: "Manifest upload failed with status \(httpResponse.statusCode)")
+    }
+
     private func uploadToServer(
         requestBody: CanonicalUploadChunkRequest,
         chunk: UploadChunk,

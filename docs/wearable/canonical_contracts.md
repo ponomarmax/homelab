@@ -193,7 +193,19 @@ Represents one upload unit from collector to backend.
   "time": {
     "device_time_reference": "string",
     "first_sample_received_at_collector": "timestamp",
-    "uploaded_at_collector": "timestamp"
+    "uploaded_at_collector": "timestamp",
+    "recording_start_utc": "timestamp | null",
+    "recording_end_utc": "timestamp | null",
+    "file_created_at_device": "timestamp | null",
+    "file_closed_at_device": "timestamp | null",
+    "device_local_time_at_fetch": "timestamp | null",
+    "device_timezone_offset": "integer_minutes | null",
+    "clock_sync_state": "synced | unsynced | unknown | null",
+    "clock_drift_estimate": "number_ppm | null",
+    "source_app_origin": "our_app | third_party | unknown | null",
+    "sensor_recording_id": "string | null",
+    "fetch_started_at_collector": "timestamp | null",
+    "fetch_completed_at_collector": "timestamp | null"
   },
   "transport": {
     "encoding": "json",
@@ -213,6 +225,7 @@ sequence
 source.vendor
 source.device_model
 collection.mode
+time.device_time_reference
 time.first_sample_received_at_collector
 time.uploaded_at_collector
 transport.encoding
@@ -244,6 +257,15 @@ chunk_id must be unique
 sequence must be monotonically increasing per stream
 stream_id must remain stable for a session
 ingestion treats payload as opaque JSON
+
+### 3.1 SessionManifest Contract
+
+Ingestion also accepts session-level manifest metadata:
+
+- `POST /session-manifest`
+- body: `SessionMetadata` (`schema_version=1.0`)
+- persisted as `session_manifest.jsonl` under the session raw path
+- used for session-level lifecycle traceability and retry-safe sync from collector
 
 
 4. AckContract
@@ -478,8 +500,8 @@ source / collector wall-clock time
 device-provided time or device reference
 server receive time
 Current rule
-collector timestamps are mandatory
-device time is optional
+`time.device_time_reference`, `time.first_sample_received_at_collector`, and `time.uploaded_at_collector` are mandatory
+device recording metadata fields are optional but strongly recommended for offline sync (`recording_start_utc`, `recording_end_utc`, `sensor_recording_id`, fetch window fields)
 server receive time is backend-assigned
 for h10 ACC and ECG payloads, `device_time_ns` is the strongest timing signal when present
 canonical analytical `ts_utc` is assigned only in normalization, never in ingestion

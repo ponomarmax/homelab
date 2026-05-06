@@ -63,6 +63,34 @@ def build_valid_chunk() -> dict[str, object]:
     }
 
 
+def build_valid_session_manifest() -> dict[str, object]:
+    return {
+        "schema_version": "1.0",
+        "session_id": "session-real-001",
+        "device_session_id": "S-20260505-120000Z-abcd1234",
+        "session_mode": "offline_recording",
+        "collector": {
+            "collector_id": "ios-collector",
+            "runtime_type": "ios",
+            "app_version": "1.0.0",
+            "build_version": "100",
+        },
+        "device": {
+            "vendor": "polar",
+            "model": "verity_sense",
+            "device_id": "dev-123",
+        },
+        "time": {
+            "started_at_source": "2026-05-05T12:00:00Z",
+            "started_at_server": None,
+        },
+        "metadata": {
+            "notes": "manual_merge_single_session",
+            "tags": ["origin:external_app"],
+        },
+    }
+
+
 @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in local python environment")
 class IngestionApiTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -201,6 +229,19 @@ class IngestionApiTests(unittest.TestCase):
         self.assertTrue(request_ref.endswith("/UploadChunkRequest"))
         self.assertIn("200", upload_post["responses"])
         self.assertIn("400", upload_post["responses"])
+
+    def test_session_manifest_is_persisted(self) -> None:
+        manifest = build_valid_session_manifest()
+        response = self.client.post("/session-manifest", json=manifest, headers={"X-User-ID": "42"})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["accepted"])
+        storage_path = Path(payload["storage"]["storage_path"])
+        self.assertTrue(storage_path.exists())
+        self.assertEqual(storage_path.name, "session_manifest.jsonl")
+        stored = json.loads(storage_path.read_text(encoding="utf-8").strip().splitlines()[0])
+        self.assertEqual(stored["session_id"], manifest["session_id"])
+        self.assertEqual(stored["user_id"], "42")
 
 
 if __name__ == "__main__":

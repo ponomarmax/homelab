@@ -76,6 +76,26 @@ final class CollectorCoreTests: XCTestCase {
                 message: "ok"
             )
         }
+
+        func uploadSessionManifest(_ manifest: SessionManifestPayload) async throws -> UploadAck {
+            if remainingFailures > 0 {
+                remainingFailures -= 1
+                throw TestUploadError.rejected
+            }
+            return UploadAck(
+                accepted: true,
+                status: "accepted",
+                chunkID: "manifest-\(manifest.sessionID)",
+                sessionID: manifest.sessionID,
+                streamID: "session_manifest",
+                receivedAtServer: manifest.time.startedAtSource,
+                storage: UploadAck.UploadStorage(
+                    rawPersisted: true,
+                    storagePath: "mock/\(manifest.sessionID)-manifest.jsonl"
+                ),
+                message: "ok"
+            )
+        }
     }
 
     final class SourceTaggedAdapter: CollectorDeviceAdapter {

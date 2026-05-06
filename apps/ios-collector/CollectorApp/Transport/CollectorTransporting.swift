@@ -19,4 +19,5 @@ protocol CollectorTransporting {
     ) -> UploadChunk?
 
     func upload(chunk: UploadChunk) async throws -> UploadAck
+    func uploadSessionManifest(_ manifest: SessionManifestPayload) async throws -> UploadAck
 }

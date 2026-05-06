@@ -36,8 +36,97 @@ struct ManagedSessionRecord: Codable, Equatable, Identifiable, Sendable {
     var notes: String?
 }
 
+struct SessionManifestPayload: Codable, Equatable, Sendable {
+    struct Collector: Codable, Equatable, Sendable {
+        let collectorID: String
+        let runtimeType: String
+        let appVersion: String
+        let buildVersion: String?
+
+        enum CodingKeys: String, CodingKey {
+            case collectorID = "collector_id"
+            case runtimeType = "runtime_type"
+            case appVersion = "app_version"
+            case buildVersion = "build_version"
+        }
+    }
+
+    struct Device: Codable, Equatable, Sendable {
+        let vendor: String
+        let model: String
+        let deviceID: String
+
+        enum CodingKeys: String, CodingKey {
+            case vendor
+            case model
+            case deviceID = "device_id"
+        }
+    }
+
+    struct Time: Codable, Equatable, Sendable {
+        let startedAtSource: String
+        let startedAtServer: String?
+
+        enum CodingKeys: String, CodingKey {
+            case startedAtSource = "started_at_source"
+            case startedAtServer = "started_at_server"
+        }
+    }
+
+    struct Metadata: Codable, Equatable, Sendable {
+        let notes: String?
+        let tags: [String]?
+    }
+
+    let schemaVersion: String
+    let sessionID: String
+    let deviceSessionID: String?
+    let sessionMode: String
+    let collector: Collector
+    let device: Device
+    let time: Time
+    let metadata: Metadata?
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case sessionID = "session_id"
+        case deviceSessionID = "device_session_id"
+        case sessionMode = "session_mode"
+        case collector
+        case device
+        case time
+        case metadata
+    }
+}
+
+struct PendingSessionManifest: Codable, Equatable, Identifiable, Sendable {
+    let id: String
+    let sessionID: UUID
+    let clientSessionID: String
+    var lastError: String?
+    var retryCount: Int
+    var updatedAtUTC: Date
+}
+
 private struct ManagedSessionSnapshot: Codable {
     var sessions: [ManagedSessionRecord]
+    var pendingManifests: [PendingSessionManifest]
+
+    enum CodingKeys: String, CodingKey {
+        case sessions
+        case pendingManifests
+    }
+
+    init(sessions: [ManagedSessionRecord], pendingManifests: [PendingSessionManifest]) {
+        self.sessions = sessions
+        self.pendingManifests = pendingManifests
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sessions = try container.decodeIfPresent([ManagedSessionRecord].self, forKey: .sessions) ?? []
+        pendingManifests = try container.decodeIfPresent([PendingSessionManifest].self, forKey: .pendingManifests) ?? []
+    }
 }
 
 @MainActor
@@ -67,8 +156,17 @@ final class SessionLedgerStore {
         return snapshot.sessions.sorted { $0.startedAtUTC > $1.startedAtUTC }
     }
 
-    func saveSessions(_ sessions: [ManagedSessionRecord]) {
-        let snapshot = ManagedSessionSnapshot(sessions: sessions.sorted { $0.startedAtUTC > $1.startedAtUTC })
+    func loadPendingManifests() -> [PendingSessionManifest] {
+        guard let data = try? Data(contentsOf: storageURL) else { return [] }
+        guard let snapshot = try? decoder.decode(ManagedSessionSnapshot.self, from: data) else { return [] }
+        return snapshot.pendingManifests.sorted { $0.updatedAtUTC > $1.updatedAtUTC }
+    }
+
+    func save(sessions: [ManagedSessionRecord], pendingManifests: [PendingSessionManifest]) {
+        let snapshot = ManagedSessionSnapshot(
+            sessions: sessions.sorted { $0.startedAtUTC > $1.startedAtUTC },
+            pendingManifests: pendingManifests.sorted { $0.updatedAtUTC > $1.updatedAtUTC }
+        )
         guard let data = try? encoder.encode(snapshot) else { return }
         try? data.write(to: storageURL, options: .atomic)
     }
@@ -140,6 +238,7 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var lastDeviceTimeDeltaSeconds: TimeInterval?
     @Published private(set) var operationalTimeEvents: [DeviceTimeOperationalEvent] = []
     @Published private(set) var managedSessions: [ManagedSessionRecord] = []
+    @Published private(set) var pendingSessionManifests: [PendingSessionManifest] = []
 
     let defaultCollectionMode: CollectionMode = .live
 
@@ -186,6 +285,7 @@ final class CollectorCore: ObservableObject {
             || environment["COLLECTOR_LOG_LEVEL"]?.lowercased() == "debug"
         self.unassignedClusterGapSeconds = TimeInterval(environment["COLLECTOR_UNASSIGNED_CLUSTER_GAP_SECONDS"] ?? "") ?? 180
         self.managedSessions = sessionLedgerStore.loadSessions()
+        self.pendingSessionManifests = sessionLedgerStore.loadPendingManifests()
         refreshUnassignedRecordingGroups()
 
         log("Collector initialized", category: "core")
@@ -254,6 +354,9 @@ final class CollectorCore: ObservableObject {
         log("App became active", category: "lifecycle")
         reconcileOpenSessionsAfterLifecycleEvent()
         refreshUnassignedRecordingGroups()
+        Task { @MainActor [weak self] in
+            await self?.retryPendingSessionManifestSync()
+        }
     }
 
     func appDidEnterBackground() {
@@ -1855,6 +1958,7 @@ final class CollectorCore: ObservableObject {
             existing.notes = notes ?? existing.notes
             existing.linkedFiles = Array(Set(existing.linkedFiles + linkedFiles))
             managedSessions[index] = existing
+            queueManifestSync(for: managedSessions[index])
         } else {
             managedSessions.append(
                 ManagedSessionRecord(
@@ -1871,9 +1975,12 @@ final class CollectorCore: ObservableObject {
                     notes: notes
                 )
             )
+            if let created = managedSessions.last {
+                queueManifestSync(for: created)
+            }
         }
         managedSessions.sort { $0.startedAtUTC > $1.startedAtUTC }
-        sessionLedgerStore.saveSessions(managedSessions)
+        persistLedger()
         refreshUnassignedRecordingGroups()
     }
 
@@ -1891,7 +1998,8 @@ final class CollectorCore: ObservableObject {
         if let notes, !notes.isEmpty {
             managedSessions[index].notes = notes
         }
-        sessionLedgerStore.saveSessions(managedSessions)
+        queueManifestSync(for: managedSessions[index])
+        persistLedger()
         refreshUnassignedRecordingGroups()
     }
 
@@ -1900,7 +2008,7 @@ final class CollectorCore: ObservableObject {
         let existing = managedSessions[index].linkedFiles
         let merged = Array(Set(existing + files))
         managedSessions[index].linkedFiles = merged.sorted { $0.path < $1.path }
-        sessionLedgerStore.saveSessions(managedSessions)
+        persistLedger()
         refreshUnassignedRecordingGroups()
     }
 
@@ -1974,6 +2082,78 @@ final class CollectorCore: ObservableObject {
             stoppedAtUTC: stop,
             linkedFiles: linkedFiles,
             notes: note
+        )
+    }
+
+    private func persistLedger() {
+        sessionLedgerStore.save(sessions: managedSessions, pendingManifests: pendingSessionManifests)
+    }
+
+    private func queueManifestSync(for record: ManagedSessionRecord) {
+        let key = record.clientSessionID
+        if pendingSessionManifests.contains(where: { $0.id == key }) {
+            return
+        }
+        pendingSessionManifests.append(
+            PendingSessionManifest(
+                id: key,
+                sessionID: record.id,
+                clientSessionID: record.clientSessionID,
+                lastError: nil,
+                retryCount: 0,
+                updatedAtUTC: nowProvider()
+            )
+        )
+        persistLedger()
+        Task { @MainActor [weak self] in
+            await self?.retryPendingSessionManifestSync()
+        }
+    }
+
+    func retryPendingSessionManifestSync() async {
+        guard transport.isNetworkUploadConfigured else { return }
+        for item in pendingSessionManifests {
+            guard let session = managedSessions.first(where: { $0.id == item.sessionID }) else { continue }
+            do {
+                let payload = buildSessionManifestPayload(from: session)
+                _ = try await transport.uploadSessionManifest(payload)
+                pendingSessionManifests.removeAll { $0.id == item.id }
+            } catch {
+                if let index = pendingSessionManifests.firstIndex(where: { $0.id == item.id }) {
+                    pendingSessionManifests[index].retryCount += 1
+                    pendingSessionManifests[index].lastError = error.localizedDescription
+                    pendingSessionManifests[index].updatedAtUTC = nowProvider()
+                }
+            }
+        }
+        persistLedger()
+    }
+
+    private func buildSessionManifestPayload(from record: ManagedSessionRecord) -> SessionManifestPayload {
+        SessionManifestPayload(
+            schemaVersion: "1.0",
+            sessionID: record.id.uuidString.lowercased(),
+            deviceSessionID: record.clientSessionID,
+            sessionMode: record.collectionMode.rawValue,
+            collector: SessionManifestPayload.Collector(
+                collectorID: "ios-collector",
+                runtimeType: "ios",
+                appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
+                buildVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+            ),
+            device: SessionManifestPayload.Device(
+                vendor: "polar",
+                model: adapter.deviceIdentity.model.lowercased(),
+                deviceID: record.deviceID
+            ),
+            time: SessionManifestPayload.Time(
+                startedAtSource: Self.iso8601(from: record.startedAtUTC),
+                startedAtServer: nil
+            ),
+            metadata: SessionManifestPayload.Metadata(
+                notes: record.notes,
+                tags: ["origin:\(record.origin.rawValue)", "lifecycle:\(record.lifecycle.rawValue)"]
+            )
         )
     }
 

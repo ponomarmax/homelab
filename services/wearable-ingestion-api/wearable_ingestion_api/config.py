@@ -6,6 +6,7 @@ from pathlib import Path
 SERVICE_NAME = "wearable-ingestion-api"
 HEALTH_PATH = "/healthz"
 UPLOAD_PATH = "/upload-chunk"
+SESSION_MANIFEST_PATH = "/session-manifest"
 
 ENV_HOST = "WEARABLE_INGESTION_API_HOST"
 ENV_PORT = "WEARABLE_INGESTION_API_PORT"

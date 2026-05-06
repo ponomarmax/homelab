@@ -12,14 +12,15 @@ from fastapi.responses import JSONResponse
 
 from .config import (
     HEALTH_PATH,
+    SESSION_MANIFEST_PATH,
     SERVICE_NAME,
     UPLOAD_PATH,
     resolve_host,
     resolve_port,
     resolve_raw_root_from_env,
 )
-from .models import AckResponse, AckStorage, ErrorResponse, UploadChunkRequest
-from .raw_storage import append_chunk_jsonl
+from .models import AckResponse, AckStorage, ErrorResponse, SessionMetadata, UploadChunkRequest
+from .raw_storage import append_chunk_jsonl, append_session_manifest_jsonl
 from .validation import validate_upload_chunk_contract
 
 logger = logging.getLogger(__name__)
@@ -188,6 +189,70 @@ def create_app(raw_root: Path) -> FastAPI:
             },
         )
         return ack_response(chunk, received_at_server, storage_path)
+
+    @app.post(
+        SESSION_MANIFEST_PATH,
+        response_model=AckResponse,
+        responses={
+            400: {"model": ErrorResponse, "description": "Validation or malformed request error"},
+            500: {"model": ErrorResponse, "description": "Persistence error"},
+        },
+    )
+    async def upload_session_manifest(
+        request: Request,
+        manifest: SessionMetadata = Body(..., description="Session manifest payload."),
+    ) -> AckResponse | JSONResponse:
+        raw_manifest = await request.json()
+        if not isinstance(raw_manifest, dict):
+            return JSONResponse(
+                status_code=400,
+                content=error_response("malformed_request", "Request body must be valid JSON object").model_dump(),
+            )
+
+        received_at_server = utc_now_iso()
+        user_id = request.headers.get("X-User-ID", "1")
+        persisted_record = dict(raw_manifest)
+        persisted_record["user_id"] = user_id
+        persisted_record["server"] = {"received_at_server": received_at_server}
+
+        vendor = str(manifest.device.vendor)
+        device_model = str(manifest.device.model)
+        stream_id = "session_manifest"
+
+        try:
+            storage_path = append_session_manifest_jsonl(
+                raw_root=app.state.raw_root,
+                user_id=user_id,
+                vendor=vendor,
+                device_model=device_model,
+                received_at_server=received_at_server,
+                session_id=manifest.session_id,
+                record=persisted_record,
+            )
+        except OSError as exc:
+            logger.exception(
+                "manifest_persistence_failed",
+                extra={"session_id": manifest.session_id},
+            )
+            return JSONResponse(
+                status_code=500,
+                content=error_response(
+                    "persistence_error",
+                    "Failed to persist session manifest",
+                    details=[{"field": "storage", "issue": str(exc)}],
+                ).model_dump(),
+            )
+
+        return AckResponse(
+            accepted=True,
+            status="accepted",
+            chunk_id=f"manifest-{manifest.session_id}",
+            session_id=manifest.session_id,
+            stream_id=stream_id,
+            received_at_server=received_at_server,
+            storage=AckStorage(raw_persisted=True, storage_path=storage_path),
+            message="Session manifest accepted and persisted.",
+        )
 
     return app
 

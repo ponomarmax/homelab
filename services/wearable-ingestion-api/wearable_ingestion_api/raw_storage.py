@@ -63,3 +63,47 @@ def append_chunk_jsonl(
         handle.write("\n")
 
     return str(target_file)
+
+
+def build_session_manifest_path(
+    raw_root: Path,
+    user_id: str,
+    vendor: str,
+    device_model: str,
+    received_at_server: str,
+    session_id: str,
+) -> Path:
+    date_segment = datetime.fromisoformat(received_at_server.replace("Z", "+00:00")).date().isoformat()
+    return (
+        raw_root
+        / f"user_id={sanitize_segment(user_id)}"
+        / f"source={_source_segment(vendor, device_model)}"
+        / f"date={date_segment}"
+        / f"session_id={sanitize_segment(session_id)}"
+        / "session_manifest.jsonl"
+    )
+
+
+def append_session_manifest_jsonl(
+    raw_root: Path,
+    user_id: str,
+    vendor: str,
+    device_model: str,
+    received_at_server: str,
+    session_id: str,
+    record: dict[str, object],
+) -> str:
+    target_file = build_session_manifest_path(
+        raw_root=raw_root,
+        user_id=user_id,
+        vendor=vendor,
+        device_model=device_model,
+        received_at_server=received_at_server,
+        session_id=session_id,
+    )
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    raw_line = json.dumps(record, separators=(",", ":"), ensure_ascii=False)
+    with target_file.open("a", encoding="utf-8") as handle:
+        handle.write(raw_line)
+        handle.write("\n")
+    return str(target_file)

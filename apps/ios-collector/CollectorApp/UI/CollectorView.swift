@@ -268,6 +268,25 @@ struct CollectorView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
+                    Text("Pending Server Sync")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Manifests queued: \(collectorCore.pendingSessionManifests.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Retry pending sync") {
+                        Task { await collectorCore.retryPendingSessionManifestSync() }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(collectorCore.pendingSessionManifests.isEmpty)
+
+                    ForEach(collectorCore.pendingSessionManifests) { item in
+                        Text("\(item.clientSessionID) • retries: \(item.retryCount)\(item.lastError == nil ? "" : " • \(item.lastError!)")")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Storage")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.red)

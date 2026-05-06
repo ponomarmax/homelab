@@ -65,10 +65,11 @@ This layer is responsible for:
 ### Stream-Specific Priority
 
 The normalizer must choose timing basis per stream type:
-- ACC and ECG: prefer `device_time_ns` as the strongest timestamp basis
-- HR: use collector event time (`received_at_collector`) as the event timestamp basis
+- `acc`, `gyro`, `mag`, `ppg`: prefer L0 recording metadata (`recording_start_utc`/`recording_end_utc`) when valid
+- `ppi`: prefer sample timestamps when valid; zero/invalid timestamps trigger fallback + confidence degradation
+- `hr`: prefer sample/event timestamps if present; otherwise reconstruct from cadence within resolved session window
 
-When both device and collector time fields are present, device time wins for timestamped signal streams.
+Collector/server timestamps are fallback only (L4).
 
 ---
 
@@ -117,9 +118,11 @@ The normalizer should follow this order of intent:
 
 1. Preserve raw timestamp fields untouched.
 2. Determine the strongest available time reference.
-   - for ACC and ECG, prefer `device_time_ns`
-   - for Polar Verity Sense offline ACC/PPG/MAG/GYRO/PPI, prefer `samples[].timeStamp`
-   - for HR event samples, use collector event time
+   - first try L0 session/file metadata
+   - then L1 sample timestamps with validated mapping
+   - then L2 cross-stream anchoring
+   - then L3 cadence reconstruction
+   - use L4 collector/server only as last resort
 3. Expand any batch payload to sample-level records.
 4. Assign `ts_utc` to each sample.
 5. Record alignment confidence and reasoning.
@@ -139,7 +142,8 @@ Use one deterministic policy registry for every offline session:
    - `clock_sync_state` must be `synced` for high confidence
    - `clock_drift_estimate` above `100 ppm` degrades confidence
 3. `L2` cross-stream anchoring:
-   - reliable stream priority: `acc -> hr -> gyro -> mag -> ppg -> ppi`
+   - default anchor pool: `acc,gyro,mag,ppg`
+   - anchor pool and thresholds are config-driven
 4. `L3` cadence reconstruction:
    - infer from sample order + stream nominal rate
 5. `L4` collector/server fallback:
@@ -151,6 +155,13 @@ Quality gates:
 - reject session duration `> 48h`
 - degrade confidence for mixed valid/invalid timestamps
 - treat `ppi` zero timestamps as recoverable (warning + degradation), not hard fail
+- L0 cross-stream consistency (config-driven):
+  - `L0_CROSS_STREAM_MAX_START_DELTA_SECONDS` (default `10`)
+  - `L0_CROSS_STREAM_MAX_END_DELTA_SECONDS` (default `10`)
+  - `L0_CROSS_STREAM_MIN_OVERLAP_RATIO` (default `0.5`)
+  - `L0_CROSS_STREAM_MIN_ANCHOR_STREAMS` (default `2`)
+  - `L0_CROSS_STREAM_ANCHOR_STREAMS` (default `acc,gyro,mag,ppg`)
+- if L0 stream fails cross-stream gate: downgrade to L2 and emit warning `l0_cross_stream_inconsistent`
 
 ---
 
