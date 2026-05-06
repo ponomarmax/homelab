@@ -81,6 +81,7 @@ struct CollectorUploadConfiguration: Equatable, Sendable {
     let streamConfigurations: [CollectorStream: StreamUploadConfiguration]
     let userIDHeaderValue: String
     let streamProfiles: [CollectorStream: StreamMetadataProfile]
+    let requestTimeoutSeconds: TimeInterval
 
     var streamProfile: StreamMetadataProfile {
         streamProfile(for: .heartRate)
@@ -122,7 +123,8 @@ struct CollectorUploadConfiguration: Equatable, Sendable {
             .magnetometer: PolarStreamProfile.magOffline,
             .gyroscope: PolarStreamProfile.gyrOffline,
             .battery: PolarStreamProfile.batteryLive
-        ]
+        ],
+        requestTimeoutSeconds: 8
     )
 
     init(
@@ -131,7 +133,8 @@ struct CollectorUploadConfiguration: Equatable, Sendable {
         retry: RetryConfiguration,
         streamConfigurations: [CollectorStream: StreamUploadConfiguration],
         userIDHeaderValue: String,
-        streamProfiles: [CollectorStream: StreamMetadataProfile]
+        streamProfiles: [CollectorStream: StreamMetadataProfile],
+        requestTimeoutSeconds: TimeInterval
     ) {
         self.uploadFlushIntervalSeconds = uploadFlushIntervalSeconds
         self.defaultSampleCountThreshold = defaultSampleCountThreshold
@@ -139,6 +142,7 @@ struct CollectorUploadConfiguration: Equatable, Sendable {
         self.streamConfigurations = streamConfigurations
         self.userIDHeaderValue = userIDHeaderValue
         self.streamProfiles = streamProfiles
+        self.requestTimeoutSeconds = requestTimeoutSeconds
     }
 
     init(
@@ -153,7 +157,8 @@ struct CollectorUploadConfiguration: Equatable, Sendable {
             retry: .init(initialDelaySeconds: 2, maxDelaySeconds: 60, backoffMultiplier: 2),
             streamConfigurations: [:],
             userIDHeaderValue: userIDHeaderValue,
-            streamProfiles: streamProfiles
+            streamProfiles: streamProfiles,
+            requestTimeoutSeconds: 8
         )
     }
 }
@@ -181,7 +186,22 @@ struct CollectorRuntimeConfiguration {
                 retry: uploadConfiguration.retry,
                 streamConfigurations: uploadConfiguration.streamConfigurations,
                 userIDHeaderValue: uploadConfiguration.userIDHeaderValue,
-                streamProfiles: uploadConfiguration.streamProfiles
+                streamProfiles: uploadConfiguration.streamProfiles,
+                requestTimeoutSeconds: uploadConfiguration.requestTimeoutSeconds
+            )
+        }
+
+        if let rawTimeout = environment["COLLECTOR_UPLOAD_REQUEST_TIMEOUT_SECONDS"],
+           let timeout = TimeInterval(rawTimeout),
+           timeout > 0 {
+            uploadConfiguration = CollectorUploadConfiguration(
+                uploadFlushIntervalSeconds: uploadConfiguration.uploadFlushIntervalSeconds,
+                defaultSampleCountThreshold: uploadConfiguration.defaultSampleCountThreshold,
+                retry: uploadConfiguration.retry,
+                streamConfigurations: uploadConfiguration.streamConfigurations,
+                userIDHeaderValue: uploadConfiguration.userIDHeaderValue,
+                streamProfiles: uploadConfiguration.streamProfiles,
+                requestTimeoutSeconds: timeout
             )
         }
 

@@ -6,6 +6,7 @@ struct CollectorView: View {
     @State private var pendingDeleteEntry: OfflineRecordingEntry?
     @State private var showDeleteAllConfirmation: Bool = false
     @State private var settingsStream: PolarOfflineStream?
+    @State private var expandedSessionIDs: Set<UUID> = []
 
     init(collectorCore: CollectorCore) {
         _collectorCore = StateObject(wrappedValue: collectorCore)
@@ -106,6 +107,8 @@ struct CollectorView: View {
                 onlineTab
             case .offline:
                 offlineTab
+            case .sessions:
+                sessionsTab
             case .device:
                 deviceTab
             }
@@ -265,6 +268,24 @@ struct CollectorView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+
+                    Divider().padding(.vertical, 4)
+                    Text("All visible recordings: \(collectorCore.offlineRecordings.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Button("Organize visible as one") {
+                            collectorCore.assignVisibleRecordingsAsSingleSession()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(collectorCore.offlineRecordings.isEmpty)
+
+                        Button("Organize visible by clusters") {
+                            collectorCore.assignVisibleRecordingsByClusters()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(collectorCore.offlineRecordings.isEmpty)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -273,11 +294,14 @@ struct CollectorView: View {
                     Text("Manifests queued: \(collectorCore.pendingSessionManifests.count)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button("Retry pending sync") {
+                    Text(collectorCore.manifestSyncStatusMessage)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Button(collectorCore.isManifestSyncRunning ? "Retrying..." : "Retry pending sync") {
                         Task { await collectorCore.retryPendingSessionManifestSync() }
                     }
                     .buttonStyle(.bordered)
-                    .disabled(collectorCore.pendingSessionManifests.isEmpty)
+                    .disabled(collectorCore.pendingSessionManifests.isEmpty || collectorCore.isManifestSyncRunning)
 
                     ForEach(collectorCore.pendingSessionManifests) { item in
                         Text("\(item.clientSessionID) • retries: \(item.retryCount)\(item.lastError == nil ? "" : " • \(item.lastError!)")")
@@ -506,6 +530,113 @@ struct CollectorView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var sessionsTab: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Session Management")
+                    .font(.headline)
+                Text("Sessions: \(collectorCore.managedSessions.count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if collectorCore.managedSessions.isEmpty {
+                    Text("No managed sessions yet.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(collectorCore.managedSessions) { session in
+                        let pending = collectorCore.pendingManifest(for: session.id)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text(session.clientSessionID)
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+                                Text(session.lifecycle.rawValue)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text("\(session.deviceType) • \(session.collectionMode.rawValue)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text("files: \(session.linkedFiles.count)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+
+                            if let pending {
+                                Text("manifest pending • retries: \(pending.retryCount)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                                if let error = pending.lastError, !error.isEmpty {
+                                    Text(error)
+                                        .font(.caption2)
+                                        .foregroundStyle(.red)
+                                }
+                            }
+
+                            HStack(spacing: 8) {
+                                Button(expandedSessionIDs.contains(session.id) ? "Hide files" : "Show files") {
+                                    if expandedSessionIDs.contains(session.id) {
+                                        expandedSessionIDs.remove(session.id)
+                                    } else {
+                                        expandedSessionIDs.insert(session.id)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+
+                                Button("Retry manifest") {
+                                    Task { await collectorCore.retryPendingManifest(for: session.id) }
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(pending == nil || collectorCore.isManifestSyncRunning)
+
+                                Button("Upload session") {
+                                    Task { await collectorCore.uploadManagedSession(session.id) }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(session.linkedFiles.isEmpty || collectorCore.offlineIsOperationRunning || collectorCore.isUploadingChunk)
+
+                                Button("Drop pending") {
+                                    guard let pending else { return }
+                                    collectorCore.removePendingManifest(id: pending.id)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(pending == nil)
+
+                                Button("Delete session", role: .destructive) {
+                                    collectorCore.deleteManagedSession(id: session.id)
+                                    expandedSessionIDs.remove(session.id)
+                                }
+                                .buttonStyle(.bordered)
+                            }
+
+                            if expandedSessionIDs.contains(session.id) {
+                                if session.linkedFiles.isEmpty {
+                                    Text("No linked files")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    ForEach(Array(session.linkedFiles.enumerated()), id: \.offset) { _, file in
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(file.stream)
+                                                .font(.caption2.weight(.semibold))
+                                            Text(file.path)
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .padding(10)
+                        .background(.background)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+            }
+            .padding(.bottom, 12)
         }
     }
 
@@ -748,6 +879,7 @@ private let dateFormatter: DateFormatter = {
 private enum PolarScreenTab: String, CaseIterable, Identifiable {
     case online = "Online"
     case offline = "Offline"
+    case sessions = "Sessions"
     case device = "Device"
 
     var id: String { rawValue }

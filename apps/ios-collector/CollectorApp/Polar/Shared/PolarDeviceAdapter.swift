@@ -125,7 +125,7 @@ final class PolarDeviceAdapter: CollectorDeviceAdapter {
         throw PolarAdapterError.unsupportedEnvironment
     }
 
-    func prepareOfflineUploadBatches() async -> OfflineUploadPreparationResult {
+    func prepareOfflineUploadBatches(allowedPaths: Set<String>? = nil) async -> OfflineUploadPreparationResult {
         OfflineUploadPreparationResult(batches: [], messagesByStream: [:])
     }
 
@@ -873,7 +873,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         }
     }
 
-    func prepareOfflineUploadBatches() async -> OfflineUploadPreparationResult {
+    func prepareOfflineUploadBatches(allowedPaths: Set<String>? = nil) async -> OfflineUploadPreparationResult {
         guard let selectedPolarIdentifier else {
             return OfflineUploadPreparationResult(
                 batches: [],
@@ -901,12 +901,30 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             )
         }
 
-        let selectedEntries = Self.selectSessionEntries(entries)
+        let selectedEntries: [PolarOfflineRecordingEntry]
+        if let allowedPaths {
+            // Session-targeted upload: use robust path matching (exact + suffix + basename).
+            let normalizedAllowed = Set(allowedPaths.map(Self.normalizePath))
+            let allowedBasenames = Set(allowedPaths.map { URL(fileURLWithPath: $0).lastPathComponent.lowercased() })
+            selectedEntries = entries.filter { entry in
+                let entryPath = Self.normalizePath(entry.path)
+                if normalizedAllowed.contains(entryPath) { return true }
+                if normalizedAllowed.contains(where: { entryPath.hasSuffix($0) || $0.hasSuffix(entryPath) }) { return true }
+                let base = URL(fileURLWithPath: entry.path).lastPathComponent.lowercased()
+                return allowedBasenames.contains(base)
+            }
+        } else {
+            // Generic upload path: keep nearest-in-time grouping heuristic.
+            selectedEntries = Self.selectSessionEntries(entries)
+        }
         var batches: [OfflineUploadBatch] = []
         var messagesByStream: [PolarOfflineStream: String] = [:]
         let fetchStartedAt = Date()
 
         for entry in entries {
+            if let allowedPaths, !allowedPaths.contains(entry.path) {
+                continue
+            }
             guard let offlineStream = Self.offlineStream(from: entry.type) else { continue }
             if !selectedEntries.contains(where: { $0.path == entry.path }) {
                 messagesByStream[offlineStream] = "skipped: out-of-session recording group"
@@ -990,6 +1008,10 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             return close
         }
         return selected
+    }
+
+    private static func normalizePath(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private static func unifyBatchSessionWindow(_ batches: [OfflineUploadBatch]) -> [OfflineUploadBatch] {

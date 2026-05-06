@@ -25,7 +25,7 @@ protocol CollectorDeviceAdapter: DeviceStatusProvider {
     func stopOfflineRecordings(streams: [PolarOfflineStream]) async -> [OfflineStreamOperationResult]
     func listOfflineRecordings() async throws -> [OfflineRecordingEntry]
     func removeOfflineRecording(path: String) async throws
-    func prepareOfflineUploadBatches() async -> OfflineUploadPreparationResult
+    func prepareOfflineUploadBatches(allowedPaths: Set<String>?) async -> OfflineUploadPreparationResult
     func heartRateStreamProvider() -> HeartRateStreamProviding?
     func readDeviceTime(mode: CollectionMode) async -> DeviceTimeActionResult
     func syncDeviceTimeToPhone(mode: CollectionMode) async -> DeviceTimeActionResult
@@ -83,7 +83,7 @@ extension CollectorDeviceAdapter {
 
     func removeOfflineRecording(path: String) async throws {}
 
-    func prepareOfflineUploadBatches() async -> OfflineUploadPreparationResult {
+    func prepareOfflineUploadBatches(allowedPaths: Set<String>? = nil) async -> OfflineUploadPreparationResult {
         OfflineUploadPreparationResult(batches: [], messagesByStream: [:])
     }
 

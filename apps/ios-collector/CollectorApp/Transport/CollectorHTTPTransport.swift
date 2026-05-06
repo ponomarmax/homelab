@@ -114,14 +114,13 @@ struct CollectorHTTPTransport: CollectorTransporting {
             throw CollectorUploadError.rejected(message: "Mock manifest upload failed")
         }
 
-        var components = URLComponents(url: uploadEndpoint, resolvingAgainstBaseURL: false)
-        components?.path = "/session-manifest"
-        guard let endpoint = components?.url else {
+        guard let endpoint = deriveManifestEndpoint(from: uploadEndpoint) else {
             throw CollectorUploadError.invalidResponse
         }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
+        request.timeoutInterval = uploadConfiguration.requestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(uploadConfiguration.userIDHeaderValue, forHTTPHeaderField: "X-User-ID")
@@ -136,9 +135,13 @@ struct CollectorHTTPTransport: CollectorTransporting {
             return ack
         }
         if let errorResponse = try? decoder.decode(UploadErrorResponse.self, from: data) {
-            throw CollectorUploadError.rejected(message: "[\(errorResponse.errorCode)] \(errorResponse.message)")
+            throw CollectorUploadError.rejected(
+                message: "[\(errorResponse.errorCode)] \(errorResponse.message) endpoint=\(endpoint.absoluteString)"
+            )
         }
-        throw CollectorUploadError.rejected(message: "Manifest upload failed with status \(httpResponse.statusCode)")
+        throw CollectorUploadError.rejected(
+            message: "Manifest upload failed with status \(httpResponse.statusCode) endpoint=\(endpoint.absoluteString)"
+        )
     }
 
     private func uploadToServer(
@@ -148,6 +151,7 @@ struct CollectorHTTPTransport: CollectorTransporting {
     ) async throws -> UploadAck {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
+        request.timeoutInterval = uploadConfiguration.requestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(uploadConfiguration.userIDHeaderValue, forHTTPHeaderField: "X-User-ID")
@@ -181,6 +185,27 @@ struct CollectorHTTPTransport: CollectorTransporting {
         throw CollectorUploadError.rejected(
             message: "Upload failed with status \(httpResponse.statusCode)"
         )
+    }
+
+    private func deriveManifestEndpoint(from uploadEndpoint: URL) -> URL? {
+        guard var components = URLComponents(url: uploadEndpoint, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        let path = components.path
+        if path.isEmpty || path == "/" {
+            components.path = "/session-manifest"
+            return components.url
+        }
+
+        var segments = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        if segments.isEmpty {
+            components.path = "/session-manifest"
+            return components.url
+        }
+        segments.removeLast()
+        segments.append("session-manifest")
+        components.path = "/" + segments.joined(separator: "/")
+        return components.url
     }
 }
 

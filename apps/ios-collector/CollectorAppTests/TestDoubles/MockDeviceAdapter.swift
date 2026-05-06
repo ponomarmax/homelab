@@ -171,8 +171,15 @@ final class MockDeviceAdapter: CollectorDeviceAdapter {
         }
     }
 
-    func prepareOfflineUploadBatches() async -> OfflineUploadPreparationResult {
-        nextOfflinePreparationResult
+    func prepareOfflineUploadBatches(allowedPaths: Set<String>? = nil) async -> OfflineUploadPreparationResult {
+        guard let allowedPaths else {
+            return nextOfflinePreparationResult
+        }
+        let filteredBatches = nextOfflinePreparationResult.batches.filter { allowedPaths.contains($0.sourcePath) }
+        return OfflineUploadPreparationResult(
+            batches: filteredBatches,
+            messagesByStream: nextOfflinePreparationResult.messagesByStream
+        )
     }
 
     func heartRateStreamProvider() -> HeartRateStreamProviding? {

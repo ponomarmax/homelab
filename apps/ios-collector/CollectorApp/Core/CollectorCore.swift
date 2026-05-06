@@ -239,6 +239,8 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var operationalTimeEvents: [DeviceTimeOperationalEvent] = []
     @Published private(set) var managedSessions: [ManagedSessionRecord] = []
     @Published private(set) var pendingSessionManifests: [PendingSessionManifest] = []
+    @Published private(set) var isManifestSyncRunning: Bool = false
+    @Published private(set) var manifestSyncStatusMessage: String = "Idle"
 
     let defaultCollectionMode: CollectionMode = .live
 
@@ -251,6 +253,8 @@ final class CollectorCore: ObservableObject {
     private let sessionLedgerStore = SessionLedgerStore()
     private let isVerboseLoggingEnabled: Bool
     private let unassignedClusterGapSeconds: TimeInterval
+    private let isManifestAutoRetryEnabled: Bool
+    private let manifestRetryBatchSize: Int
 
     private var pendingUploadChunks: [UploadChunk] = []
     private var bufferedSamplesByStream: [CollectorStream: [HeartRateSample]] = [:]
@@ -284,6 +288,8 @@ final class CollectorCore: ObservableObject {
         self.isVerboseLoggingEnabled = environment["COLLECTOR_VERBOSE_LOGS"] == "1"
             || environment["COLLECTOR_LOG_LEVEL"]?.lowercased() == "debug"
         self.unassignedClusterGapSeconds = TimeInterval(environment["COLLECTOR_UNASSIGNED_CLUSTER_GAP_SECONDS"] ?? "") ?? 180
+        self.isManifestAutoRetryEnabled = environment["COLLECTOR_MANIFEST_AUTO_RETRY"] == "1"
+        self.manifestRetryBatchSize = max(1, Int(environment["COLLECTOR_MANIFEST_RETRY_BATCH_SIZE"] ?? "") ?? 3)
         self.managedSessions = sessionLedgerStore.loadSessions()
         self.pendingSessionManifests = sessionLedgerStore.loadPendingManifests()
         refreshUnassignedRecordingGroups()
@@ -354,6 +360,7 @@ final class CollectorCore: ObservableObject {
         log("App became active", category: "lifecycle")
         reconcileOpenSessionsAfterLifecycleEvent()
         refreshUnassignedRecordingGroups()
+        guard isManifestAutoRetryEnabled else { return }
         Task { @MainActor [weak self] in
             await self?.retryPendingSessionManifestSync()
         }
@@ -949,6 +956,73 @@ final class CollectorCore: ObservableObject {
         refreshUnassignedRecordingGroups()
     }
 
+    func assignVisibleRecordingsAsSingleSession() {
+        let candidates = unassignedRecordings(from: offlineRecordings)
+        guard !candidates.isEmpty else {
+            offlineLastErrorMessage = "All visible recordings are already assigned to sessions"
+            return
+        }
+        createExternalManagedSession(from: candidates, note: "manual_merge_visible_recordings")
+        refreshUnassignedRecordingGroups()
+    }
+
+    func assignVisibleRecordingsByClusters() {
+        let candidates = unassignedRecordings(from: offlineRecordings)
+        let clusters = clusterUnassignedRecordings(candidates)
+        guard !clusters.isEmpty else { return }
+        for group in clusters where !group.entries.isEmpty {
+            createExternalManagedSession(from: group.entries, note: "manual_split_visible_recordings_by_cluster")
+        }
+        refreshUnassignedRecordingGroups()
+    }
+
+    func pendingManifest(for sessionID: UUID) -> PendingSessionManifest? {
+        pendingSessionManifests.first(where: { $0.sessionID == sessionID })
+    }
+
+    func removePendingManifest(id: String) {
+        pendingSessionManifests.removeAll { $0.id == id }
+        persistLedger()
+    }
+
+    func deleteManagedSession(id: UUID) {
+        managedSessions.removeAll { $0.id == id }
+        pendingSessionManifests.removeAll { $0.sessionID == id }
+        persistLedger()
+        refreshUnassignedRecordingGroups()
+    }
+
+    func retryPendingManifest(for sessionID: UUID) async {
+        guard !isManifestSyncRunning else { return }
+        guard transport.isNetworkUploadConfigured else {
+            manifestSyncStatusMessage = "Network upload is not configured"
+            return
+        }
+        guard let session = managedSessions.first(where: { $0.id == sessionID }) else { return }
+        guard let pending = pendingSessionManifests.first(where: { $0.sessionID == sessionID }) else { return }
+
+        isManifestSyncRunning = true
+        manifestSyncStatusMessage = "Syncing manifest for \(session.clientSessionID)..."
+        defer {
+            isManifestSyncRunning = false
+            persistLedger()
+        }
+
+        do {
+            let payload = buildSessionManifestPayload(from: session)
+            _ = try await transport.uploadSessionManifest(payload)
+            pendingSessionManifests.removeAll { $0.id == pending.id }
+            manifestSyncStatusMessage = "Manifest synced for \(session.clientSessionID)"
+        } catch {
+            if let index = pendingSessionManifests.firstIndex(where: { $0.id == pending.id }) {
+                pendingSessionManifests[index].retryCount += 1
+                pendingSessionManifests[index].lastError = error.localizedDescription
+                pendingSessionManifests[index].updatedAtUTC = nowProvider()
+            }
+            manifestSyncStatusMessage = "Manifest sync failed for \(session.clientSessionID)"
+        }
+    }
+
     func uploadOfflineRecordings() async {
         guard beginOfflineOperation(.uploading, lifecycle: .uploading, statusMessage: "Uploading offline recordings...") else { return }
         defer { completeOfflineOperation() }
@@ -963,7 +1037,7 @@ final class CollectorCore: ObservableObject {
         for stream in selectedOfflineStreams {
             offlineStreamRunStates[stream] = .fetching
         }
-        let preparation = await adapter.prepareOfflineUploadBatches()
+        let preparation = await adapter.prepareOfflineUploadBatches(allowedPaths: nil)
         offlineStreamRunMessages.merge(
             preparation.messagesByStream,
             uniquingKeysWith: { _, new in new }
@@ -1037,6 +1111,79 @@ final class CollectorCore: ObservableObject {
         } else {
             offlineLifecycleState = .partialSuccess
             offlineStatusMessage = "Offline upload completed with mixed result"
+        }
+    }
+
+    func uploadManagedSession(_ id: UUID) async {
+        guard let session = managedSessions.first(where: { $0.id == id }) else { return }
+        let allowedPaths = Set(session.linkedFiles.map(\.path))
+        guard !allowedPaths.isEmpty else {
+            offlineLastErrorMessage = "Session has no linked files to upload"
+            return
+        }
+        log("Session upload requested: \(session.clientSessionID) files=\(allowedPaths.count)", category: "session")
+
+        guard beginOfflineOperation(.uploading, lifecycle: .uploading, statusMessage: "Uploading session...") else { return }
+        defer { completeOfflineOperation() }
+
+        let preparation = await adapter.prepareOfflineUploadBatches(allowedPaths: allowedPaths)
+        let streamsPrepared = preparation.batches.map(\.stream.transportType).joined(separator: ",")
+        log(
+            "Session upload preparation result: batches=\(preparation.batches.count) streams=[\(streamsPrepared)] messages=\(preparation.messagesByStream)",
+            category: "session"
+        )
+        guard !preparation.batches.isEmpty else {
+            offlineLifecycleState = .failed
+            offlineStatusMessage = "No batches prepared for selected session"
+            offlineLastErrorMessage = offlineStatusMessage
+            return
+        }
+
+        activeSession = CollectionSession(
+            sessionID: session.id,
+            device: adapter.deviceIdentity,
+            collectionMode: session.collectionMode,
+            startedAtUTC: session.startedAtUTC,
+            stoppedAtUTC: session.stoppedAtUTC,
+            supportedStreams: adapter.availableStreams
+        )
+
+        for batch in preparation.batches {
+            if streamDescriptorsByType[batch.stream] == nil {
+                streamDescriptorsByType[batch.stream] = transport.makeStreamDescriptor(
+                    for: batch.stream,
+                    source: adapter.sourceIdentifier
+                )
+            }
+            if nextChunkSequenceNumberByStream[batch.stream] == nil {
+                nextChunkSequenceNumberByStream[batch.stream] = 1
+            }
+            if lastFlushAtUTCByStream[batch.stream] == nil {
+                lastFlushAtUTCByStream[batch.stream] = nowProvider()
+            }
+            var samples = bufferedSamplesByStream[batch.stream] ?? []
+            samples.append(contentsOf: batch.samples)
+            bufferedSamplesByStream[batch.stream] = samples
+            if let context = batch.timeContext {
+                pendingTimeContextByStream[batch.stream] = context
+            }
+        }
+        bufferedSamplesCount = bufferedSampleTotalCount()
+        await flushAndUploadAllBufferedSamples(trigger: .manual)
+        if uploadStatus == .success {
+            updateManagedSessionLifecycle(
+                id: session.id,
+                lifecycle: .uploaded,
+                stoppedAtUTC: session.stoppedAtUTC,
+                notes: "session_upload_success"
+            )
+        } else if uploadStatus == .failure {
+            updateManagedSessionLifecycle(
+                id: session.id,
+                lifecycle: .partiallyUploaded,
+                stoppedAtUTC: session.stoppedAtUTC,
+                notes: "session_upload_failed"
+            )
         }
     }
 
@@ -2021,6 +2168,11 @@ final class CollectorCore: ObservableObject {
         unassignedRecordingGroups = clusterUnassignedRecordings(unassignedOfflineRecordings)
     }
 
+    private func unassignedRecordings(from entries: [OfflineRecordingEntry]) -> [OfflineRecordingEntry] {
+        let assignedPaths = Set(managedSessions.flatMap { $0.linkedFiles.map(\.path) })
+        return entries.filter { !assignedPaths.contains($0.path) }
+    }
+
     private func clusterUnassignedRecordings(_ entries: [OfflineRecordingEntry]) -> [UnassignedRecordingGroup] {
         guard !entries.isEmpty else { return [] }
         let sorted = entries.sorted { ($0.startedAt ?? .distantPast) < ($1.startedAt ?? .distantPast) }
@@ -2060,11 +2212,12 @@ final class CollectorCore: ObservableObject {
     }
 
     private func createExternalManagedSession(from entries: [OfflineRecordingEntry], note: String) {
-        guard !entries.isEmpty else { return }
-        let start = entries.compactMap(\.startedAt).min() ?? nowProvider()
-        let stop = entries.compactMap(\.startedAt).max() ?? start
+        let candidates = unassignedRecordings(from: entries)
+        guard !candidates.isEmpty else { return }
+        let start = candidates.compactMap(\.startedAt).min() ?? nowProvider()
+        let stop = candidates.compactMap(\.startedAt).max() ?? start
         let sessionUUID = UUID()
-        let linkedFiles = entries.map {
+        let linkedFiles = candidates.map {
             ManagedSessionFile(
                 path: $0.path,
                 stream: $0.stream?.rawValue ?? "unknown",
@@ -2105,6 +2258,7 @@ final class CollectorCore: ObservableObject {
             )
         )
         persistLedger()
+        guard isManifestAutoRetryEnabled else { return }
         Task { @MainActor [weak self] in
             await self?.retryPendingSessionManifestSync()
         }
@@ -2112,21 +2266,40 @@ final class CollectorCore: ObservableObject {
 
     func retryPendingSessionManifestSync() async {
         guard transport.isNetworkUploadConfigured else { return }
-        for item in pendingSessionManifests {
+        guard !isManifestSyncRunning else { return }
+        guard !pendingSessionManifests.isEmpty else {
+            manifestSyncStatusMessage = "No pending manifests"
+            return
+        }
+
+        isManifestSyncRunning = true
+        defer {
+            isManifestSyncRunning = false
+            persistLedger()
+        }
+
+        let batch = Array(pendingSessionManifests.prefix(manifestRetryBatchSize))
+        manifestSyncStatusMessage = "Syncing \(batch.count) manifest(s)..."
+        var successCount = 0
+        var failureCount = 0
+
+        for item in batch {
             guard let session = managedSessions.first(where: { $0.id == item.sessionID }) else { continue }
             do {
                 let payload = buildSessionManifestPayload(from: session)
                 _ = try await transport.uploadSessionManifest(payload)
                 pendingSessionManifests.removeAll { $0.id == item.id }
+                successCount += 1
             } catch {
                 if let index = pendingSessionManifests.firstIndex(where: { $0.id == item.id }) {
                     pendingSessionManifests[index].retryCount += 1
                     pendingSessionManifests[index].lastError = error.localizedDescription
                     pendingSessionManifests[index].updatedAtUTC = nowProvider()
                 }
+                failureCount += 1
             }
         }
-        persistLedger()
+        manifestSyncStatusMessage = "Manifest sync done: ok \(successCount), failed \(failureCount), left \(pendingSessionManifests.count)"
     }
 
     private func buildSessionManifestPayload(from record: ManagedSessionRecord) -> SessionManifestPayload {

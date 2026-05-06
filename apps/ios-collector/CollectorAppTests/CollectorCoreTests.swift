@@ -3,6 +3,26 @@ import XCTest
 
 @MainActor
 final class CollectorCoreTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        clearSessionLedger()
+    }
+
+    override func tearDown() {
+        clearSessionLedger()
+        super.tearDown()
+    }
+
+    private func clearSessionLedger() {
+        let fm = FileManager.default
+        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        let ledgerURL = appSupport
+            .appendingPathComponent("CollectorApp", isDirectory: true)
+            .appendingPathComponent("session-ledger.json")
+        try? fm.removeItem(at: ledgerURL)
+    }
+
     final class RecordingTransport: CollectorTransporting {
         private let chunkBuilder = HeartRateChunkBuilder()
         private var remainingFailures: Int
@@ -518,7 +538,8 @@ final class CollectorCoreTests: XCTestCase {
             retry: retryConfiguration,
             streamConfigurations: [:],
             userIDHeaderValue: "2",
-            streamProfiles: CollectorUploadConfiguration.default.streamProfiles
+            streamProfiles: CollectorUploadConfiguration.default.streamProfiles,
+            requestTimeoutSeconds: 8
         )
         let core = CollectorCore(
             adapter: MockDeviceAdapter(
@@ -1520,5 +1541,97 @@ final class CollectorCoreTests: XCTestCase {
         let accRequest = adapter.lastStartedOfflineRequests.first(where: { $0.stream == .acc })
         XCTAssertEqual(accRequest?.selectedSettings?.sampleRate, 25)
         XCTAssertEqual(accRequest?.selectedSettings?.range, 4000)
+    }
+
+    // MARK: Session Management Use Cases
+
+    func testSessionUseCaseA_inAppStartedAndStopped_createsManagedSession() async {
+        let transport = RecordingTransport()
+        let core = CollectorCore(
+            adapter: MockDeviceAdapter(
+                hrProvider: ImmediateHeartRateProvider(
+                    samples: [makeSample(hr: 71, receivedAt: Date(), sequence: 0)]
+                )
+            ),
+            transport: transport
+        )
+
+        core.selectDevice()
+        await core.startCollection()
+        let started = await waitUntil { core.managedSessions.count == 1 }
+        XCTAssertTrue(started)
+
+        core.stopCollection()
+        let stopped = await waitUntil {
+            core.managedSessions.first?.lifecycle == .stopped || core.managedSessions.first?.lifecycle == .uploaded
+        }
+        XCTAssertTrue(stopped)
+        XCTAssertEqual(core.managedSessions.first?.origin, .ourApp)
+    }
+
+    func testSessionUseCaseB_startedElsewhereCompletedHere_organizeAndUpload() async {
+        let transport = RecordingTransport()
+        let adapter = MockDeviceAdapter()
+        let now = Date(timeIntervalSince1970: 2_000)
+        adapter.nextOfflineRecordings = [
+            OfflineRecordingEntry(id: "r-hr", path: "/tmp/R-hr", stream: .hr, sizeBytes: 10, startedAt: now, status: "available"),
+            OfflineRecordingEntry(id: "r-acc", path: "/tmp/R-acc", stream: .acc, sizeBytes: 20, startedAt: now.addingTimeInterval(1), status: "available")
+        ]
+        adapter.nextOfflinePreparationResult = OfflineUploadPreparationResult(
+            batches: [
+                OfflineUploadBatch(stream: .heartRate, sourcePath: "/tmp/R-hr", samples: [makeSample(hr: 72, receivedAt: now, sequence: 0)], timeContext: nil)
+            ],
+            messagesByStream: [.hr: "uploaded-ready: 1", .acc: "uploaded-ready: 1"]
+        )
+        let core = CollectorCore(adapter: adapter, transport: transport)
+
+        core.selectDevice()
+        await core.connectSelectedDevice()
+        await core.refreshOfflineData()
+        core.assignUnassignedAsSingleSession()
+        let session = try? XCTUnwrap(core.managedSessions.first)
+        XCTAssertNotNil(session)
+
+        if let session {
+            await core.uploadManagedSession(session.id)
+        }
+        XCTAssertGreaterThanOrEqual(transport.uploadedChunks.count, 1)
+    }
+
+    func testSessionUseCaseC_startedStoppedElsewhere_organizeOnly_noDuplicateAssignment() async {
+        let adapter = MockDeviceAdapter()
+        let t0 = Date(timeIntervalSince1970: 3_000)
+        adapter.nextOfflineRecordings = [
+            OfflineRecordingEntry(id: "r1", path: "/tmp/A-hr", stream: .hr, sizeBytes: 10, startedAt: t0, status: "available"),
+            OfflineRecordingEntry(id: "r2", path: "/tmp/A-acc", stream: .acc, sizeBytes: 10, startedAt: t0.addingTimeInterval(1), status: "available")
+        ]
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.connectSelectedDevice()
+        await core.refreshOfflineData()
+        core.assignVisibleRecordingsAsSingleSession()
+        XCTAssertEqual(core.managedSessions.count, 1)
+        XCTAssertEqual(core.managedSessions.first?.linkedFiles.count, 2)
+
+        core.assignVisibleRecordingsAsSingleSession()
+        XCTAssertEqual(core.managedSessions.count, 1)
+    }
+
+    func testSessionUseCaseD_startedHereStoppedElsewhere_recoversAsStoppedExternal() async {
+        let adapter = MockDeviceAdapter(
+            hrProvider: ImmediateHeartRateProvider(samples: [makeSample(hr: 80, receivedAt: Date(), sequence: 0)])
+        )
+        adapter.offlineStatusByStream = Dictionary(uniqueKeysWithValues: PolarOfflineStream.allCases.map { ($0, .ready) })
+        let core = CollectorCore(adapter: adapter, transport: RecordingTransport())
+
+        core.selectDevice()
+        await core.startCollection()
+        let hasOpen = await waitUntil { core.managedSessions.first?.lifecycle == .started }
+        XCTAssertTrue(hasOpen)
+
+        core.appDidBecomeActive()
+        let recovered = await waitUntil { core.managedSessions.first?.lifecycle == .stoppedExternal }
+        XCTAssertTrue(recovered)
     }
 }
