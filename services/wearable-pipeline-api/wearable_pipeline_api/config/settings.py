@@ -20,6 +20,8 @@ ENV_L0_CROSS_STREAM_MAX_END_DELTA_SECONDS = "L0_CROSS_STREAM_MAX_END_DELTA_SECON
 ENV_L0_CROSS_STREAM_MIN_OVERLAP_RATIO = "L0_CROSS_STREAM_MIN_OVERLAP_RATIO"
 ENV_L0_CROSS_STREAM_MIN_ANCHOR_STREAMS = "L0_CROSS_STREAM_MIN_ANCHOR_STREAMS"
 ENV_L0_CROSS_STREAM_ANCHOR_STREAMS = "L0_CROSS_STREAM_ANCHOR_STREAMS"
+ENV_ENABLE_PPI_STARTUP_DELAY = "ENABLE_PPI_STARTUP_DELAY"
+ENV_PPI_STARTUP_DELAY_SECONDS = "PPI_STARTUP_DELAY_SECONDS"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8091
@@ -32,6 +34,8 @@ DEFAULT_L0_CROSS_STREAM_MAX_END_DELTA_SECONDS = 10.0
 DEFAULT_L0_CROSS_STREAM_MIN_OVERLAP_RATIO = 0.5
 DEFAULT_L0_CROSS_STREAM_MIN_ANCHOR_STREAMS = 2
 DEFAULT_L0_CROSS_STREAM_ANCHOR_STREAMS = ("acc", "gyro", "mag", "ppg")
+DEFAULT_ENABLE_PPI_STARTUP_DELAY = False
+DEFAULT_PPI_STARTUP_DELAY_SECONDS = 25.0
 
 
 @dataclass(frozen=True)
@@ -47,6 +51,8 @@ class Settings:
     l0_cross_stream_min_overlap_ratio: float = DEFAULT_L0_CROSS_STREAM_MIN_OVERLAP_RATIO
     l0_cross_stream_min_anchor_streams: int = DEFAULT_L0_CROSS_STREAM_MIN_ANCHOR_STREAMS
     l0_cross_stream_anchor_streams: tuple[str, ...] = DEFAULT_L0_CROSS_STREAM_ANCHOR_STREAMS
+    enable_ppi_startup_delay: bool = DEFAULT_ENABLE_PPI_STARTUP_DELAY
+    ppi_startup_delay_seconds: float = DEFAULT_PPI_STARTUP_DELAY_SECONDS
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -77,4 +83,6 @@ class Settings:
                 ).split(",")
                 if item.strip()
             ),
+            enable_ppi_startup_delay=os.environ.get(ENV_ENABLE_PPI_STARTUP_DELAY, str(DEFAULT_ENABLE_PPI_STARTUP_DELAY)).strip().lower() in {"1", "true", "yes", "on"},
+            ppi_startup_delay_seconds=float(os.environ.get(ENV_PPI_STARTUP_DELAY_SECONDS, str(DEFAULT_PPI_STARTUP_DELAY_SECONDS))),
         )

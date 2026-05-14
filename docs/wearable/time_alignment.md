@@ -66,7 +66,8 @@ This layer is responsible for:
 
 The normalizer must choose timing basis per stream type:
 - `acc`, `gyro`, `mag`, `ppg`: prefer L0 recording metadata (`recording_start_utc`/`recording_end_utc`) when valid
-- `ppi`: prefer sample timestamps when valid; zero/invalid timestamps trigger fallback + confidence degradation
+- `ppi`: prefer sample timestamps when valid; zero/invalid timestamps trigger fallback + confidence degradation.
+  For Verity Sense offline PPI, canonical timeline fallback is interval-based (`ppInMs` cumulative), not nominal fixed-rate cadence.
 - `hr`: prefer sample/event timestamps if present; otherwise reconstruct from cadence within resolved session window
 
 Collector/server timestamps are fallback only (L4).
@@ -155,6 +156,12 @@ Quality gates:
 - reject session duration `> 48h`
 - degrade confidence for mixed valid/invalid timestamps
 - treat `ppi` zero timestamps as recoverable (warning + degradation), not hard fail
+- for `ppi` quality annotation:
+  - `ppErrorEstimate < 10ms` => high quality likelihood
+  - `10ms <= ppErrorEstimate <= 30ms` => moderate quality
+  - `ppErrorEstimate > 30ms` => low quality marker
+  - `blockerBit=1` => low quality marker
+  - `skinContactSupported=1` and `skinContactStatus=0` => contact warning marker (device dependent; do not hard-fail timeline)
 - L0 cross-stream consistency (config-driven):
   - `L0_CROSS_STREAM_MAX_START_DELTA_SECONDS` (default `10`)
   - `L0_CROSS_STREAM_MAX_END_DELTA_SECONDS` (default `10`)
@@ -212,6 +219,18 @@ Suggested content:
 - warnings
 
 This artifact helps verify alignment decisions without re-reading raw payloads manually.
+
+### PPI Startup Delay (Configurable)
+
+For Verity Sense offline PPI sessions where timestamps are mostly zero/invalid or mapped with low confidence, the normalizer may apply startup delay before interval-based reconstruction.
+
+- Per-session toggle: `time.apply_ppi_startup_delay` (`true`/`false`)
+- Per-session override: `time.ppi_startup_delay_seconds`
+- Environment defaults:
+  - `ENABLE_PPI_STARTUP_DELAY` (default `false`)
+  - `PPI_STARTUP_DELAY_SECONDS` (default `25`)
+
+The startup delay is intended for known Verity Sense PPI batching behavior and should be applied only for relevant sessions/modes.
 
 ---
 

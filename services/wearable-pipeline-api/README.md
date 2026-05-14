@@ -26,12 +26,15 @@ Pipeline flow:
 - `L0_CROSS_STREAM_MIN_OVERLAP_RATIO` (default: `0.5`)
 - `L0_CROSS_STREAM_MIN_ANCHOR_STREAMS` (default: `2`)
 - `L0_CROSS_STREAM_ANCHOR_STREAMS` (default: `acc,gyro,mag,ppg`)
+- `ENABLE_PPI_STARTUP_DELAY` (default: `false`)
+- `PPI_STARTUP_DELAY_SECONDS` (default: `25`)
 
 ## Time Alignment Notes
 
 - Normalization emits `time_alignment_report.json` per processed session.
 - L0-based alignment is cross-validated against anchor streams.
 - If a stream's L0 window is inconsistent with anchor windows, alignment is downgraded to L2 (`cross_stream_anchoring`) with warning `l0_cross_stream_inconsistent`.
+- Verity Sense offline PPI fallback uses interval-based reconstruction from `ppInMs` and can optionally apply configurable startup delay for session-specific batching behavior.
 
 ## Local run
 

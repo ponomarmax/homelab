@@ -5,6 +5,9 @@ from typing import Any
 
 from .alignment import as_float
 
+PPI_ERROR_STRICT_MS = 10
+PPI_ERROR_LOW_CONFIDENCE_MS = 30
+
 
 def ppi_step_seconds(sample: dict[str, Any], default_rate_hz: float) -> float:
     pp_ms = sample.get("ppInMs")
@@ -28,13 +31,44 @@ def build_hr_fields(sample: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_ppi_fields(sample: dict[str, Any]) -> dict[str, Any]:
+    pp_error_estimate = sample.get("ppErrorEstimate")
+    blocker_bit = sample.get("blockerBit")
+    skin_contact_status = sample.get("skinContactStatus")
+    skin_contact_supported = sample.get("skinContactSupported")
+
+    if isinstance(pp_error_estimate, (int, float)):
+        if pp_error_estimate < PPI_ERROR_STRICT_MS:
+            pp_error_band = "strict_lt10ms"
+        elif pp_error_estimate <= PPI_ERROR_LOW_CONFIDENCE_MS:
+            pp_error_band = "moderate_10_to_30ms"
+        else:
+            pp_error_band = "high_gt30ms"
+    else:
+        pp_error_band = "unknown"
+
+    blocked = bool(blocker_bit == 1)
+    skin_contact_missing = bool(skin_contact_supported == 1 and skin_contact_status == 0)
+
+    if blocked:
+        quality_tier = "low"
+    elif pp_error_band == "high_gt30ms":
+        quality_tier = "low"
+    elif pp_error_band == "moderate_10_to_30ms" or skin_contact_missing:
+        quality_tier = "medium"
+    else:
+        quality_tier = "high"
+
     return {
         "hr": sample.get("hr"),
         "pp_in_ms": sample.get("ppInMs"),
-        "pp_error_estimate": sample.get("ppErrorEstimate"),
-        "blocker_bit": sample.get("blockerBit"),
-        "skin_contact_status": sample.get("skinContactStatus"),
-        "skin_contact_supported": sample.get("skinContactSupported"),
+        "pp_error_estimate": pp_error_estimate,
+        "blocker_bit": blocker_bit,
+        "skin_contact_status": skin_contact_status,
+        "skin_contact_supported": skin_contact_supported,
+        "pp_error_band": pp_error_band,
+        "sample_quality_tier": quality_tier,
+        "sample_quality_blocked": blocked,
+        "sample_quality_skin_contact_missing": skin_contact_missing,
     }
 
 

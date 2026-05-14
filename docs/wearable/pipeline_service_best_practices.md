@@ -73,6 +73,9 @@ Compatibility rule:
 - Keep L0/L1/L2/L3/L4 logic explicit and testable.
 - If cross-stream gating degrades confidence/level, write warning and rationale to report.
 - Preserve raw timing fields where present; do not fabricate unavailable source values.
+- For Verity Sense offline `ppi`, prefer interval-based (`ppInMs`) reconstruction when sample timestamps are invalid/zero.
+- Treat `timeStamp` as diagnostic/provenance when it is cyclic/non-monotonic.
+- Record startup-delay usage explicitly (`ppi_startup_delay_applied`, `ppi_startup_delay_seconds`) when enabled for session-specific modes.
 
 ## Artifact Rules
 

@@ -350,6 +350,42 @@ class PipelineApiTests(unittest.TestCase):
         min_ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce").min()
         self.assertEqual(min_ts.year, 2026)
 
+    def test_verity_offline_ppi_startup_delay_is_configurable_per_chunk(self) -> None:
+        chunk = build_chunk(
+            chunk_id="chunk-offline-ppi-delay-1",
+            sequence=1,
+            stream_type="ppi",
+            payload_schema="polar.offline.ppi",
+            stream_id="stream-offline-ppi-delay-001",
+            device_model="verity_sense",
+            payload={
+                "type": "PPI",
+                "source": "polar_verity_sense_offline",
+                "samples": [
+                    {"timeStamp": 0, "hr": 71, "ppInMs": 840, "ppErrorEstimate": 7, "blockerBit": 0, "skinContactStatus": 1, "skinContactSupported": 1},
+                    {"timeStamp": 0, "hr": 72, "ppInMs": 830, "ppErrorEstimate": 35, "blockerBit": 1, "skinContactStatus": 0, "skinContactSupported": 1},
+                ],
+            },
+        )
+        chunk["time"]["apply_ppi_startup_delay"] = True
+        chunk["time"]["ppi_startup_delay_seconds"] = 25
+        chunk["time"]["fetch_started_at_collector"] = "2026-04-25T10:00:00Z"
+
+        raw_path = write_raw_stream(
+            self.raw_root,
+            session_id="session-verity-offline-ppi-delay",
+            stream_type="ppi",
+            chunks=[chunk],
+        )
+
+        output = PolarVerityOfflineNormalizer(StreamSpec(stream_type="ppi", payload_schema="polar.offline.ppi", time_field="timeStamp")).handle(raw_path)
+        self.assertTrue(bool(output.report.get("ppi_startup_delay_applied")))
+        self.assertEqual(float(output.report.get("ppi_startup_delay_seconds")), 25.0)
+        min_ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce").min()
+        self.assertEqual(min_ts.isoformat().replace("+00:00", "Z"), "2026-04-25T10:00:25Z")
+        self.assertIn("sample_quality_tier", output.dataframe.columns)
+        self.assertIn("timestamp_origin", output.dataframe.columns)
+
     def test_verity_offline_ppi_uses_upload_hint_when_collector_hint_missing(self) -> None:
         chunk = build_chunk(
             chunk_id="chunk-offline-ppi-upload-hint-1",
@@ -420,7 +456,7 @@ class PipelineApiTests(unittest.TestCase):
 
         output = PolarVerityOfflineNormalizer(StreamSpec(stream_type="ppi", payload_schema="polar.offline.ppi", time_field="timeStamp")).handle(raw_path)
         self.assertEqual(output.report.get("alignment_basis_level"), "L2")
-        self.assertEqual(output.report.get("alignment_basis"), "cadence_reconstruction")
+        self.assertEqual(output.report.get("alignment_basis"), "ppi_cumulative_reconstruction")
         self.assertIn("timeline_resequenced_from_cadence_anchor", output.report.get("warnings", []))
         duration = (output.report.get("duration_sanity") or {}).get("duration_seconds")
         expected = (output.report.get("duration_sanity") or {}).get("expected_seconds_from_default_rate")
@@ -1279,6 +1315,93 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(payload["sessions_discovered"], 1)
         self.assertEqual(len(payload["normalize_runs"]), 1)
         self.assertEqual(payload["normalize_runs"][0]["session_id"], "session-002")
+
+
+@unittest.skipUnless(DEPS_AVAILABLE, "pipeline dependencies are not installed")
+class PolarVeritySenseOfflinePpiTimestampTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        self.raw_root = self.root / "raw"
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_monotonic_raw_timestamps_preserved(self) -> None:
+        base = 545998017227188608
+        raw_path = write_raw_stream(
+            self.raw_root,
+            session_id="session-verity-offline-ppi-monotonic",
+            stream_type="ppi",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-offline-ppi-monotonic-1",
+                    sequence=1,
+                    stream_type="ppi",
+                    payload_schema="polar.offline.ppi",
+                    stream_id="stream-offline-ppi-monotonic-001",
+                    device_model="verity_sense",
+                    payload={
+                        "type": "PPI",
+                        "source": "polar_verity_sense_offline",
+                        "samples": [
+                            {"sample_index": 0, "timeStamp": base, "hr": 70, "ppInMs": 900, "ppErrorEstimate": 8},
+                            {"sample_index": 1, "timeStamp": base + 900_000_000, "hr": 71, "ppInMs": 900, "ppErrorEstimate": 7},
+                            {"sample_index": 2, "timeStamp": base + 1_780_000_000, "hr": 72, "ppInMs": 880, "ppErrorEstimate": 6},
+                        ],
+                    },
+                )
+            ],
+        )
+
+        output = PolarVerityOfflineNormalizer(
+            StreamSpec(stream_type="ppi", payload_schema="polar.offline.ppi", time_field="timeStamp")
+        ).handle(raw_path)
+
+        self.assertEqual(len(output.dataframe.index), 3)
+        self.assertTrue((output.dataframe["timestamp_origin"] == "raw_sample_timestamp").all())
+        ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce")
+        self.assertTrue(ts.is_monotonic_increasing)
+        self.assertEqual(int((ts.diff().dt.total_seconds().fillna(0.0) < 0).sum()), 0)
+
+    def test_mixed_increasing_then_zero_reset_then_increasing_keeps_monotonic_timeline(self) -> None:
+        base = 545998017227188608
+        raw_path = write_raw_stream(
+            self.raw_root,
+            session_id="session-verity-offline-ppi-reset-zero",
+            stream_type="ppi",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-offline-ppi-reset-zero-1",
+                    sequence=1,
+                    stream_type="ppi",
+                    payload_schema="polar.offline.ppi",
+                    stream_id="stream-offline-ppi-reset-zero-001",
+                    device_model="verity_sense",
+                    payload={
+                        "type": "PPI",
+                        "source": "polar_verity_sense_offline",
+                        "samples": [
+                            {"sample_index": 0, "timeStamp": base, "hr": 70, "ppInMs": 900, "ppErrorEstimate": 8},
+                            {"sample_index": 1, "timeStamp": base + 900_000_000, "hr": 71, "ppInMs": 900, "ppErrorEstimate": 7},
+                            {"sample_index": 2, "timeStamp": 0, "hr": 72, "ppInMs": 880, "ppErrorEstimate": 9},
+                            {"sample_index": 3, "timeStamp": base + 2_680_000_000, "hr": 73, "ppInMs": 890, "ppErrorEstimate": 8},
+                            {"sample_index": 4, "timeStamp": base + 3_560_000_000, "hr": 74, "ppInMs": 880, "ppErrorEstimate": 7},
+                        ],
+                    },
+                )
+            ],
+        )
+
+        output = PolarVerityOfflineNormalizer(
+            StreamSpec(stream_type="ppi", payload_schema="polar.offline.ppi", time_field="timeStamp")
+        ).handle(raw_path)
+
+        self.assertEqual(len(output.dataframe.index), 5)
+        self.assertGreaterEqual(int((output.dataframe["timestamp_origin"] == "ppi_repaired_from_neighbors").sum()), 1)
+        ts = pd.to_datetime(output.dataframe["ts_utc"], utc=True, errors="coerce")
+        self.assertTrue(ts.is_monotonic_increasing)
+        self.assertEqual(int((ts.diff().dt.total_seconds().fillna(0.0) < 0).sum()), 0)
 
 
 if __name__ == "__main__":

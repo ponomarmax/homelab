@@ -163,234 +163,13 @@ struct CollectorView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Offline Recording")
                     .font(.headline)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Status")
-                        .font(.subheadline.weight(.semibold))
-                    offlineStatusCard
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Streams")
-                        .font(.subheadline.weight(.semibold))
-                    ForEach(PolarOfflineStream.allCases, id: \.self) { stream in
-                        OfflineStreamRow(
-                            stream: stream,
-                            capability: collectorCore.capabilityForOfflineStream(stream),
-                            selected: collectorCore.selectedOfflineStreams.contains(stream),
-                            runState: collectorCore.offlineStreamRunStates[stream] ?? .ready,
-                            runMessage: collectorCore.offlineStreamRunMessages[stream],
-                            settingsSummary: collectorCore.offlineSettingsSummary(for: stream),
-                            canConfigure: collectorCore.canConfigureOfflineStream(stream),
-                            onToggle: { collectorCore.toggleOfflineStream(stream) },
-                            onConfigure: {
-                                Task { await collectorCore.loadOfflineSettings(for: stream) }
-                                settingsStream = stream
-                            }
-                        )
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Actions")
-                        .font(.subheadline.weight(.semibold))
-
-                    HStack(spacing: 8) {
-                        Menu {
-                            Button("Start all") {
-                                Task { await collectorCore.startOfflineAllSupported() }
-                            }
-                        } label: {
-                            Text(collectorCore.offlineOperation == .starting ? "Starting..." : "Start")
-                                .frame(maxWidth: .infinity)
-                        } primaryAction: {
-                            Task { await collectorCore.startOfflineSelected() }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(collectorCore.isOfflineActionDisabled(.starting) || !collectorCore.canStartOfflineSelected())
-
-                        Menu {
-                            Button("Stop all") {
-                                Task { await collectorCore.stopOfflineAllSupported() }
-                            }
-                        } label: {
-                            Text(collectorCore.offlineOperation == .stopping ? "Stopping..." : "Stop")
-                                .frame(maxWidth: .infinity)
-                        } primaryAction: {
-                            Task { await collectorCore.stopOfflineSelected() }
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(collectorCore.isOfflineActionDisabled(.stopping) || !collectorCore.canStopOfflineSelected())
-                    }
-
-                    HStack(spacing: 8) {
-                        Button(collectorCore.offlineOperation == .listing ? "Refreshing..." : "Refresh") {
-                            Task { await collectorCore.refreshOfflineData() }
-                        }
-                        .buttonStyle(.bordered)
-                        .frame(maxWidth: .infinity)
-                        .disabled(collectorCore.isOfflineActionDisabled(.listing))
-
-                        Button(collectorCore.offlineOperation == .uploading ? "Uploading..." : "Upload") {
-                            Task { await collectorCore.uploadOfflineRecordings() }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .frame(maxWidth: .infinity)
-                        .disabled(collectorCore.isOfflineActionDisabled(.uploading))
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Unassigned Recordings")
-                        .font(.subheadline.weight(.semibold))
-                    Text("Found: \(collectorCore.unassignedOfflineRecordings.count)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    HStack(spacing: 8) {
-                        Button("Assign as one session") {
-                            collectorCore.assignUnassignedAsSingleSession()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(collectorCore.unassignedOfflineRecordings.isEmpty)
-
-                        Button("Assign by clusters") {
-                            collectorCore.assignUnassignedByClusters()
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(collectorCore.unassignedRecordingGroups.isEmpty)
-                    }
-
-                    if !collectorCore.unassignedRecordingGroups.isEmpty {
-                        ForEach(collectorCore.unassignedRecordingGroups) { group in
-                            Text("\(group.id): \(group.entries.count) file(s)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Divider().padding(.vertical, 4)
-                    Text("All visible recordings: \(collectorCore.offlineRecordings.count)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    HStack(spacing: 8) {
-                        Button("Organize visible as one") {
-                            collectorCore.assignVisibleRecordingsAsSingleSession()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(collectorCore.offlineRecordings.isEmpty)
-
-                        Button("Organize visible by clusters") {
-                            collectorCore.assignVisibleRecordingsByClusters()
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(collectorCore.offlineRecordings.isEmpty)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Pending Server Sync")
-                        .font(.subheadline.weight(.semibold))
-                    Text("Manifests queued: \(collectorCore.pendingSessionManifests.count)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(collectorCore.manifestSyncStatusMessage)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Button(collectorCore.isManifestSyncRunning ? "Retrying..." : "Retry pending sync") {
-                        Task { await collectorCore.retryPendingSessionManifestSync() }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(collectorCore.pendingSessionManifests.isEmpty || collectorCore.isManifestSyncRunning)
-
-                    ForEach(collectorCore.pendingSessionManifests) { item in
-                        Text("\(item.clientSessionID) • retries: \(item.retryCount)\(item.lastError == nil ? "" : " • \(item.lastError!)")")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Storage")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.red)
-                    HStack(spacing: 8) {
-                        Button("Delete selected") {
-                            if let firstSelected = collectorCore.offlineRecordings.first(where: {
-                                if let stream = $0.stream {
-                                    return collectorCore.selectedOfflineStreams.contains(stream)
-                                }
-                                return false
-                            }) {
-                                pendingDeleteEntry = firstSelected
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.red)
-                        .disabled(
-                            collectorCore.offlineIsOperationRunning
-                                || collectorCore.isUploadingChunk
-                                || collectorCore.hasActiveOfflineRecording()
-                                || !collectorCore.offlineRecordings.contains(where: {
-                                    if let stream = $0.stream {
-                                        return collectorCore.selectedOfflineStreams.contains(stream)
-                                    }
-                                    return false
-                                })
-                        )
-
-                        Button("Delete all recordings", role: .destructive) {
-                            showDeleteAllConfirmation = true
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(collectorCore.offlineIsOperationRunning || collectorCore.isUploadingChunk || collectorCore.hasActiveOfflineRecording())
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Recordings")
-                        .font(.subheadline.weight(.semibold))
-                    if collectorCore.offlineRecordings.isEmpty {
-                        Text("No offline recordings listed yet.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(collectorCore.offlineRecordings) { entry in
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text(entry.stream?.rawValue ?? "Unknown")
-                                        .font(.subheadline.weight(.semibold))
-                                    Spacer()
-                                    Button(collectorCore.deletingOfflineRecordingIDs.contains(entry.id) ? "Deleting..." : "Delete") {
-                                        pendingDeleteEntry = entry
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .disabled(collectorCore.offlineIsOperationRunning || collectorCore.isUploadingChunk || collectorCore.hasActiveOfflineRecording())
-                                }
-                                Text("path: \(entry.path)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                Text("size: \(entry.sizeBytes.map(String.init) ?? "n/a")")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                Text("date: \(entry.startedAt.map { dateFormatter.string(from: $0) } ?? "n/a")")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                Text("status: \(entry.status ?? "n/a")")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                if let recordError = collectorCore.offlineRecordErrorsByID[entry.id] {
-                                    Text(recordError)
-                                        .font(.caption2)
-                                        .foregroundStyle(.red)
-                                }
-                            }
-                            .padding(10)
-                            .background(.background)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        }
-                    }
-                }
+                offlineStatusSection
+                offlineStreamsSection
+                offlineActionsSection
+                offlineUnassignedSection
+                offlinePendingSyncSection
+                offlineStorageSection
+                offlineRecordingsSection
             }
             .padding(.bottom, 12)
         }
@@ -424,6 +203,203 @@ struct CollectorView: View {
         
         .sheet(item: $settingsStream) { stream in
             OfflineSettingsEditorSheet(stream: stream, collectorCore: collectorCore)
+        }
+    }
+
+    private var offlineStatusSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Status")
+                .font(.subheadline.weight(.semibold))
+            offlineStatusCard
+        }
+    }
+
+    private var offlineStreamsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Streams")
+                .font(.subheadline.weight(.semibold))
+            ForEach(PolarOfflineStream.allCases, id: \.self) { stream in
+                OfflineStreamRow(
+                    stream: stream,
+                    capability: collectorCore.capabilityForOfflineStream(stream),
+                    selected: collectorCore.selectedOfflineStreams.contains(stream),
+                    runState: collectorCore.offlineStreamRunStates[stream] ?? .ready,
+                    runMessage: collectorCore.offlineStreamRunMessages[stream],
+                    settingsSummary: collectorCore.offlineSettingsSummary(for: stream),
+                    canConfigure: collectorCore.canConfigureOfflineStream(stream),
+                    onToggle: { collectorCore.toggleOfflineStream(stream) },
+                    onConfigure: {
+                        Task { await collectorCore.loadOfflineSettings(for: stream) }
+                        settingsStream = stream
+                    }
+                )
+            }
+        }
+    }
+
+    private var offlineActionsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Actions")
+                .font(.subheadline.weight(.semibold))
+            HStack(spacing: 8) {
+                Menu {
+                    Button("Start all") { Task { await collectorCore.startOfflineAllSupported() } }
+                } label: {
+                    Text(collectorCore.offlineOperation == .starting ? "Starting..." : "Start")
+                        .frame(maxWidth: .infinity)
+                } primaryAction: {
+                    Task { await collectorCore.startOfflineSelected() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(collectorCore.isOfflineActionDisabled(.starting) || !collectorCore.canStartOfflineSelected())
+
+                Menu {
+                    Button("Stop all") { Task { await collectorCore.stopOfflineAllSupported() } }
+                } label: {
+                    Text(collectorCore.offlineOperation == .stopping ? "Stopping..." : "Stop")
+                        .frame(maxWidth: .infinity)
+                } primaryAction: {
+                    Task { await collectorCore.stopOfflineSelected() }
+                }
+                .buttonStyle(.bordered)
+                .disabled(collectorCore.isOfflineActionDisabled(.stopping) || !collectorCore.canStopOfflineSelected())
+            }
+            HStack(spacing: 8) {
+                Button(collectorCore.offlineOperation == .listing ? "Refreshing..." : "Refresh") {
+                    Task { await collectorCore.refreshOfflineData() }
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
+                .disabled(collectorCore.isOfflineActionDisabled(.listing))
+
+                Button(collectorCore.offlineOperation == .uploading ? "Uploading..." : "Upload") {
+                    Task { await collectorCore.uploadOfflineRecordings() }
+                }
+                .buttonStyle(.borderedProminent)
+                .frame(maxWidth: .infinity)
+                .disabled(collectorCore.isOfflineActionDisabled(.uploading))
+            }
+        }
+    }
+
+    private var offlineUnassignedSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Unassigned Recordings")
+                .font(.subheadline.weight(.semibold))
+            Text("Found: \(collectorCore.unassignedOfflineRecordings.count)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Button("Assign as one session") { collectorCore.assignUnassignedAsSingleSession() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(collectorCore.unassignedOfflineRecordings.isEmpty)
+                Button("Assign by clusters") { collectorCore.assignUnassignedByClusters() }
+                    .buttonStyle(.bordered)
+                    .disabled(collectorCore.unassignedRecordingGroups.isEmpty)
+            }
+            if !collectorCore.unassignedRecordingGroups.isEmpty {
+                ForEach(collectorCore.unassignedRecordingGroups) { group in
+                    Text("\(group.id): \(group.entries.count) file(s)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Divider().padding(.vertical, 4)
+            Text("All visible recordings: \(collectorCore.offlineRecordings.count)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Button("Organize visible as one") { collectorCore.assignVisibleRecordingsAsSingleSession() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(collectorCore.offlineRecordings.isEmpty)
+                Button("Organize visible by clusters") { collectorCore.assignVisibleRecordingsByClusters() }
+                    .buttonStyle(.bordered)
+                    .disabled(collectorCore.offlineRecordings.isEmpty)
+            }
+        }
+    }
+
+    private var offlinePendingSyncSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Pending Server Sync")
+                .font(.subheadline.weight(.semibold))
+            Text("Manifests queued: \(collectorCore.pendingSessionManifests.count)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(collectorCore.manifestSyncStatusMessage)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Button(collectorCore.isManifestSyncRunning ? "Retrying..." : "Retry pending sync") {
+                Task { await collectorCore.retryPendingSessionManifestSync() }
+            }
+            .buttonStyle(.bordered)
+            .disabled(collectorCore.pendingSessionManifests.isEmpty || collectorCore.isManifestSyncRunning)
+            ForEach(collectorCore.pendingSessionManifests) { item in
+                Text("\(item.clientSessionID) • retries: \(item.retryCount)\(item.lastError == nil ? "" : " • \(item.lastError!)")")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var offlineStorageSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Storage")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.red)
+            HStack(spacing: 8) {
+                Button("Delete selected") {
+                    if let firstSelected = collectorCore.offlineRecordings.first(where: {
+                        if let stream = $0.stream { return collectorCore.selectedOfflineStreams.contains(stream) }
+                        return false
+                    }) {
+                        pendingDeleteEntry = firstSelected
+                    }
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
+                .disabled(
+                    collectorCore.offlineIsOperationRunning
+                        || collectorCore.isUploadingChunk
+                        || collectorCore.hasActiveOfflineRecording()
+                        || !collectorCore.offlineRecordings.contains(where: {
+                            if let stream = $0.stream { return collectorCore.selectedOfflineStreams.contains(stream) }
+                            return false
+                        })
+                )
+                Button("Delete all recordings", role: .destructive) {
+                    showDeleteAllConfirmation = true
+                }
+                .buttonStyle(.bordered)
+                .disabled(collectorCore.offlineIsOperationRunning || collectorCore.isUploadingChunk || collectorCore.hasActiveOfflineRecording())
+            }
+        }
+    }
+
+    private var offlineRecordingsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Recordings")
+                .font(.subheadline.weight(.semibold))
+            if collectorCore.offlineRecordings.isEmpty {
+                Text("No offline recordings listed yet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(collectorCore.offlineRecordings) { entry in
+                    let safety = collectorCore.offlineRecordingSafetySummary(for: entry)
+                    OfflineRecordingCard(
+                        entry: entry,
+                        safety: safety,
+                        isDeleting: collectorCore.deletingOfflineRecordingIDs.contains(entry.id),
+                        isDeleteDisabled: collectorCore.offlineIsOperationRunning || collectorCore.isUploadingChunk || collectorCore.hasActiveOfflineRecording(),
+                        recordError: collectorCore.offlineRecordErrorsByID[entry.id],
+                        dateText: entry.startedAt.map { dateFormatter.string(from: $0) } ?? "n/a",
+                        onDelete: {
+                            pendingDeleteEntry = entry
+                        }
+                    )
+                }
+            }
         }
     }
 
@@ -541,6 +517,26 @@ struct CollectorView: View {
                 Text("Sessions: \(collectorCore.managedSessions.count)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        if collectorCore.isManagedSessionUploadRunning {
+                            ProgressView().controlSize(.small)
+                        }
+                        Text(collectorCore.managedSessionUploadStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack(spacing: 8) {
+                        Button("Upload all (chronology)") {
+                            Task { await collectorCore.uploadManagedSessionsChronologically() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(collectorCore.managedSessions.isEmpty || collectorCore.offlineIsOperationRunning || collectorCore.isUploadingChunk)
+                    }
+                }
+                .padding(10)
+                .background(.background)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                 if collectorCore.managedSessions.isEmpty {
                     Text("No managed sessions yet.")
@@ -549,6 +545,8 @@ struct CollectorView: View {
                 } else {
                     ForEach(collectorCore.managedSessions) { session in
                         let pending = collectorCore.pendingManifest(for: session.id)
+                        let hasLocalArchive = collectorCore.isManagedSessionArchived(session.id)
+                        let isServerSynced = session.lifecycle == .uploaded && pending == nil
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Text(session.clientSessionID)
@@ -564,6 +562,17 @@ struct CollectorView: View {
                             Text("files: \(session.linkedFiles.count)")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                            SessionSyncBar(
+                                hasLocalCopy: hasLocalArchive,
+                                isServerUploaded: isServerSynced,
+                                isPendingServerSync: pending != nil,
+                                isUploadingNow: collectorCore.isManagedSessionUploadRunning
+                            )
+                            if let uploadStatus = collectorCore.managedSessionUploadStatusByID[session.id] {
+                                Text(uploadStatus)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
 
                             if let pending {
                                 Text("manifest pending • retries: \(pending.retryCount)")
@@ -618,6 +627,11 @@ struct CollectorView: View {
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 } else {
+                                    Text("local archive file:")
+                                        .font(.caption2.weight(.semibold))
+                                    Text(collectorCore.localArchiveFilePath(for: session.id))
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
                                     ForEach(Array(session.linkedFiles.enumerated()), id: \.offset) { _, file in
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(file.stream)
@@ -761,6 +775,92 @@ private struct OfflineStreamRow: View {
         default:
             return "Unknown"
         }
+    }
+}
+
+private struct SessionSyncBar: View {
+    let hasLocalCopy: Bool
+    let isServerUploaded: Bool
+    let isPendingServerSync: Bool
+    let isUploadingNow: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                syncPill(
+                    title: "Local copy",
+                    color: hasLocalCopy ? .green : .gray,
+                    value: hasLocalCopy ? "saved" : "missing"
+                )
+                syncPill(
+                    title: "Server upload",
+                    color: isServerUploaded ? .green : (isPendingServerSync || isUploadingNow ? .orange : .gray),
+                    value: isServerUploaded ? "done" : (isPendingServerSync ? "queued" : (isUploadingNow ? "uploading" : "not uploaded"))
+                )
+            }
+            GeometryReader { geo in
+                HStack(spacing: 6) {
+                    Rectangle()
+                        .fill(hasLocalCopy ? Color.green : Color.gray.opacity(0.35))
+                    Rectangle()
+                        .fill(isServerUploaded ? Color.green : (isPendingServerSync || isUploadingNow ? Color.orange : Color.gray.opacity(0.35)))
+                }
+                .frame(width: geo.size.width, height: 8)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            }
+            .frame(height: 8)
+        }
+    }
+
+    private func syncPill(title: String, color: Color, value: String) -> some View {
+        Text("\(title): \(value)")
+            .font(.caption2)
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+}
+
+private struct OfflineRecordingCard: View {
+    let entry: OfflineRecordingEntry
+    let safety: OfflineRecordingSafetySummary
+    let isDeleting: Bool
+    let isDeleteDisabled: Bool
+    let recordError: String?
+    let dateText: String
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(entry.stream?.rawValue ?? "Unknown")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button(isDeleting ? "Deleting..." : "Delete") {
+                    onDelete()
+                }
+                .buttonStyle(.bordered)
+                .disabled(isDeleteDisabled)
+            }
+            Text("path: \(entry.path)").font(.caption2).foregroundStyle(.secondary)
+            Text("size: \(entry.sizeBytes.map(String.init) ?? "n/a")").font(.caption2).foregroundStyle(.secondary)
+            Text("date: \(dateText)").font(.caption2).foregroundStyle(.secondary)
+            Text("status: \(entry.status ?? "n/a")").font(.caption2).foregroundStyle(.secondary)
+            Text("recording now: \(safety.isRecordingNow ? "yes" : "no")").font(.caption2).foregroundStyle(safety.isRecordingNow ? .orange : .secondary)
+            Text("assigned session: \(safety.assignedSessionID ?? "no")").font(.caption2).foregroundStyle(safety.isAssignedToSession ? Color.secondary : Color.orange)
+            Text("local copy: \(safety.hasLocalArchiveCopy ? "saved" : "missing")").font(.caption2).foregroundStyle(safety.hasLocalArchiveCopy ? .green : .orange)
+            Text("safe to delete from sensor: \(safety.safeToDeleteFromSensor ? "yes" : "no")")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(safety.safeToDeleteFromSensor ? .green : .orange)
+            if let recordError {
+                Text(recordError).font(.caption2).foregroundStyle(.red)
+            }
+        }
+        .padding(10)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 

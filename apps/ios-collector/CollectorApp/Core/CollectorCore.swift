@@ -108,6 +108,127 @@ struct PendingSessionManifest: Codable, Equatable, Identifiable, Sendable {
     var updatedAtUTC: Date
 }
 
+struct OfflineRecordingSafetySummary: Equatable, Sendable {
+    let isRecordingNow: Bool
+    let isAssignedToSession: Bool
+    let assignedSessionID: String?
+    let hasLocalArchiveCopy: Bool
+    let safeToDeleteFromSensor: Bool
+}
+
+private struct ArchivedOfflineUploadBatch: Codable {
+    let streamRawValue: String
+    let sourcePath: String
+    let samples: [HeartRateSample]
+    let timeContext: UploadChunkTimeContext?
+}
+
+private struct OfflineSessionArchivePayload: Codable {
+    let sessionID: UUID
+    let clientSessionID: String
+    let startedAtUTC: Date
+    let updatedAtUTC: Date
+    let batches: [ArchivedOfflineUploadBatch]
+}
+
+@MainActor
+final class OfflineSessionArchiveStore {
+    private let archiveDirectoryURL: URL
+    private let encoder: JSONEncoder
+    private let decoder: JSONDecoder
+    private let fileManager: FileManager
+
+    init(fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        let dir = appSupport
+            .appendingPathComponent("CollectorApp", isDirectory: true)
+            .appendingPathComponent("offline-session-archive", isDirectory: true)
+        if !fileManager.fileExists(atPath: dir.path) {
+            try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        self.archiveDirectoryURL = dir
+
+        self.encoder = JSONEncoder()
+        self.encoder.dateEncodingStrategy = .iso8601
+        self.encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+        self.decoder = JSONDecoder()
+        self.decoder.dateDecodingStrategy = .iso8601
+    }
+
+    func loadBatches(sessionID: UUID) -> [OfflineUploadBatch] {
+        let fileURL = archiveDirectoryURL.appendingPathComponent("\(sessionID.uuidString.lowercased()).json")
+        guard let data = try? Data(contentsOf: fileURL) else { return [] }
+        guard let payload = try? decoder.decode(OfflineSessionArchivePayload.self, from: data) else { return [] }
+        return payload.batches.compactMap { item in
+            guard let stream = CollectorStream(rawValue: item.streamRawValue) else { return nil }
+            return OfflineUploadBatch(
+                stream: stream,
+                sourcePath: item.sourcePath,
+                samples: item.samples,
+                timeContext: item.timeContext
+            )
+        }
+    }
+
+    func saveBatches(
+        sessionID: UUID,
+        clientSessionID: String,
+        startedAtUTC: Date,
+        batches: [OfflineUploadBatch]
+    ) {
+        guard !batches.isEmpty else { return }
+        let existing = loadBatches(sessionID: sessionID)
+        let merged = deduplicate(existing + batches)
+        let payload = OfflineSessionArchivePayload(
+            sessionID: sessionID,
+            clientSessionID: clientSessionID,
+            startedAtUTC: startedAtUTC,
+            updatedAtUTC: Date(),
+            batches: merged.map {
+                ArchivedOfflineUploadBatch(
+                    streamRawValue: $0.stream.rawValue,
+                    sourcePath: $0.sourcePath,
+                    samples: $0.samples,
+                    timeContext: $0.timeContext
+                )
+            }
+        )
+        guard let data = try? encoder.encode(payload) else { return }
+        let fileURL = archiveDirectoryURL.appendingPathComponent("\(sessionID.uuidString.lowercased()).json")
+        try? data.write(to: fileURL, options: .atomic)
+    }
+
+    func deleteSessionArchive(sessionID: UUID) {
+        let fileURL = archiveDirectoryURL.appendingPathComponent("\(sessionID.uuidString.lowercased()).json")
+        try? fileManager.removeItem(at: fileURL)
+    }
+
+    func archiveFileURL(sessionID: UUID) -> URL {
+        archiveDirectoryURL.appendingPathComponent("\(sessionID.uuidString.lowercased()).json")
+    }
+
+    func containsSourcePath(sessionID: UUID, sourcePath: String) -> Bool {
+        loadBatches(sessionID: sessionID).contains(where: { $0.sourcePath == sourcePath })
+    }
+
+    private func deduplicate(_ batches: [OfflineUploadBatch]) -> [OfflineUploadBatch] {
+        var seen = Set<String>()
+        var ordered: [OfflineUploadBatch] = []
+        for batch in batches {
+            let key = "\(batch.stream.rawValue)|\(batch.sourcePath)|\(batch.samples.count)|\(batch.timeContext?.recordingStartUTC?.timeIntervalSince1970 ?? -1)"
+            if seen.contains(key) {
+                continue
+            }
+            seen.insert(key)
+            ordered.append(batch)
+        }
+        return ordered
+    }
+}
+
 private struct ManagedSessionSnapshot: Codable {
     var sessions: [ManagedSessionRecord]
     var pendingManifests: [PendingSessionManifest]
@@ -241,6 +362,9 @@ final class CollectorCore: ObservableObject {
     @Published private(set) var pendingSessionManifests: [PendingSessionManifest] = []
     @Published private(set) var isManifestSyncRunning: Bool = false
     @Published private(set) var manifestSyncStatusMessage: String = "Idle"
+    @Published private(set) var isManagedSessionUploadRunning: Bool = false
+    @Published private(set) var managedSessionUploadStatusMessage: String = "Idle"
+    @Published private(set) var managedSessionUploadStatusByID: [UUID: String] = [:]
 
     let defaultCollectionMode: CollectionMode = .live
 
@@ -251,6 +375,7 @@ final class CollectorCore: ObservableObject {
     private let sleepProvider: @Sendable (UInt64) async -> Void
     private let debugExporter = HrSampleDebugExporter()
     private let sessionLedgerStore = SessionLedgerStore()
+    private let offlineSessionArchiveStore = OfflineSessionArchiveStore()
     private let isVerboseLoggingEnabled: Bool
     private let unassignedClusterGapSeconds: TimeInterval
     private let isManifestAutoRetryEnabled: Bool
@@ -944,14 +1069,24 @@ final class CollectorCore: ObservableObject {
 
     func assignUnassignedAsSingleSession() {
         guard !unassignedOfflineRecordings.isEmpty else { return }
-        createExternalManagedSession(from: unassignedOfflineRecordings, note: "manual_merge_single_session")
+        let createdID = createExternalManagedSession(from: unassignedOfflineRecordings, note: "manual_merge_single_session")
+        if let createdID {
+            Task { @MainActor [weak self] in
+                await self?.archiveManagedSessionIfNeeded(createdID)
+            }
+        }
         refreshUnassignedRecordingGroups()
     }
 
     func assignUnassignedByClusters() {
         guard !unassignedRecordingGroups.isEmpty else { return }
         for group in unassignedRecordingGroups where !group.entries.isEmpty {
-            createExternalManagedSession(from: group.entries, note: "manual_split_by_time_cluster")
+            let createdID = createExternalManagedSession(from: group.entries, note: "manual_split_by_time_cluster")
+            if let createdID {
+                Task { @MainActor [weak self] in
+                    await self?.archiveManagedSessionIfNeeded(createdID)
+                }
+            }
         }
         refreshUnassignedRecordingGroups()
     }
@@ -962,7 +1097,12 @@ final class CollectorCore: ObservableObject {
             offlineLastErrorMessage = "All visible recordings are already assigned to sessions"
             return
         }
-        createExternalManagedSession(from: candidates, note: "manual_merge_visible_recordings")
+        let createdID = createExternalManagedSession(from: candidates, note: "manual_merge_visible_recordings")
+        if let createdID {
+            Task { @MainActor [weak self] in
+                await self?.archiveManagedSessionIfNeeded(createdID)
+            }
+        }
         refreshUnassignedRecordingGroups()
     }
 
@@ -971,7 +1111,12 @@ final class CollectorCore: ObservableObject {
         let clusters = clusterUnassignedRecordings(candidates)
         guard !clusters.isEmpty else { return }
         for group in clusters where !group.entries.isEmpty {
-            createExternalManagedSession(from: group.entries, note: "manual_split_visible_recordings_by_cluster")
+            let createdID = createExternalManagedSession(from: group.entries, note: "manual_split_visible_recordings_by_cluster")
+            if let createdID {
+                Task { @MainActor [weak self] in
+                    await self?.archiveManagedSessionIfNeeded(createdID)
+                }
+            }
         }
         refreshUnassignedRecordingGroups()
     }
@@ -988,8 +1133,57 @@ final class CollectorCore: ObservableObject {
     func deleteManagedSession(id: UUID) {
         managedSessions.removeAll { $0.id == id }
         pendingSessionManifests.removeAll { $0.sessionID == id }
+        offlineSessionArchiveStore.deleteSessionArchive(sessionID: id)
         persistLedger()
         refreshUnassignedRecordingGroups()
+    }
+
+    func uploadManagedSessionsChronologically() async {
+        let ordered = managedSessions.sorted { $0.startedAtUTC < $1.startedAtUTC }
+        managedSessionUploadStatusMessage = "Uploading \(ordered.count) session(s) in chronology..."
+        for session in ordered {
+            await uploadManagedSession(session.id)
+        }
+        managedSessionUploadStatusMessage = "Chronological upload completed"
+    }
+
+    func isManagedSessionArchived(_ id: UUID) -> Bool {
+        !offlineSessionArchiveStore.loadBatches(sessionID: id).isEmpty
+    }
+
+    func localArchiveFilePath(for sessionID: UUID) -> String {
+        offlineSessionArchiveStore.archiveFileURL(sessionID: sessionID).path
+    }
+
+    func offlineRecordingSafetySummary(for entry: OfflineRecordingEntry) -> OfflineRecordingSafetySummary {
+        let isRecordingNow: Bool
+        if let stream = entry.stream {
+            isRecordingNow = offlineStreamRunStates[stream] == .recording
+        } else {
+            isRecordingNow = false
+        }
+
+        let linkedSession = managedSessions.first(where: { session in
+            session.linkedFiles.contains(where: { $0.path == entry.path })
+        })
+
+        let hasLocalArchiveCopy: Bool
+        if let linkedSession {
+            hasLocalArchiveCopy = offlineSessionArchiveStore.containsSourcePath(
+                sessionID: linkedSession.id,
+                sourcePath: entry.path
+            )
+        } else {
+            hasLocalArchiveCopy = false
+        }
+
+        return OfflineRecordingSafetySummary(
+            isRecordingNow: isRecordingNow,
+            isAssignedToSession: linkedSession != nil,
+            assignedSessionID: linkedSession?.clientSessionID,
+            hasLocalArchiveCopy: hasLocalArchiveCopy,
+            safeToDeleteFromSensor: !isRecordingNow && hasLocalArchiveCopy
+        )
     }
 
     func retryPendingManifest(for sessionID: UUID) async {
@@ -1052,6 +1246,13 @@ final class CollectorCore: ObservableObject {
 
         ensureUploadSessionIfNeeded(for: preparation.batches.map(\.stream))
         if let session = activeSession {
+            offlineSessionArchiveStore.saveBatches(
+                sessionID: session.sessionID,
+                clientSessionID: session.clientSessionID,
+                startedAtUTC: session.startedAtUTC,
+                batches: preparation.batches
+            )
+            managedSessionUploadStatusByID[session.sessionID] = "Saved locally"
             let files = preparation.batches.map {
                 ManagedSessionFile(
                     path: $0.sourcePath,
@@ -1119,14 +1320,36 @@ final class CollectorCore: ObservableObject {
         let allowedPaths = Set(session.linkedFiles.map(\.path))
         guard !allowedPaths.isEmpty else {
             offlineLastErrorMessage = "Session has no linked files to upload"
+            managedSessionUploadStatusByID[id] = "No linked files"
             return
+        }
+        isManagedSessionUploadRunning = true
+        managedSessionUploadStatusByID[id] = "Preparing upload..."
+        managedSessionUploadStatusMessage = "Uploading \(session.clientSessionID)..."
+        defer {
+            isManagedSessionUploadRunning = false
         }
         log("Session upload requested: \(session.clientSessionID) files=\(allowedPaths.count)", category: "session")
 
         guard beginOfflineOperation(.uploading, lifecycle: .uploading, statusMessage: "Uploading session...") else { return }
         defer { completeOfflineOperation() }
 
-        let preparation = await adapter.prepareOfflineUploadBatches(allowedPaths: allowedPaths)
+        var batches = offlineSessionArchiveStore.loadBatches(sessionID: id)
+        var sourceLabel = "local archive"
+        if batches.isEmpty {
+            sourceLabel = "device files"
+            let fetched = await adapter.prepareOfflineUploadBatches(allowedPaths: allowedPaths)
+            batches = fetched.batches
+            if !batches.isEmpty {
+                offlineSessionArchiveStore.saveBatches(
+                    sessionID: session.id,
+                    clientSessionID: session.clientSessionID,
+                    startedAtUTC: session.startedAtUTC,
+                    batches: batches
+                )
+            }
+        }
+        let preparation = OfflineUploadPreparationResult(batches: batches, messagesByStream: [:])
         let streamsPrepared = preparation.batches.map(\.stream.transportType).joined(separator: ",")
         log(
             "Session upload preparation result: batches=\(preparation.batches.count) streams=[\(streamsPrepared)] messages=\(preparation.messagesByStream)",
@@ -1136,8 +1359,11 @@ final class CollectorCore: ObservableObject {
             offlineLifecycleState = .failed
             offlineStatusMessage = "No batches prepared for selected session"
             offlineLastErrorMessage = offlineStatusMessage
+            managedSessionUploadStatusByID[id] = "No data available for upload"
+            managedSessionUploadStatusMessage = "Upload failed for \(session.clientSessionID)"
             return
         }
+        managedSessionUploadStatusByID[id] = "Uploading (\(sourceLabel))..."
 
         activeSession = CollectionSession(
             sessionID: session.id,
@@ -1177,6 +1403,8 @@ final class CollectorCore: ObservableObject {
                 stoppedAtUTC: session.stoppedAtUTC,
                 notes: "session_upload_success"
             )
+            managedSessionUploadStatusByID[id] = "Uploaded to server"
+            managedSessionUploadStatusMessage = "Uploaded \(session.clientSessionID)"
         } else if uploadStatus == .failure {
             updateManagedSessionLifecycle(
                 id: session.id,
@@ -1184,6 +1412,11 @@ final class CollectorCore: ObservableObject {
                 stoppedAtUTC: session.stoppedAtUTC,
                 notes: "session_upload_failed"
             )
+            managedSessionUploadStatusByID[id] = "Upload failed, local copy kept"
+            managedSessionUploadStatusMessage = "Upload failed for \(session.clientSessionID)"
+        } else {
+            managedSessionUploadStatusByID[id] = "Upload completed with mixed result"
+            managedSessionUploadStatusMessage = "Mixed upload result for \(session.clientSessionID)"
         }
     }
 
@@ -2211,9 +2444,9 @@ final class CollectorCore: ObservableObject {
         }
     }
 
-    private func createExternalManagedSession(from entries: [OfflineRecordingEntry], note: String) {
+    private func createExternalManagedSession(from entries: [OfflineRecordingEntry], note: String) -> UUID? {
         let candidates = unassignedRecordings(from: entries)
-        guard !candidates.isEmpty else { return }
+        guard !candidates.isEmpty else { return nil }
         let start = candidates.compactMap(\.startedAt).min() ?? nowProvider()
         let stop = candidates.compactMap(\.startedAt).max() ?? start
         let sessionUUID = UUID()
@@ -2236,6 +2469,25 @@ final class CollectorCore: ObservableObject {
             linkedFiles: linkedFiles,
             notes: note
         )
+        return sessionUUID
+    }
+
+    private func archiveManagedSessionIfNeeded(_ sessionID: UUID) async {
+        guard let session = managedSessions.first(where: { $0.id == sessionID }) else { return }
+        if !offlineSessionArchiveStore.loadBatches(sessionID: sessionID).isEmpty {
+            return
+        }
+        let allowedPaths = Set(session.linkedFiles.map(\.path))
+        guard !allowedPaths.isEmpty else { return }
+        let preparation = await adapter.prepareOfflineUploadBatches(allowedPaths: allowedPaths)
+        guard !preparation.batches.isEmpty else { return }
+        offlineSessionArchiveStore.saveBatches(
+            sessionID: sessionID,
+            clientSessionID: session.clientSessionID,
+            startedAtUTC: session.startedAtUTC,
+            batches: preparation.batches
+        )
+        managedSessionUploadStatusByID[sessionID] = "Saved locally"
     }
 
     private func persistLedger() {

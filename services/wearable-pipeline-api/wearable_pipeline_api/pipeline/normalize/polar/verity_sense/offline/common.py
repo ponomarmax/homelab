@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import timezone
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,57 @@ from .alignment import (
     ts_to_iso,
 )
 from .streams.policies import POLICY_BY_SCHEMA, VeritySenseOfflineStreamPolicy
+
+ENV_PPI_STARTUP_DELAY_SECONDS = "PPI_STARTUP_DELAY_SECONDS"
+ENV_ENABLE_PPI_STARTUP_DELAY = "ENABLE_PPI_STARTUP_DELAY"
+DEFAULT_PPI_STARTUP_DELAY_SECONDS = 25.0
+
+
+def _as_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return None
+
+
+def _as_float_or_none(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_ppi_like_basis(decision: AlignmentDecision, sample_ts_values: list[int]) -> bool:
+    if not sample_ts_values:
+        return True
+    if decision.level in {"L3", "L4"}:
+        return True
+    return decision.details in {
+        "shifted_to_reference_hint",
+        "clock_not_synced",
+        "clock_drift_high",
+        "implausible_direct_mapping",
+        "implausible_future_mapping",
+    }
+
+
+def _build_ppi_cadence_timestamps(anchor_start: pd.Timestamp, ppi_values_ms: list[float | int | None]) -> list[pd.Timestamp]:
+    timestamps: list[pd.Timestamp] = []
+    current = anchor_start
+    for step_ms in ppi_values_ms:
+        timestamps.append(current)
+        step_seconds = 0.0
+        if isinstance(step_ms, (int, float)) and step_ms > 0:
+            step_seconds = float(step_ms) / 1000.0
+        current = current + pd.to_timedelta(step_seconds, unit="s")
+    return timestamps
 
 
 class PolarVerityOfflineNormalizer:
@@ -59,6 +111,8 @@ class PolarVerityOfflineNormalizer:
         ppi_invalid_or_zero_timestamps = 0
         valid_timestamp_count = 0
         total_timestamp_fields = 0
+        ppi_startup_delay_applied = False
+        ppi_startup_delay_seconds = 0.0
 
         for context in chunk_contexts:
             chunk = context.chunk
@@ -112,6 +166,22 @@ class PolarVerityOfflineNormalizer:
             if session_start is None:
                 session_start = parse_ts(time_info.get("fetch_started_at_collector") or time_info.get("first_sample_received_at_collector"))
 
+            ppi_startup_delay_applied = False
+            ppi_startup_delay_seconds = 0.0
+            if self.policy.stream_type == "ppi":
+                delay_toggle = _as_bool(time_info.get("apply_ppi_startup_delay"))
+                if delay_toggle is None:
+                    delay_toggle = _as_bool(os.environ.get(ENV_ENABLE_PPI_STARTUP_DELAY))
+                delay_seconds = _as_float_or_none(time_info.get("ppi_startup_delay_seconds"))
+                if delay_seconds is None:
+                    delay_seconds = _as_float_or_none(os.environ.get(ENV_PPI_STARTUP_DELAY_SECONDS))
+                if delay_seconds is None:
+                    delay_seconds = DEFAULT_PPI_STARTUP_DELAY_SECONDS
+                if delay_toggle and session_start is not None and _is_ppi_like_basis(decision, sample_ts_values):
+                    session_start = session_start + pd.to_timedelta(delay_seconds, unit="s")
+                    ppi_startup_delay_applied = True
+                    ppi_startup_delay_seconds = delay_seconds
+
             ppi_ts_candidates = self.policy.build_timestamp_candidates(
                 samples,
                 self.spec.time_field,
@@ -126,19 +196,31 @@ class PolarVerityOfflineNormalizer:
 
                 ts: pd.Timestamp | None = None
                 raw_sample_ts = sample.get(self.spec.time_field) if self.spec.time_field else None
+                timestamp_origin = "missing"
                 if isinstance(raw_sample_ts, int) and (not self.policy.uses_invalid_zero_timestamp_repair or raw_sample_ts > 0):
                     ts = self.alignment.ts_from_ns(int(raw_sample_ts), shift_ns=decision.shift_ns)
+                    if ts is not None:
+                        timestamp_origin = "raw_sample_timestamp"
 
                 if ts is None and self.policy.uses_invalid_zero_timestamp_repair:
                     ts = self.policy.repair_missing_timestamp(sample_idx - 1, sample, ppi_ts_candidates, stream_rate_hz)
+                    if ts is not None:
+                        timestamp_origin = "ppi_repaired_from_neighbors"
 
                 if ts is None and session_start is not None and stream_rate_hz > 0:
                     index = int(sample.get("sample_index")) if isinstance(sample.get("sample_index"), int) else (sample_idx - 1)
-                    if self.policy.cadence_anchor == "end":
+                    if self.policy.stream_type == "ppi":
+                        step = self.policy.field_builder(sample).get("pp_in_ms")
+                        step_seconds = float(step) / 1000.0 if isinstance(step, (int, float)) and step > 0 else 0.0
+                        ts = session_start + pd.to_timedelta(index * step_seconds, unit="s")
+                        timestamp_origin = "ppi_cumulative_from_session_anchor"
+                    elif self.policy.cadence_anchor == "end":
                         reverse_offset = max(len(samples) - 1 - index, 0) / stream_rate_hz
                         ts = session_start - pd.to_timedelta(reverse_offset, unit="s")
+                        timestamp_origin = "cadence_from_end_anchor"
                     else:
                         ts = session_start + pd.to_timedelta(index / stream_rate_hz, unit="s")
+                        timestamp_origin = "cadence_from_start_anchor"
 
                 if ts is None:
                     skipped_samples_count += 1
@@ -165,6 +247,8 @@ class PolarVerityOfflineNormalizer:
                     "alignment_confidence": decision.confidence,
                     "sample_index": sample.get("sample_index") if isinstance(sample.get("sample_index"), int) else (sample_idx - 1),
                     "raw_sample_timestamp_ns": raw_sample_ts,
+                    "timestamp_origin": timestamp_origin,
+                    "timestamp_repair_applied": bool(timestamp_origin != "raw_sample_timestamp"),
                 }
                 row.update(self.policy.field_builder(sample))
                 rows.append(row)
@@ -180,7 +264,10 @@ class PolarVerityOfflineNormalizer:
         end = df["ts_utc"].max() if not df.empty else None
 
         duration = max(float((end - start).total_seconds()), 0.0) if start is not None and end is not None else 0.0
-        expected = max(float(len(df.index) - 1), 0.0) / self.policy.default_rate_hz if not df.empty else 0.0
+        if not df.empty and self.policy.stream_type == "ppi":
+            expected = float(df.get("pp_in_ms", pd.Series(dtype=float)).fillna(0).clip(lower=0).sum()) / 1000.0
+        else:
+            expected = max(float(len(df.index) - 1), 0.0) / self.policy.default_rate_hz if not df.empty else 0.0
         duration_delta = abs(duration - expected)
         duration_warning = None
         if expected > 0 and duration_delta > max(3.0, expected * 0.35):
@@ -198,6 +285,9 @@ class PolarVerityOfflineNormalizer:
         if self.policy.uses_invalid_zero_timestamp_repair and ppi_invalid_or_zero_timestamps > 0:
             warnings.append("ppi invalid_or_zero_timestamps fallback used for timestamp reconstruction")
             confidence = degrade_confidence(confidence)
+
+        if not df.empty:
+            df["alignment_confidence"] = confidence
 
         # Generic single-stream fallback: if resolved timestamps clearly collapse expected cadence window,
         # rebuild a monotonic cadence-aligned timeline anchored to collector/server hints.
@@ -233,9 +323,22 @@ class PolarVerityOfflineNormalizer:
                 anchor_start = collector_start
                 anchor_end = collector_start + pd.to_timedelta(expected, unit="s")
             if anchor_start is not None and anchor_end is not None and anchor_end >= anchor_start:
-                ts_rebuilt = pd.date_range(start=anchor_start, periods=len(df.index), freq=pd.to_timedelta(1.0 / self.policy.default_rate_hz, unit="s"))
+                if self.policy.stream_type == "ppi":
+                    ppi_ms_values = list(df.get("pp_in_ms", pd.Series(dtype=float)).tolist())
+                    ts_rebuilt = _build_ppi_cadence_timestamps(anchor_start, ppi_ms_values)
+                else:
+                    ts_rebuilt = pd.date_range(
+                        start=anchor_start,
+                        periods=len(df.index),
+                        freq=pd.to_timedelta(1.0 / self.policy.default_rate_hz, unit="s"),
+                    )
                 df = df.copy()
                 df["ts_utc"] = ts_rebuilt
+                if self.policy.stream_type == "ppi":
+                    df["timestamp_origin"] = "ppi_cumulative_from_session_anchor"
+                else:
+                    df["timestamp_origin"] = "cadence_reconstruction"
+                df["timestamp_repair_applied"] = True
                 start = pd.to_datetime(df["ts_utc"], utc=True, errors="coerce").min()
                 end = pd.to_datetime(df["ts_utc"], utc=True, errors="coerce").max()
                 duration = max(float((end - start).total_seconds()), 0.0) if start is not None and end is not None else 0.0
@@ -246,7 +349,7 @@ class PolarVerityOfflineNormalizer:
                 warnings.append("timeline_resequenced_from_cadence_anchor")
                 decision = AlignmentDecision(
                     level="L2",
-                    basis="cadence_reconstruction",
+                    basis="ppi_cumulative_reconstruction" if self.policy.stream_type == "ppi" else "cadence_reconstruction",
                     details="timeline_resequenced_from_cadence_anchor",
                     confidence="low",
                     shift_ns=decision.shift_ns,
@@ -286,6 +389,8 @@ class PolarVerityOfflineNormalizer:
             "chunks_count": chunks_count,
             "skipped_samples_count": skipped_samples_count,
             "invalid_or_zero_sample_timestamps_count": ppi_invalid_or_zero_timestamps,
+            "ppi_startup_delay_applied": ppi_startup_delay_applied,
+            "ppi_startup_delay_seconds": ppi_startup_delay_seconds if ppi_startup_delay_applied else 0.0,
             "normalized_time_range": {"start_utc": start_iso, "end_utc": end_iso},
             "duration_sanity": {
                 "duration_seconds": duration,

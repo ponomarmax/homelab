@@ -65,6 +65,8 @@ def finalize_rows(rows: list[dict[str, Any]], *, columns: list[str]) -> pd.DataF
     if df.empty:
         return df
 
-    df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True, errors="coerce")
+    # Support mixed valid ISO-8601 strings within one column, e.g. both
+    # second-level "...Z" and fractional-second "... .830000Z" timestamps.
+    df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True, errors="coerce", format="ISO8601")
     df = df.dropna(subset=["ts_utc"]).sort_values("ts_utc").reset_index(drop=True)
     return df
