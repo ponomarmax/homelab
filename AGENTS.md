@@ -44,3 +44,52 @@ Return only:
 
 ### Suggested commit message
 `type(scope): summary`
+
+
+## On-Demand Handoff Summary Command
+
+When I say: `update content handoff`
+
+Do this:
+1. Analyze work done in the current chat/session.
+2. Analyze commits created during this session (if any).
+3. Synthesize one consolidated update in `docs/content_handoff.md`.
+4. Overwrite only the sections below the template headers; keep one file only.
+
+Use this format:
+
+# Content Handoff
+
+## Scope
+- Session/chat focus:
+- Branch:
+- Time window:
+
+## Commits Considered
+- <sha> <message>
+- <sha> <message>
+
+## Consolidated Technical Changes
+- ...
+
+## Why These Changes Were Made
+- ...
+
+## Validation and Evidence
+- Tests:
+- Runtime checks:
+- Metrics:
+- Artifacts/paths:
+
+## Risks / Trade-offs
+- ...
+
+## Suggested Narrative Deltas (for posts)
+- ...
+- ...
+
+Rules:
+- Summarize at feature/change-set level, not commit-by-commit noise.
+- Be factual, concise, technical.
+- No hype language.
+- Include concrete evidence only.
