@@ -195,7 +195,7 @@ CP1 baseline:
 - mock HR provider tests
 - collector lifecycle tests
 - collector domain model tests
-- `xcodebuild build-for-testing` should compile the iOS app and unit tests without a real device
+- `xcodebuild build-for-testing -workspace apps/ios-collector/ios-collector.xcworkspace -scheme CollectorApp ...` should compile the iOS app and unit tests without a real device
 
 CP2 extension:
 - session metadata creation tests

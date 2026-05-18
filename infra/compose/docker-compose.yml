@@ -81,6 +81,27 @@ services:
     networks:
       - internal
 
+
+  wearable-operator-dashboard:
+    build:
+      context: ${PROJECT_ROOT}/services/visualization
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PIPELINE_API_BASE_URL: ${WEARABLE_OPERATOR_PIPELINE_API_BASE_URL:-http://wearable-pipeline-api:8091}
+      RAW_ROOT: ${WEARABLE_PIPELINE_RAW_ROOT:-/data/wearable/raw}
+      PROCESSED_ROOT: ${WEARABLE_PIPELINE_PROCESSED_ROOT:-/data/wearable/processed}
+    ports:
+      - "${WEARABLE_OPERATOR_DASHBOARD_PORT:-18501}:8501"
+    volumes:
+      - wearable_raw_data:${WEARABLE_PIPELINE_RAW_ROOT:-/data/wearable/raw}:ro
+      - wearable_processed_data:${WEARABLE_PIPELINE_PROCESSED_ROOT:-/data/wearable/processed}:ro
+    depends_on:
+      wearable-pipeline-api:
+        condition: service_started
+    networks:
+      - internal
+
   data-browser:
     image: nginx:1.27-alpine
     entrypoint: ["nginx", "-g", "daemon off;"]

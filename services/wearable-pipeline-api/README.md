@@ -12,6 +12,13 @@ Pipeline flow:
 - `GET /health`
 - `POST /api/v1/pipeline/run`
   - Optional JSON body: `{"session_id": "<session-id>"}` to run a single session only
+- `POST /api/v1/pipeline/trigger`
+  - Body: `{"session_id":"<session-id>","requested_steps":["normalize","window_features","session_summary"]}`
+  - Response includes accepted/rejected steps and optional `dashboard_url`
+- `GET /api/v1/operator/sessions`
+  - Lightweight operator listing with raw/pipeline status
+- `GET /api/v1/operator/sessions/{session_id}`
+  - Operator detail view for a single session
 
 ## Environment
 

@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct WearableCollectorApp: App {
     private let collectorCore: CollectorCore
+    private let runtimeConfiguration: CollectorRuntimeConfiguration
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -24,11 +25,16 @@ struct WearableCollectorApp: App {
             transport: transport,
             uploadConfiguration: configuration.upload
         )
+        runtimeConfiguration = configuration
     }
 
     var body: some Scene {
         WindowGroup {
-            CollectorView(collectorCore: collectorCore)
+            MainCollectorView(
+                collectorCore: collectorCore,
+                pipelineEndpoint: runtimeConfiguration.pipelineEndpoint,
+                dashboardEndpoint: runtimeConfiguration.dashboardEndpoint
+            )
                 .onChange(of: scenePhase) { newPhase in
                     switch newPhase {
                     case .active:

@@ -37,6 +37,7 @@
 		A1000001000000000000001C /* ContractMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001000000000000001F /* ContractMappingTests.swift */; };
 		A1000001000000000000001D /* CollectorRuntimeConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000020 /* CollectorRuntimeConfigurationTests.swift */; };
 		A1000001000000000000001E /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000021 /* TestSupport.swift */; };
+		A10000010000000000000099 /* NightSessionViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000099 /* NightSessionViewModelTests.swift */; };
 		A10000010000000000000022 /* PolarDeviceProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000022 /* PolarDeviceProfile.swift */; };
 		A10000010000000000000023 /* PolarH10OnlineDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000023 /* PolarH10OnlineDefaults.swift */; };
 		A10000010000000000000024 /* PolarVeritySenseOnlineDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000024 /* PolarVeritySenseOnlineDefaults.swift */; };
@@ -44,6 +45,18 @@
 		A10000010000000000000026 /* PolarStreamProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000026 /* PolarStreamProfiles.swift */; };
 		A10000010000000000000027 /* DeviceTimeSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000027 /* DeviceTimeSync.swift */; };
 		A10000010000000000000028 /* OfflineRecording.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000028 /* OfflineRecording.swift */; };
+		A1000001000000000000009A /* CollectorSessionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001000000000000009A /* CollectorSessionModels.swift */; };
+		A1000001000000000000009B /* CollectorCoreOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001000000000000009B /* CollectorCoreOperations.swift */; };
+		A1000001000000000000009C /* CollectorCoreSessionLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001000000000000009C /* CollectorCoreSessionLifecycle.swift */; };
+		A10000010000000000000090 /* SessionOperationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000090 /* SessionOperationState.swift */; };
+		A10000010000000000000091 /* SessionWorkflowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000091 /* SessionWorkflowCoordinator.swift */; };
+		A10000010000000000000092 /* NightSessionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000092 /* NightSessionViewModel.swift */; };
+		A10000010000000000000093 /* MainCollectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000093 /* MainCollectorView.swift */; };
+		A10000010000000000000094 /* SessionControlCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000094 /* SessionControlCard.swift */; };
+		A10000010000000000000095 /* SessionStatusCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000095 /* SessionStatusCard.swift */; };
+		A10000010000000000000096 /* UploadStatusCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000096 /* UploadStatusCard.swift */; };
+		A10000010000000000000097 /* PipelineStatusCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000097 /* PipelineStatusCard.swift */; };
+		A10000010000000000000098 /* DeviceStatusCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010000000000000098 /* DeviceStatusCard.swift */; };
 		A73B1BAE82178FC109A9A2CD /* libPods-CollectorApp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 194AC702E05B377D67F9B776 /* libPods-CollectorApp.a */; };
 /* End PBXBuildFile section */
 
@@ -103,6 +116,19 @@
 		B10000010000000000000026 /* PolarStreamProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Polar/Shared/PolarStreamProfiles.swift; sourceTree = "<group>"; };
 		B10000010000000000000027 /* DeviceTimeSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceTimeSync.swift; sourceTree = "<group>"; };
 		B10000010000000000000028 /* OfflineRecording.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineRecording.swift; sourceTree = "<group>"; };
+		B1000001000000000000009A /* CollectorSessionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectorSessionModels.swift; sourceTree = "<group>"; };
+		B1000001000000000000009B /* CollectorCoreOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectorCoreOperations.swift; sourceTree = "<group>"; };
+		B1000001000000000000009C /* CollectorCoreSessionLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectorCoreSessionLifecycle.swift; sourceTree = "<group>"; };
+		B10000010000000000000099 /* NightSessionViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightSessionViewModelTests.swift; sourceTree = "<group>"; };
+		B10000010000000000000090 /* SessionOperationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionOperationState.swift; sourceTree = "<group>"; };
+		B10000010000000000000091 /* SessionWorkflowCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWorkflowCoordinator.swift; sourceTree = "<group>"; };
+		B10000010000000000000092 /* NightSessionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightSessionViewModel.swift; sourceTree = "<group>"; };
+		B10000010000000000000093 /* MainCollectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainCollectorView.swift; sourceTree = "<group>"; };
+		B10000010000000000000094 /* SessionControlCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionControlCard.swift; sourceTree = "<group>"; };
+		B10000010000000000000095 /* SessionStatusCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStatusCard.swift; sourceTree = "<group>"; };
+		B10000010000000000000096 /* UploadStatusCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadStatusCard.swift; sourceTree = "<group>"; };
+		B10000010000000000000097 /* PipelineStatusCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineStatusCard.swift; sourceTree = "<group>"; };
+		B10000010000000000000098 /* DeviceStatusCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceStatusCard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -158,6 +184,7 @@
 				B1000001000000000000001E /* TransportTests.swift */,
 				B1000001000000000000001F /* ContractMappingTests.swift */,
 				B10000010000000000000020 /* CollectorRuntimeConfigurationTests.swift */,
+				B10000010000000000000099 /* NightSessionViewModelTests.swift */,
 				B10000010000000000000021 /* TestSupport.swift */,
 				B1000001000000000000000F /* MockHeartRateStreamProvider.swift */,
 				B10000010000000000000010 /* MockDeviceAdapter.swift */,
@@ -178,8 +205,13 @@
 			isa = PBXGroup;
 			children = (
 				B10000010000000000000002 /* CollectorCore.swift */,
+				B1000001000000000000009B /* CollectorCoreOperations.swift */,
+				B1000001000000000000009C /* CollectorCoreSessionLifecycle.swift */,
+				B1000001000000000000009A /* CollectorSessionModels.swift */,
 				B1000001000000000000001B /* CollectorSampleDebugExporter.swift */,
 				B1000001000000000000001C /* CollectorRuntimeConfiguration.swift */,
+				B10000010000000000000090 /* SessionOperationState.swift */,
+				B10000010000000000000091 /* SessionWorkflowCoordinator.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -232,6 +264,13 @@
 			isa = PBXGroup;
 			children = (
 				B10000010000000000000011 /* CollectorView.swift */,
+				B10000010000000000000093 /* MainCollectorView.swift */,
+				B10000010000000000000094 /* SessionControlCard.swift */,
+				B10000010000000000000095 /* SessionStatusCard.swift */,
+				B10000010000000000000096 /* UploadStatusCard.swift */,
+				B10000010000000000000097 /* PipelineStatusCard.swift */,
+				B10000010000000000000098 /* DeviceStatusCard.swift */,
+				B10000010000000000000092 /* NightSessionViewModel.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -424,6 +463,9 @@
 			files = (
 				A10000010000000000000001 /* CollectorApp.swift in Sources */,
 				A10000010000000000000002 /* CollectorCore.swift in Sources */,
+				A1000001000000000000009B /* CollectorCoreOperations.swift in Sources */,
+				A1000001000000000000009C /* CollectorCoreSessionLifecycle.swift in Sources */,
+				A1000001000000000000009A /* CollectorSessionModels.swift in Sources */,
 				A10000010000000000000003 /* CollectionMode.swift in Sources */,
 				A10000010000000000000004 /* CollectorDevice.swift in Sources */,
 				A10000010000000000000005 /* CollectorStream.swift in Sources */,
@@ -449,7 +491,16 @@
 				A10000010000000000000026 /* PolarStreamProfiles.swift in Sources */,
 				A10000010000000000000018 /* CollectorSampleDebugExporter.swift in Sources */,
 				A10000010000000000000019 /* CollectorRuntimeConfiguration.swift in Sources */,
+				A10000010000000000000090 /* SessionOperationState.swift in Sources */,
+				A10000010000000000000091 /* SessionWorkflowCoordinator.swift in Sources */,
+				A10000010000000000000092 /* NightSessionViewModel.swift in Sources */,
 				A10000010000000000000011 /* CollectorView.swift in Sources */,
+				A10000010000000000000093 /* MainCollectorView.swift in Sources */,
+				A10000010000000000000094 /* SessionControlCard.swift in Sources */,
+				A10000010000000000000095 /* SessionStatusCard.swift in Sources */,
+				A10000010000000000000096 /* UploadStatusCard.swift in Sources */,
+				A10000010000000000000097 /* PipelineStatusCard.swift in Sources */,
+				A10000010000000000000098 /* DeviceStatusCard.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -462,6 +513,7 @@
 				A1000001000000000000001B /* TransportTests.swift in Sources */,
 				A1000001000000000000001C /* ContractMappingTests.swift in Sources */,
 				A1000001000000000000001D /* CollectorRuntimeConfigurationTests.swift in Sources */,
+				A10000010000000000000099 /* NightSessionViewModelTests.swift in Sources */,
 				A1000001000000000000001E /* TestSupport.swift in Sources */,
 				A1000001000000000000000F /* MockHeartRateStreamProvider.swift in Sources */,
 				A10000010000000000000010 /* MockDeviceAdapter.swift in Sources */,

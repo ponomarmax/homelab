@@ -35,6 +35,7 @@ Implemented in CP2:
 - `CollectionSession`, `StreamDescriptor`, and `UploadChunk` keep the transport-facing model explicit
 - `CollectorChunkBuilder` turns buffered samples into transport-ready chunk payloads
 - `SessionLedgerStore` persists managed session state and pending manifest sync queue
+- `NightSessionViewModel` + `SessionWorkflowCoordinator` provide one-button offline PPI+ACC operational flow
 
 Current stream naming and payload schemas:
 - `hr` -> `polar.hr`
@@ -60,6 +61,8 @@ Collector uses a layered configuration strategy:
 Configured keys:
 - `COLLECTOR_UPLOAD_ENDPOINT` (`String`)  
   Upload destination. If only base URL is provided (for example `http://192.168.0.5:18090/`), collector auto-expands to `/upload-chunk`.
+- `COLLECTOR_PIPELINE_ENDPOINT` (`String`)
+  Pipeline trigger endpoint, for example `http://192.168.0.5:18091/api/v1/pipeline/trigger`.
 - `COLLECTOR_UNASSIGNED_CLUSTER_GAP_SECONDS` (`Number`, optional)
   Time gap threshold (seconds) for clustering unassigned offline recordings. Default is `180`.
 - `COLLECTOR_UPLOAD_FLUSH_INTERVAL_SECONDS` (`Number`, optional)
@@ -123,7 +126,14 @@ xcodebuild test \
   -destination 'platform=iOS Simulator,name=<AVAILABLE_IPHONE_SIMULATOR>'
 ```
 
-If simulator execution is blocked in the current shell environment, `xcodebuild build-for-testing` should still compile the app and test target.
+If simulator execution is blocked in the current shell environment, run workspace-based compile-only:
+
+```bash
+xcodebuild build-for-testing \
+  -workspace apps/ios-collector/ios-collector.xcworkspace \
+  -scheme CollectorApp \
+  -destination 'platform=iOS Simulator,name=<AVAILABLE_IPHONE_SIMULATOR>'
+```
 
 ## Manual Validation
 
@@ -156,6 +166,23 @@ Optional:
   - as one merged session
   - or as multiple sessions by time clusters
 - Session IDs are collector-generated with UTC prefix + short GUID suffix (`S-YYYYMMDD-HHMMSSZ-XXXXXXXX`).
+
+## One-Button Night Session (Operational)
+
+- Start button: `Start Night Session`
+  - connects/selects device if needed
+  - selects offline streams `PPI` + `ACC`
+  - starts offline recording
+- Stop button: `Stop & Sync Session`
+  - stops offline recording
+  - refreshes/lists offline recordings
+  - uploads raw chunks with stable collector session id
+  - triggers pipeline endpoint for the uploaded session
+- Status cards show:
+  - collector session id
+  - backend session id (same id when backend does not return separate id)
+  - pipeline trigger status
+  - optional dashboard/session link
 
 ## Pending Server Sync and Retry (Implemented)
 

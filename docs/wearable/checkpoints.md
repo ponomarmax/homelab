@@ -73,3 +73,15 @@ Break the work into small observable vertical slices.
 Future extension checkpoints:
 - sleep detection extension checkpoints CP14-CP21 are defined in `docs/wearable/sleep_detection_roadmap.md`
 - PPI and ACC extension work must follow that roadmap and remain consistent with raw-first boundaries
+
+## CP14 — Operational Offline PPI+ACC Session Flow
+
+- one-button collector workflow for offline `PPI` + `ACC`:
+  - start session
+  - stop and sync
+  - upload raw chunks
+  - trigger pipeline
+- operator endpoints for session listing/detail:
+  - `/api/v1/operator/sessions`
+  - `/api/v1/operator/sessions/{session_id}`
+- no sleep-stage or ML logic in this checkpoint

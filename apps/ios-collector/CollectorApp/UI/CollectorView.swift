@@ -2,14 +2,28 @@ import SwiftUI
 
 struct CollectorView: View {
     @StateObject private var collectorCore: CollectorCore
+    @StateObject private var nightSessionViewModel: NightSessionViewModel
     @State private var selectedTab: PolarScreenTab = .online
     @State private var pendingDeleteEntry: OfflineRecordingEntry?
     @State private var showDeleteAllConfirmation: Bool = false
     @State private var settingsStream: PolarOfflineStream?
     @State private var expandedSessionIDs: Set<UUID> = []
 
-    init(collectorCore: CollectorCore) {
+    init(collectorCore: CollectorCore, nightSessionViewModel: NightSessionViewModel? = nil) {
         _collectorCore = StateObject(wrappedValue: collectorCore)
+        if let nightSessionViewModel {
+            _nightSessionViewModel = StateObject(wrappedValue: nightSessionViewModel)
+        } else {
+            _nightSessionViewModel = StateObject(
+                wrappedValue: NightSessionViewModel(
+                    coordinator: SessionWorkflowCoordinator(
+                        core: collectorCore,
+                        pipelineEndpoint: nil,
+                        dashboardEndpoint: nil
+                    )
+                )
+            )
+        }
     }
 
     var body: some View {
@@ -163,6 +177,14 @@ struct CollectorView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Offline Recording")
                     .font(.headline)
+                SessionControlCard(viewModel: nightSessionViewModel)
+                SessionStatusCard(viewModel: nightSessionViewModel)
+                UploadStatusCard(message: collectorCore.offlineStatusMessage)
+                PipelineStatusCard(viewModel: nightSessionViewModel)
+                DeviceStatusCard(
+                    deviceName: collectorCore.selectedDevice?.name ?? "Unknown",
+                    batteryText: collectorCore.selectedDeviceBatteryDisplayText()
+                )
                 offlineStatusSection
                 offlineStreamsSection
                 offlineActionsSection
@@ -546,7 +568,7 @@ struct CollectorView: View {
                     ForEach(collectorCore.managedSessions) { session in
                         let pending = collectorCore.pendingManifest(for: session.id)
                         let hasLocalArchive = collectorCore.isManagedSessionArchived(session.id)
-                        let isServerSynced = session.lifecycle == .uploaded && pending == nil
+                        let isServerSynced = session.lifecycle == .uploaded
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Text(session.clientSessionID)

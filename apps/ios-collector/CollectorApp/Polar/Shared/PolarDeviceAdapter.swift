@@ -1147,6 +1147,9 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
                 if errorCode == 1 {
                     return "Failed to \(action): GATT attribute error 1 (likely busy/not ready/already recording).\((suffix))"
                 }
+                if errorCode == 10 {
+                    return "Failed to \(action): GATT attribute error 10 (likely invalid state/recording still active).\((suffix))"
+                }
                 return "Failed to \(action): GATT attribute error \(errorCode).\((suffix))"
             default:
                 return "Failed to \(action): \(bleError.localizedDescription)\((suffix))"
@@ -1155,6 +1158,9 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         let nsError = error as NSError
         if nsError.code == 1 {
             return "Failed to \(action): GATT error 1 (likely busy/not ready/already recording).\((suffix))"
+        }
+        if nsError.code == 10 {
+            return "Failed to \(action): GATT error 10 (likely invalid state/recording still active).\((suffix))"
         }
         return "Failed to \(action): \(error.localizedDescription)\((suffix))"
     }

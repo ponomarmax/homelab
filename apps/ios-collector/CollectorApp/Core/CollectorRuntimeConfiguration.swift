@@ -165,6 +165,8 @@ struct CollectorUploadConfiguration: Equatable, Sendable {
 
 struct CollectorRuntimeConfiguration {
     let uploadEndpoint: URL?
+    let pipelineEndpoint: URL?
+    let dashboardEndpoint: URL?
     let upload: CollectorUploadConfiguration
 
     static func from(
@@ -175,6 +177,12 @@ struct CollectorRuntimeConfiguration {
         let uploadEndpointRawValue = environment["COLLECTOR_UPLOAD_ENDPOINT"]
             ?? (bundleInfo?["COLLECTOR_UPLOAD_ENDPOINT"] as? String)
         let uploadEndpoint = uploadEndpointRawValue.flatMap(parseUploadEndpoint)
+        let pipelineEndpointRawValue = environment["COLLECTOR_PIPELINE_ENDPOINT"]
+            ?? (bundleInfo?["COLLECTOR_PIPELINE_ENDPOINT"] as? String)
+        let pipelineEndpoint = pipelineEndpointRawValue.flatMap(parseServiceEndpoint)
+        let dashboardEndpointRawValue = environment["COLLECTOR_DASHBOARD_ENDPOINT"]
+            ?? (bundleInfo?["COLLECTOR_DASHBOARD_ENDPOINT"] as? String)
+        let dashboardEndpoint = dashboardEndpointRawValue.flatMap(parseServiceEndpoint)
 
         var uploadConfiguration = CollectorUploadConfiguration.default
         if let rawFlushInterval = environment["COLLECTOR_UPLOAD_FLUSH_INTERVAL_SECONDS"],
@@ -207,6 +215,8 @@ struct CollectorRuntimeConfiguration {
 
         return CollectorRuntimeConfiguration(
             uploadEndpoint: uploadEndpoint,
+            pipelineEndpoint: pipelineEndpoint,
+            dashboardEndpoint: dashboardEndpoint,
             upload: uploadConfiguration
         )
     }
@@ -222,6 +232,15 @@ struct CollectorRuntimeConfiguration {
             components.path = "/upload-chunk"
         }
 
+        return components.url
+    }
+
+    private static func parseServiceEndpoint(_ rawValue: String) -> URL? {
+        guard let components = URLComponents(string: rawValue) else { return nil }
+        guard let scheme = components.scheme?.lowercased(), ["http", "https"].contains(scheme) else {
+            return nil
+        }
+        guard let host = components.host, !host.isEmpty else { return nil }
         return components.url
     }
 }

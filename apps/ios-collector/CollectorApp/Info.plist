@@ -20,6 +20,10 @@
 	<string>1</string>
 	<key>COLLECTOR_UPLOAD_ENDPOINT</key>
 	<string>http://192.168.0.5:18090/</string>
+	<key>COLLECTOR_PIPELINE_ENDPOINT</key>
+	<string>http://192.168.0.5:18091/api/v1/pipeline/trigger</string>
+	<key>COLLECTOR_DASHBOARD_ENDPOINT</key>
+	<string>http://192.168.0.5:18501/</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

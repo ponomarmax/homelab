@@ -13,6 +13,23 @@ LinkedIn post idea:
 Date: 2026-05-18
 
 What was done:
+- Stabilized iOS collector quick-session flow by addressing connection race conditions observed on device logs (`SWIFT TASK CONTINUATION MISUSE` with overlapping connect attempts).
+- Added single-flight guards in collector core operations to prevent parallel scan/connect requests during auto-connect and manual actions.
+- Fixed operator-facing pipeline error-message normalization (`is no configured` -> `is not configured`) to avoid confusing status text in UI.
+- Configured pipeline endpoint in app runtime defaults (`COLLECTOR_PIPELINE_ENDPOINT`) so pipeline trigger is available on normal device runs.
+- Added dedicated dashboard endpoint runtime config (`COLLECTOR_DASHBOARD_ENDPOINT`) and mapped pipeline API session links to dashboard UI session-details route.
+- Updated session-link resolution logic so iOS now opens the operator dashboard page (Session Details) instead of raw JSON API payload.
+- Verified workspace-based iOS builds after each change (`xcodebuild -workspace ...`) per project rule.
+
+Key insight:
+For operator UX, pipeline API URLs and dashboard UI URLs must be treated as separate concerns; explicit client-side mapping avoids exposing raw JSON endpoints to non-API workflows.
+
+LinkedIn post idea:
+How to harden a BLE collector workflow: remove async race conditions, keep endpoint config explicit, and convert machine-facing API links into operator-facing dashboard deep links.
+
+Date: 2026-05-18
+
+What was done:
 - Completed a deep Polar Verity Sense offline PPI timestamp investigation and aligned normalization policy to cumulative `ppInMs` reconstruction when raw `timeStamp` is unreliable.
 - Updated wearable pipeline normalization for offline PPI with configurable startup delay controls and quality labeling fields:
   - `pp_error_band` (`strict_lt10ms`, `moderate_10_to_30ms`, `high_gt30ms`, `unknown`)
@@ -299,6 +316,31 @@ Session summary can stay lightweight and deterministic while still being robust 
 LinkedIn post idea:
 How to evolve a deterministic wearable pipeline summary from single-stream HR to multi-stream session-level aggregation without adding non-deterministic logic.
 
+Date: 2026-05-18
+
+What was done:
+- Added modular iOS night/session operational flow components:
+  - `SessionWorkflowCoordinator`
+  - `NightSessionViewModel`
+  - focused status/control cards in collector UI
+- Added one-button operator flow for Polar Verity Sense offline `PPI` + `ACC`:
+  - start recording
+  - stop/sync/upload
+  - pipeline trigger call
+- Added pipeline API trigger endpoint:
+  - `POST /api/v1/pipeline/trigger`
+  - accepted/rejected step reporting
+- Added operator session endpoints:
+  - `GET /api/v1/operator/sessions`
+  - `GET /api/v1/operator/sessions/{session_id}`
+- Added backend tests for trigger and operator listing.
+
+Key insight:
+Operational reliability improved by layering a small workflow coordinator over existing collector core primitives instead of rewriting offline logic.
+
+LinkedIn post idea:
+How to turn a debug offline recording surface into a one-button operational flow while preserving raw-first boundaries.
+
 Date: 2026-04-23
 
 What was done:
@@ -422,3 +464,16 @@ Defining stable transport contracts before implementing services keeps raw inges
 
 LinkedIn post idea:
 How a contract-first boundary makes a wearable data platform easier to debug, extend, and trust before any ML work begins.
+
+Date: 2026-05-18
+
+What was done:
+- Added a new lightweight Python operator dashboard service (`services/visualization`) using Streamlit.
+- Added two operational pages: Session List and Session Details, including stream-level normalized chart rendering with zoom for inspectability.
+- Integrated the dashboard as a dedicated Docker Compose service (`wearable-operator-dashboard`) with read-only mounts for raw/processed wearable data.
+- Hardened `wearable-pipeline-api` operator session listing to skip malformed JSONL lines and avoid full-file scans per stream (first valid line only), improving reliability and latency.
+- Added tests for dashboard data access and for pipeline operator listing behavior with invalid JSONL lines.
+- Deployed dashboard + pipeline updates to server and validated real data paths, including session `a3b4f7a4-c810-4e7a-8152-e9a05dd32b1e`.
+
+Key insight:
+Operational dashboards should tolerate imperfect append-only raw files; list views should use metadata sampling and robust parsing to stay responsive and reliable.

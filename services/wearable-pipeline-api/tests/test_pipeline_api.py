@@ -1316,6 +1316,127 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(len(payload["normalize_runs"]), 1)
         self.assertEqual(payload["normalize_runs"][0]["session_id"], "session-002")
 
+    def test_pipeline_trigger_endpoint_accepts_session_id(self) -> None:
+        write_raw_stream(
+            self.raw_root,
+            session_id="session-trigger-001",
+            stream_type="hr",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-trigger-1",
+                    sequence=1,
+                    stream_type="hr",
+                    payload_schema="polar.hr",
+                    samples=[{"received_at_collector": "2026-04-25T10:00:00.100Z", "hr": 70}],
+                    stream_id="stream-hr-trigger",
+                    session_id="session-trigger-001",
+                )
+            ],
+        )
+        settings = Settings(
+            host="127.0.0.1",
+            port=8091,
+            raw_root=self.raw_root,
+            processed_root=self.processed_root,
+            pipeline_state_root=self.state_root,
+            log_level="INFO",
+        )
+        client = TestClient(create_app(settings))
+        response = client.post(
+            "/api/v1/pipeline/trigger",
+            json={"session_id": "session-trigger-001", "requested_steps": ["normalize"]},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["accepted"], True)
+        self.assertEqual(payload["session_id"], "session-trigger-001")
+        self.assertIn("normalize", payload["accepted_steps"])
+
+    def test_pipeline_trigger_rejects_empty_supported_steps(self) -> None:
+        settings = Settings(
+            host="127.0.0.1",
+            port=8091,
+            raw_root=self.raw_root,
+            processed_root=self.processed_root,
+            pipeline_state_root=self.state_root,
+            log_level="INFO",
+        )
+        client = TestClient(create_app(settings))
+        response = client.post(
+            "/api/v1/pipeline/trigger",
+            json={"session_id": "session-trigger-002", "requested_steps": ["unknown_step"]},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["accepted"], False)
+        self.assertEqual(payload["accepted_steps"], [])
+        self.assertIn("unknown_step", payload["rejected_steps"])
+
+    def test_operator_session_listing_returns_sessions(self) -> None:
+        write_raw_stream(
+            self.raw_root,
+            session_id="session-list-001",
+            stream_type="acc",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-list-1",
+                    sequence=1,
+                    stream_type="acc",
+                    payload_schema="polar.offline.acc",
+                    stream_id="stream-acc-list",
+                    session_id="session-list-001",
+                    payload={"type": "ACC", "source": "polar_verity_sense_offline", "samples": []},
+                )
+            ],
+        )
+        settings = Settings(
+            host="127.0.0.1",
+            port=8091,
+            raw_root=self.raw_root,
+            processed_root=self.processed_root,
+            pipeline_state_root=self.state_root,
+            log_level="INFO",
+        )
+        client = TestClient(create_app(settings))
+        response = client.get("/api/v1/operator/sessions")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(any(item["session_id"] == "session-list-001" for item in payload["sessions"]))
+
+    def test_operator_session_listing_skips_invalid_jsonl_lines(self) -> None:
+        raw_path = write_raw_stream(
+            self.raw_root,
+            session_id="session-list-invalid-001",
+            stream_type="acc",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-list-invalid-1",
+                    sequence=1,
+                    stream_type="acc",
+                    payload_schema="polar.offline.acc",
+                    stream_id="stream-acc-invalid",
+                    session_id="session-list-invalid-001",
+                    payload={"type": "ACC", "source": "polar_verity_sense_offline", "samples": []},
+                )
+            ],
+        )
+        with raw_path.open("a", encoding="utf-8") as handle:
+            handle.write("{invalid_json_line}\n")
+
+        settings = Settings(
+            host="127.0.0.1",
+            port=8091,
+            raw_root=self.raw_root,
+            processed_root=self.processed_root,
+            pipeline_state_root=self.state_root,
+            log_level="INFO",
+        )
+        client = TestClient(create_app(settings))
+        response = client.get("/api/v1/operator/sessions")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(any(item["session_id"] == "session-list-invalid-001" for item in payload["sessions"]))
+
 
 @unittest.skipUnless(DEPS_AVAILABLE, "pipeline dependencies are not installed")
 class PolarVeritySenseOfflinePpiTimestampTests(unittest.TestCase):
