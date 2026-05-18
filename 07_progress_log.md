@@ -10,6 +10,25 @@ LinkedIn post idea:
 ---
 
 ## Entries
+Date: 2026-05-18
+
+What was done:
+- Completed a deep Polar Verity Sense offline PPI timestamp investigation and aligned normalization policy to cumulative `ppInMs` reconstruction when raw `timeStamp` is unreliable.
+- Updated wearable pipeline normalization for offline PPI with configurable startup delay controls and quality labeling fields:
+  - `pp_error_band` (`strict_lt10ms`, `moderate_10_to_30ms`, `high_gt30ms`, `unknown`)
+  - `sample_quality_tier`, blocker/contact quality flags, timestamp-origin provenance.
+- Fixed mixed ISO parsing in normalized row finalization to prevent valid fractional-second timestamps from being dropped.
+- Added dedicated device/stream-specific tests for Verity Sense offline PPI timestamp behavior (monotonic raw timestamps and zero-reset sequences).
+- Deployed updated `wearable-pipeline-api` and reran session `a3b4f7a4-c810-4e7a-8152-e9a05dd32b1e`; verified server report now uses `L2` + `ppi_cumulative_reconstruction`.
+- Built an interactive Plotly notebook version for time-alignment exploration and fixed Plotly datetime vline compatibility issues.
+- Added notebook guards to prevent misleading canonical plots when local cache is stale, then refreshed local cached normalized/report files from server.
+
+Key insight:
+For Verity Sense offline PPI, robust timeline reconstruction requires treating `ppInMs` as the primary event-timing signal and treating raw/metadata time hints as anchors with explicit trust rules, not as guaranteed per-sample UTC.
+
+LinkedIn post idea:
+How to stabilize wearable PPI timelines when device timestamps are inconsistent: anchor selection, cumulative reconstruction, quality-tier filtering, and deployment-grade validation.
+
 Date: 2026-05-06
 
 What was done:
