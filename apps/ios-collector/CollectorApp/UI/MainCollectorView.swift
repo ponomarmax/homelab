@@ -3,7 +3,6 @@ import SwiftUI
 struct MainCollectorView: View {
     @StateObject private var collectorCore: CollectorCore
     @StateObject private var nightSessionViewModel: NightSessionViewModel
-    @StateObject private var quickSessionViewModel: NightSessionViewModel
 
     init(collectorCore: CollectorCore, pipelineEndpoint: URL?, dashboardEndpoint: URL?) {
         _collectorCore = StateObject(wrappedValue: collectorCore)
@@ -13,7 +12,6 @@ struct MainCollectorView: View {
             dashboardEndpoint: dashboardEndpoint
         )
         _nightSessionViewModel = StateObject(wrappedValue: NightSessionViewModel(coordinator: workflow))
-        _quickSessionViewModel = StateObject(wrappedValue: NightSessionViewModel(coordinator: workflow))
     }
 
     var body: some View {
@@ -23,7 +21,7 @@ struct MainCollectorView: View {
                     Label("Classic", systemImage: "list.bullet.rectangle")
                 }
 
-            QuickSessionTestView(collectorCore: collectorCore, viewModel: quickSessionViewModel)
+            QuickSessionTestView(collectorCore: collectorCore, viewModel: nightSessionViewModel)
                 .tabItem {
                     Label("Quick Session (Test)", systemImage: "bolt.heart")
                 }
@@ -63,6 +61,13 @@ private struct QuickSessionTestView: View {
 
                 GroupBox("Connection") {
                     VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            if collectorCore.isScanningDevices || collectorCore.isConnectingDevice {
+                                ProgressView().controlSize(.small)
+                            }
+                            Text(connectionStatusLine)
+                                .font(.caption)
+                        }
                         Text("Status: \(collectorCore.status.displayName)")
                             .font(.caption)
                         Text("Device: \(collectorCore.selectedDevice?.name ?? "Not selected")")
@@ -75,12 +80,41 @@ private struct QuickSessionTestView: View {
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
+                        if let error = collectorCore.lastErrorMessage, !error.isEmpty {
+                            Text("Last error: \(error)")
+                                .font(.caption2)
+                                .foregroundStyle(.red)
+                        }
+                        Button("Retry auto-connect") {
+                            Task { await collectorCore.autoConnectToRememberedDevice() }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(collectorCore.isScanningDevices || collectorCore.isConnectingDevice)
                     }
                 }
 
                 SessionControlCard(viewModel: viewModel)
                 SessionStatusCard(viewModel: viewModel)
+                UploadStatusCard(collectorCore: collectorCore)
                 PipelineStatusCard(viewModel: viewModel)
+                GroupBox("Logs") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button("Prepare log export") {
+                            collectorCore.prepareLogExportFile()
+                        }
+                        .buttonStyle(.bordered)
+                        if let exportURL = collectorCore.logExportFileURL {
+                            ShareLink(item: exportURL) {
+                                Text("Share snapshot log")
+                            }
+                        }
+                        if let persistentURL = collectorCore.persistentLogFileURL {
+                            ShareLink(item: persistentURL) {
+                                Text("Share full app log")
+                            }
+                        }
+                    }
+                }
 
                 if let dashboardURL = viewModel.dashboardURL, let url = URL(string: dashboardURL) {
                     Link("Open Session URL", destination: url)
@@ -97,5 +131,24 @@ private struct QuickSessionTestView: View {
                 await collectorCore.autoConnectToRememberedDevice()
             }
         }
+    }
+
+    private var connectionStatusLine: String {
+        if collectorCore.isScanningDevices {
+            return "Scanning for remembered device..."
+        }
+        if collectorCore.isConnectingDevice {
+            return "Connecting to device..."
+        }
+        if collectorCore.status == .connected {
+            return "Connected"
+        }
+        if collectorCore.selectedDevice != nil {
+            return "Device selected, ready to connect"
+        }
+        if collectorCore.rememberedDevice != nil {
+            return "Waiting for remembered device advertisement"
+        }
+        return "No remembered device configured"
     }
 }

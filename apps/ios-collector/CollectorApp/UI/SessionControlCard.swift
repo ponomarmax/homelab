@@ -11,6 +11,7 @@ struct SessionControlCard: View {
                 Task { await viewModel.onPrimaryButtonTapped() }
             }
             .buttonStyle(.borderedProminent)
+            .disabled(viewModel.isActionInFlight)
         }
     }
 }

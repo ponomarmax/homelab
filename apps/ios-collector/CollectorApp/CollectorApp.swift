@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 @main
 struct WearableCollectorApp: App {
@@ -13,19 +14,41 @@ struct WearableCollectorApp: App {
             arguments: ProcessInfo.processInfo.arguments,
             bundleInfo: Bundle.main.infoDictionary
         )
+        let resolvedUserID = Self.resolveCollectorUserID()
+        let uploadConfiguration = CollectorUploadConfiguration(
+            uploadFlushIntervalSeconds: configuration.upload.uploadFlushIntervalSeconds,
+            defaultSampleCountThreshold: configuration.upload.defaultSampleCountThreshold,
+            retry: configuration.upload.retry,
+            streamConfigurations: configuration.upload.streamConfigurations,
+            userIDHeaderValue: resolvedUserID,
+            streamProfiles: configuration.upload.streamProfiles,
+            requestTimeoutSeconds: configuration.upload.requestTimeoutSeconds
+        )
         let adapter: CollectorDeviceAdapter = PolarDeviceAdapter()
 
         let transport = CollectorHTTPTransport(
             uploadEndpoint: configuration.uploadEndpoint,
-            uploadConfiguration: configuration.upload
+            uploadConfiguration: uploadConfiguration
         )
 
         collectorCore = CollectorCore(
             adapter: adapter,
             transport: transport,
-            uploadConfiguration: configuration.upload
+            uploadConfiguration: uploadConfiguration
         )
         runtimeConfiguration = configuration
+    }
+
+    private static func resolveCollectorUserID() -> String {
+        if let explicit = ProcessInfo.processInfo.environment["COLLECTOR_USER_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !explicit.isEmpty {
+            return explicit
+        }
+        if let byVendor = UIDevice.current.identifierForVendor?.uuidString.lowercased(),
+           !byVendor.isEmpty {
+            return byVendor
+        }
+        return "ios-unknown-device"
     }
 
     var body: some Scene {

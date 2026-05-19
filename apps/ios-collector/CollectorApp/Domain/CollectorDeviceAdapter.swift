@@ -26,6 +26,10 @@ protocol CollectorDeviceAdapter: DeviceStatusProvider {
     func listOfflineRecordings() async throws -> [OfflineRecordingEntry]
     func removeOfflineRecording(path: String) async throws
     func prepareOfflineUploadBatches(allowedPaths: Set<String>?) async -> OfflineUploadPreparationResult
+    func prepareOfflineUploadBatches(
+        allowedPaths: Set<String>?,
+        onProgress: @escaping @Sendable (OfflineUploadFetchProgress) -> Void
+    ) async -> OfflineUploadPreparationResult
     func heartRateStreamProvider() -> HeartRateStreamProviding?
     func readDeviceTime(mode: CollectionMode) async -> DeviceTimeActionResult
     func syncDeviceTimeToPhone(mode: CollectionMode) async -> DeviceTimeActionResult
@@ -85,6 +89,36 @@ extension CollectorDeviceAdapter {
 
     func prepareOfflineUploadBatches(allowedPaths: Set<String>? = nil) async -> OfflineUploadPreparationResult {
         OfflineUploadPreparationResult(batches: [], messagesByStream: [:])
+    }
+
+    func prepareOfflineUploadBatches(
+        allowedPaths: Set<String>? = nil,
+        onProgress: @escaping @Sendable (OfflineUploadFetchProgress) -> Void
+    ) async -> OfflineUploadPreparationResult {
+        onProgress(
+            OfflineUploadFetchProgress(
+                processedEntries: 0,
+                totalEntries: 0,
+                processedBytes: 0,
+                totalBytes: nil,
+                currentStream: nil,
+                currentPath: nil,
+                stage: "started"
+            )
+        )
+        let result = await prepareOfflineUploadBatches(allowedPaths: allowedPaths)
+        onProgress(
+            OfflineUploadFetchProgress(
+                processedEntries: result.batches.count,
+                totalEntries: result.batches.count,
+                processedBytes: 0,
+                totalBytes: nil,
+                currentStream: nil,
+                currentPath: nil,
+                stage: "completed"
+            )
+        )
+        return result
     }
 
     var deviceStatusCapabilities: [DeviceStatusCapability] { [] }

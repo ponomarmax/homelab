@@ -12,6 +12,8 @@ final class SessionWorkflowCoordinator: NightSessionCoordinating {
     private let core: CollectorCore
     private let pipelineEndpoint: URL?
     private let dashboardEndpoint: URL?
+    private let pipelineRequestTimeoutSeconds: TimeInterval = 30
+    private let pipelineTriggerMaxAttempts: Int = 3
 
     init(core: CollectorCore, pipelineEndpoint: URL?, dashboardEndpoint: URL?) {
         self.core = core
@@ -84,17 +86,14 @@ final class SessionWorkflowCoordinator: NightSessionCoordinating {
         var request = URLRequest(url: pipelineEndpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 10
+        request.timeoutInterval = pipelineRequestTimeoutSeconds
         let body: [String: Any] = [
             "session_id": sessionID,
             "requested_steps": ["normalize", "window_features", "session_summary"]
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw WorkflowError.failed("Pipeline trigger request failed")
-        }
+        let data = try await performPipelineTriggerRequestWithRetry(request: request)
 
         guard
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -155,6 +154,31 @@ final class SessionWorkflowCoordinator: NightSessionCoordinating {
         components.path = "/"
         components.query = nil
         return components.url
+    }
+
+    private func performPipelineTriggerRequestWithRetry(request: URLRequest) async throws -> Data {
+        var lastError: Error?
+        for attempt in 1...pipelineTriggerMaxAttempts {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                    throw WorkflowError.failed("Pipeline trigger request failed")
+                }
+                return data
+            } catch {
+                lastError = error
+                let shouldRetryTimeout = (error as? URLError)?.code == .timedOut
+                if !shouldRetryTimeout || attempt == pipelineTriggerMaxAttempts {
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 700_000_000)
+            }
+        }
+
+        if let urlError = lastError as? URLError, urlError.code == .timedOut {
+            throw WorkflowError.failed("Pipeline trigger timed out. Please retry.")
+        }
+        throw WorkflowError.failed(lastError?.localizedDescription ?? "Pipeline trigger request failed")
     }
 
     enum WorkflowError: LocalizedError {

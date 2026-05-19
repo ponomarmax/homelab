@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 extension CollectorCore {
     func autoConnectToRememberedDevice() async {
@@ -848,8 +849,13 @@ extension CollectorCore {
     }
 
     func uploadOfflineRecordings() async {
+        beginBackgroundTaskIfNeeded(name: "offline-upload")
+        defer { endBackgroundTaskIfNeeded() }
         guard beginOfflineOperation(.uploading, lifecycle: .uploading, statusMessage: "Uploading offline recordings...") else { return }
-        defer { completeOfflineOperation() }
+        defer {
+            offlineFetchProgress = nil
+            completeOfflineOperation()
+        }
         guard adapter.connectionState == .connected else {
             offlineLifecycleState = .disconnected
             offlineStatusMessage = "Device disconnected"
@@ -861,7 +867,29 @@ extension CollectorCore {
         for stream in selectedOfflineStreams {
             offlineStreamRunStates[stream] = .fetching
         }
-        let preparation = await adapter.prepareOfflineUploadBatches(allowedPaths: nil)
+        let preparation = await adapter.prepareOfflineUploadBatches(allowedPaths: nil) { [weak self] progress in
+            Task { @MainActor in
+                guard let self else { return }
+                self.offlineFetchProgress = progress
+                if let stream = progress.currentStream {
+                    self.offlineStreamRunMessages[stream] = "Reading file from device (\(progress.processedEntries)/\(max(progress.totalEntries, 1)))"
+                }
+                let processed = progress.processedEntries
+                let total = max(progress.totalEntries, 1)
+                let percent = Int((Double(processed) / Double(total)) * 100.0)
+                let bytesSuffix: String
+                if let totalBytes = progress.totalBytes, totalBytes > 0 {
+                    bytesSuffix = " • \(progress.processedBytes)/\(totalBytes) bytes"
+                } else {
+                    bytesSuffix = ""
+                }
+                self.offlineStatusMessage = "Fetching offline recordings... \(processed)/\(progress.totalEntries) (\(percent)%)\(bytesSuffix)"
+                self.log(
+                    "offline_fetch_progress stage=\(progress.stage) processed=\(progress.processedEntries)/\(progress.totalEntries) bytes=\(progress.processedBytes)/\(progress.totalBytes ?? 0) stream=\(progress.currentStream?.rawValue ?? "n/a") path=\(progress.currentPath ?? "n/a")",
+                    category: "offline-upload"
+                )
+            }
+        }
         offlineStreamRunMessages.merge(
             preparation.messagesByStream,
             uniquingKeysWith: { _, new in new }
@@ -905,6 +933,7 @@ extension CollectorCore {
         bufferedSamplesCount = bufferedSampleTotalCount()
 
         offlineStatusMessage = "Uploading chunks..."
+        log("offline_upload_stage=server_upload_start batches=\(preparation.batches.count)", category: "offline-upload")
         for stream in selectedOfflineStreams {
             offlineStreamRunStates[stream] = .uploading
         }
@@ -968,7 +997,24 @@ extension CollectorCore {
         var sourceLabel = "local archive"
         if batches.isEmpty {
             sourceLabel = "device files"
-            let fetched = await adapter.prepareOfflineUploadBatches(allowedPaths: allowedPaths)
+            managedSessionUploadStatusByID[id] = "Reading files from device..."
+            log("session_upload_stage=device_read_start session=\(session.clientSessionID) files=\(allowedPaths.count)", category: "session")
+            let fetched = await adapter.prepareOfflineUploadBatches(allowedPaths: allowedPaths) { [weak self] progress in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.offlineFetchProgress = progress
+                    let total = max(progress.totalEntries, 1)
+                    let percent = Int((Double(progress.processedEntries) / Double(total)) * 100.0)
+                    self.managedSessionUploadStatusByID[id] = "Reading files from device... \(progress.processedEntries)/\(progress.totalEntries) (\(percent)%)"
+                    if let stream = progress.currentStream {
+                        self.offlineStreamRunMessages[stream] = "Session read: \(progress.processedEntries)/\(progress.totalEntries)"
+                    }
+                    self.log(
+                        "session_upload_fetch_progress session=\(session.clientSessionID) stage=\(progress.stage) processed=\(progress.processedEntries)/\(progress.totalEntries) bytes=\(progress.processedBytes)/\(progress.totalBytes ?? 0) stream=\(progress.currentStream?.rawValue ?? "n/a") path=\(progress.currentPath ?? "n/a")",
+                        category: "session"
+                    )
+                }
+            }
             batches = fetched.batches
             if !batches.isEmpty {
                 offlineSessionArchiveStore.saveBatches(
@@ -977,7 +1023,12 @@ extension CollectorCore {
                     startedAtUTC: session.startedAtUTC,
                     batches: batches
                 )
+                managedSessionUploadStatusByID[id] = "Saved locally (\(batches.count) files)"
+                log("session_upload_stage=local_archive_saved session=\(session.clientSessionID) batches=\(batches.count)", category: "session")
             }
+        } else {
+            managedSessionUploadStatusByID[id] = "Loaded from local archive (\(batches.count) files)"
+            log("session_upload_stage=local_archive_read session=\(session.clientSessionID) batches=\(batches.count)", category: "session")
         }
         let preparation = OfflineUploadPreparationResult(batches: batches, messagesByStream: [:])
         let streamsPrepared = preparation.batches.map(\.stream.transportType).joined(separator: ",")
@@ -994,6 +1045,7 @@ extension CollectorCore {
             return
         }
         managedSessionUploadStatusByID[id] = "Uploading (\(sourceLabel))..."
+        log("session_upload_stage=server_upload_start session=\(session.clientSessionID) source=\(sourceLabel) batches=\(preparation.batches.count)", category: "session")
 
         activeSession = CollectionSession(
             sessionID: session.id,
@@ -1004,7 +1056,7 @@ extension CollectorCore {
             supportedStreams: adapter.availableStreams
         )
 
-        for batch in preparation.batches {
+        for (index, batch) in preparation.batches.enumerated() {
             if streamDescriptorsByType[batch.stream] == nil {
                 streamDescriptorsByType[batch.stream] = transport.makeStreamDescriptor(
                     for: batch.stream,
@@ -1017,15 +1069,25 @@ extension CollectorCore {
             if lastFlushAtUTCByStream[batch.stream] == nil {
                 lastFlushAtUTCByStream[batch.stream] = nowProvider()
             }
-            var samples = bufferedSamplesByStream[batch.stream] ?? []
-            samples.append(contentsOf: batch.samples)
-            bufferedSamplesByStream[batch.stream] = samples
+
+            managedSessionUploadStatusByID[id] = "Uploading batch \(index + 1)/\(preparation.batches.count) (\(batch.stream.transportType))..."
+            log(
+                "session_upload_stage=batch_enqueue session=\(session.clientSessionID) batch=\(index + 1)/\(preparation.batches.count) stream=\(batch.stream.transportType) samples=\(batch.samples.count)",
+                category: "session"
+            )
+
+            // Keep memory bounded: enqueue and flush one batch at a time instead of aggregating all batches in RAM.
+            bufferedSamplesByStream[batch.stream] = batch.samples
             if let context = batch.timeContext {
                 pendingTimeContextByStream[batch.stream] = context
             }
+            bufferedSamplesCount = bufferedSampleTotalCount()
+            await flushAndUploadAllBufferedSamples(trigger: .manual)
+
+            if uploadStatus == .failure {
+                break
+            }
         }
-        bufferedSamplesCount = bufferedSampleTotalCount()
-        await flushAndUploadAllBufferedSamples(trigger: .manual)
         if uploadStatus == .success {
             updateManagedSessionLifecycle(
                 id: session.id,
@@ -1035,6 +1097,7 @@ extension CollectorCore {
             )
             managedSessionUploadStatusByID[id] = "Uploaded to server"
             managedSessionUploadStatusMessage = "Uploaded \(session.clientSessionID)"
+            log("session_upload_stage=server_upload_done session=\(session.clientSessionID)", category: "session")
             await retryPendingManifest(for: session.id)
         } else if uploadStatus == .failure {
             updateManagedSessionLifecycle(
@@ -1045,10 +1108,13 @@ extension CollectorCore {
             )
             managedSessionUploadStatusByID[id] = "Upload failed, local copy kept"
             managedSessionUploadStatusMessage = "Upload failed for \(session.clientSessionID)"
+            log("session_upload_stage=server_upload_failed session=\(session.clientSessionID)", level: .error, category: "session")
         } else {
             managedSessionUploadStatusByID[id] = "Upload completed with mixed result"
             managedSessionUploadStatusMessage = "Mixed upload result for \(session.clientSessionID)"
+            log("session_upload_stage=server_upload_mixed session=\(session.clientSessionID)", level: .warning, category: "session")
         }
+        offlineFetchProgress = nil
     }
 
     func deleteOfflineRecording(_ entry: OfflineRecordingEntry) async {
@@ -1932,6 +1998,33 @@ extension CollectorCore {
         if eventLogs.count > 1000 {
             eventLogs.removeFirst(eventLogs.count - 1000)
         }
+        appendToPersistentLog(line)
+    }
+
+    private func appendToPersistentLog(_ line: String) {
+        if persistentLogFileHandle == nil {
+            let fileURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("collector-app-events.log")
+            if !FileManager.default.fileExists(atPath: fileURL.path) {
+                FileManager.default.createFile(atPath: fileURL.path, contents: nil)
+            }
+            do {
+                let handle = try FileHandle(forWritingTo: fileURL)
+                try handle.seekToEnd()
+                persistentLogFileHandle = handle
+                persistentLogFileURL = fileURL
+            } catch {
+                return
+            }
+        }
+
+        guard let persistentLogFileHandle else { return }
+        guard let data = (line + "\n").data(using: .utf8) else { return }
+        do {
+            try persistentLogFileHandle.write(contentsOf: data)
+        } catch {
+            // Ignore write failures to keep main flow unaffected.
+        }
     }
 
     func bufferedSampleTotalCount() -> Int {
@@ -1980,4 +2073,38 @@ extension CollectorCore {
         }
     }
 
+}
+
+@MainActor
+private extension CollectorCore {
+    func runWithBackgroundTask<T>(
+        name: String,
+        operation: @escaping @MainActor () async -> T
+    ) async -> T {
+        beginBackgroundTaskIfNeeded(name: name)
+        defer { endBackgroundTaskIfNeeded() }
+        return await operation()
+    }
+
+    func beginBackgroundTaskIfNeeded(name: String) {
+        guard backgroundTaskID == .invalid else { return }
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            Task { @MainActor in
+                self?.log("Background task expired: \(name)", level: .warning, category: "lifecycle")
+                self?.endBackgroundTaskIfNeeded()
+            }
+        }
+        if backgroundTaskID != .invalid {
+            log("Background task started: \(name)", category: "lifecycle")
+        } else {
+            log("Background task unavailable: \(name)", level: .warning, category: "lifecycle")
+        }
+    }
+
+    func endBackgroundTaskIfNeeded() {
+        guard backgroundTaskID != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTaskID)
+        backgroundTaskID = .invalid
+        log("Background task ended", category: "lifecycle")
+    }
 }

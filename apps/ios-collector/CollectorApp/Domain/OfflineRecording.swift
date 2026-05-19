@@ -150,6 +150,16 @@ struct OfflineUploadPreparationResult: Equatable, Sendable {
     let messagesByStream: [PolarOfflineStream: String]
 }
 
+struct OfflineUploadFetchProgress: Equatable, Sendable {
+    let processedEntries: Int
+    let totalEntries: Int
+    let processedBytes: UInt64
+    let totalBytes: UInt64?
+    let currentStream: PolarOfflineStream?
+    let currentPath: String?
+    let stage: String
+}
+
 struct UnassignedRecordingGroup: Identifiable, Equatable, Sendable {
     let id: String
     let entries: [OfflineRecordingEntry]

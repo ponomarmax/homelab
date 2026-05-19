@@ -179,7 +179,7 @@ struct CollectorView: View {
                     .font(.headline)
                 SessionControlCard(viewModel: nightSessionViewModel)
                 SessionStatusCard(viewModel: nightSessionViewModel)
-                UploadStatusCard(message: collectorCore.offlineStatusMessage)
+                UploadStatusCard(collectorCore: collectorCore)
                 PipelineStatusCard(viewModel: nightSessionViewModel)
                 DeviceStatusCard(
                     deviceName: collectorCore.selectedDevice?.name ?? "Unknown",
@@ -719,6 +719,26 @@ struct CollectorView: View {
     private var logsCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Logs").font(.headline)
+            HStack(spacing: 8) {
+                Button("Prepare log export") {
+                    collectorCore.prepareLogExportFile()
+                }
+                .buttonStyle(.bordered)
+
+                if let exportURL = collectorCore.logExportFileURL {
+                    ShareLink(item: exportURL) {
+                        Text("Share snapshot log")
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if let persistentURL = collectorCore.persistentLogFileURL {
+                    ShareLink(item: persistentURL) {
+                        Text("Share full app log")
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
             if collectorCore.eventLogs.isEmpty {
                 Text("No logs yet").font(.footnote).foregroundStyle(.secondary)
             } else {

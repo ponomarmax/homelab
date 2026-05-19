@@ -10,6 +10,22 @@ LinkedIn post idea:
 ---
 
 ## Entries
+Date: 2026-05-19
+
+What was done:
+- Improved iOS collector upload observability across Classic and Quick Session modes with a shared upload status card that now shows stage-level and per-stream progress for offline/session uploads.
+- Added explicit upload-stage signaling for managed session uploads: device read progress, local archive save/load status, and server upload stage/status.
+- Added always-on in-app log persistence (`collector-app-events.log`) plus UI actions to export/share both snapshot logs and full persistent logs without requiring debug mode.
+- Investigated and fixed `SWIFT TASK CONTINUATION MISUSE` for `offlineRecordingSettings(for:)` by isolating its Rx subscription lifecycle from other stream capability operations.
+- Reduced memory pressure risk during managed session uploads by switching from all-batches-in-memory buffering to one-batch-at-a-time enqueue/flush/upload flow.
+- Rebuilt workspace after each fix cycle and confirmed successful build.
+
+Key insight:
+Long offline uploads need both bounded memory behavior and explicit multi-stage visibility (device read -> local save -> server upload); either one missing makes failures look like silent hangs.
+
+LinkedIn post idea:
+How to make BLE offline upload flows trustworthy on iOS: stage-aware UX, always-on exportable logs, continuation-safety fixes, and bounded-memory batch uploads.
+
 Date: 2026-05-18
 
 What was done:

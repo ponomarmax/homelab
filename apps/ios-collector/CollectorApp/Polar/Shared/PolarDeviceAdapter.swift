@@ -236,6 +236,7 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
     private var timeSetupDisposable: Disposable?
     private var timeReadbackDisposable: Disposable?
     private var streamCapabilitiesDisposable: Disposable?
+    private var offlineSettingsDisposable: Disposable?
     private var hrCapabilitiesFallbackDisposable: Disposable?
 
     private var batteryPollingTask: Task<Void, Never>?
@@ -532,6 +533,8 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         timeReadbackDisposable = nil
         streamCapabilitiesDisposable?.dispose()
         streamCapabilitiesDisposable = nil
+        offlineSettingsDisposable?.dispose()
+        offlineSettingsDisposable = nil
         hrCapabilitiesFallbackDisposable?.dispose()
         hrCapabilitiesFallbackDisposable = nil
         streamCapabilitiesRetryWorkItem?.cancel()
@@ -694,12 +697,18 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         }
         do {
             let rawSettings = try await withCheckedThrowingContinuation { continuation in
-                streamCapabilitiesDisposable?.dispose()
-                streamCapabilitiesDisposable = api.requestOfflineRecordingSettings(selectedPolarIdentifier, feature: dataType(for: stream))
+                offlineSettingsDisposable?.dispose()
+                offlineSettingsDisposable = api.requestOfflineRecordingSettings(selectedPolarIdentifier, feature: dataType(for: stream))
                     .observe(on: MainScheduler.asyncInstance)
                     .subscribe(
-                        onSuccess: { settings in continuation.resume(returning: settings) },
-                        onFailure: { error in continuation.resume(throwing: error) }
+                        onSuccess: { [weak self] settings in
+                            self?.offlineSettingsDisposable = nil
+                            continuation.resume(returning: settings)
+                        },
+                        onFailure: { [weak self] error in
+                            self?.offlineSettingsDisposable = nil
+                            continuation.resume(throwing: error)
+                        }
                     )
             }
             let options = Self.mapSettingsOptions(from: rawSettings)
@@ -874,6 +883,13 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
     }
 
     func prepareOfflineUploadBatches(allowedPaths: Set<String>? = nil) async -> OfflineUploadPreparationResult {
+        await prepareOfflineUploadBatches(allowedPaths: allowedPaths) { _ in }
+    }
+
+    func prepareOfflineUploadBatches(
+        allowedPaths: Set<String>? = nil,
+        onProgress: @escaping @Sendable (OfflineUploadFetchProgress) -> Void
+    ) async -> OfflineUploadPreparationResult {
         guard let selectedPolarIdentifier else {
             return OfflineUploadPreparationResult(
                 batches: [],
@@ -920,6 +936,24 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
         var batches: [OfflineUploadBatch] = []
         var messagesByStream: [PolarOfflineStream: String] = [:]
         let fetchStartedAt = Date()
+        let totalEntries = selectedEntries.count
+        let totalBytes = selectedEntries.reduce(UInt64(0)) { partial, entry in
+            partial + UInt64(entry.size)
+        }
+        var processedEntries = 0
+        var processedBytes: UInt64 = 0
+
+        onProgress(
+            OfflineUploadFetchProgress(
+                processedEntries: 0,
+                totalEntries: totalEntries,
+                processedBytes: 0,
+                totalBytes: totalEntries > 0 ? totalBytes : nil,
+                currentStream: nil,
+                currentPath: nil,
+                stage: "started"
+            )
+        )
 
         for entry in entries {
             if let allowedPaths, !allowedPaths.contains(entry.path) {
@@ -973,9 +1007,34 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             } catch {
                 messagesByStream[offlineStream] = "failed: \(error.localizedDescription)"
             }
+
+            processedEntries += 1
+            processedBytes += UInt64(entry.size)
+            onProgress(
+                OfflineUploadFetchProgress(
+                    processedEntries: processedEntries,
+                    totalEntries: totalEntries,
+                    processedBytes: processedBytes,
+                    totalBytes: totalEntries > 0 ? totalBytes : nil,
+                    currentStream: offlineStream,
+                    currentPath: entry.path,
+                    stage: "fetching"
+                )
+            )
         }
 
         batches = Self.unifyBatchSessionWindow(batches)
+        onProgress(
+            OfflineUploadFetchProgress(
+                processedEntries: processedEntries,
+                totalEntries: totalEntries,
+                processedBytes: processedBytes,
+                totalBytes: totalEntries > 0 ? totalBytes : nil,
+                currentStream: nil,
+                currentPath: nil,
+                stage: "completed"
+            )
+        )
         return OfflineUploadPreparationResult(batches: batches, messagesByStream: messagesByStream)
     }
 

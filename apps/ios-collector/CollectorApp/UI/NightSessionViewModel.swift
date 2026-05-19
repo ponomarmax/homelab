@@ -21,6 +21,15 @@ final class NightSessionViewModel: ObservableObject {
         self.coordinator = coordinator
     }
 
+    var isActionInFlight: Bool {
+        switch state {
+        case .connecting, .syncing, .uploading, .pipelineTriggering:
+            return true
+        default:
+            return false
+        }
+    }
+
     func onPrimaryButtonTapped() async {
         do {
             switch state {

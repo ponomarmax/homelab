@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 @MainActor
 final class CollectorCore: ObservableObject {
@@ -39,6 +40,7 @@ final class CollectorCore: ObservableObject {
     @Published var lastPreparedChunk: UploadChunk?
     @Published var debugExportFileURL: URL?
     @Published var logExportFileURL: URL?
+    @Published var persistentLogFileURL: URL?
     @Published var lastErrorMessage: String?
     @Published var shouldSuggestLogExport: Bool = false
     @Published var isScanningDevices: Bool = false
@@ -51,6 +53,7 @@ final class CollectorCore: ObservableObject {
     @Published var selectedOfflineStreams: Set<PolarOfflineStream> = []
     @Published var offlineLifecycleState: OfflineLifecycleState = .notLoaded
     @Published var offlineStatusMessage: String = "Disconnected"
+    @Published var offlineFetchProgress: OfflineUploadFetchProgress?
     @Published var offlineStreamCapabilities: [PolarOfflineStream: OfflineStreamCapability] = [:]
     @Published var offlineSettingsByStream: [PolarOfflineStream: OfflineStreamSettings] = [:]
     @Published var offlineSettingsLoadStateByStream: [PolarOfflineStream: OfflineSettingsLoadState] = [:]
@@ -108,6 +111,8 @@ final class CollectorCore: ObservableObject {
 
     var autoFlushTask: Task<Void, Never>?
     var isAutoFlushing: Bool = false
+    var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    var persistentLogFileHandle: FileHandle?
     var consecutiveUploadFailureCount: Int = 0
     var nextUploadRetryAtUTC: Date?
     let rememberedDeviceStorageKey = "collector.remembered_device.v1"

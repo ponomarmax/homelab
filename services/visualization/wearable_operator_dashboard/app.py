@@ -87,6 +87,7 @@ if page == "Session List":
                 {
                     "session_id": session.get("session_id"),
                     "session_link": f"/?page=Session+Details&session_id={quote_plus(str(session.get('session_id') or ''))}",
+                    "user_id": session.get("user_id", "unknown"),
                     "device": session.get("device"),
                     "device_id": session.get("device_id", "unknown"),
                     "collection_mode": session.get("collection_mode"),
@@ -115,6 +116,7 @@ if page == "Session List":
             },
             column_order=[
                 "session_link",
+                "user_id",
                 "device",
                 "device_id",
                 "collection_mode",

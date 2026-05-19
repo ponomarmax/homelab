@@ -158,6 +158,7 @@ def build_router(runner: SessionPipelineRunner) -> APIRouter:
                 session_id,
                 {
                     "session_id": session_id,
+                    "user_id": "unknown",
                     "device": "unknown",
                     "device_id": "unknown",
                     "collection_mode": "unknown",
@@ -171,6 +172,9 @@ def build_router(runner: SessionPipelineRunner) -> APIRouter:
                 },
             )
             payload["streams_present"] = sorted(set(payload["streams_present"] + [path.parent.name]))
+            user_part = next((part for part in path.parts if part.startswith("user_id=")), "")
+            if user_part:
+                payload["user_id"] = user_part.split("=", 1)[1] or payload["user_id"]
             item = _read_first_valid_jsonl(path)
             if item is None:
                 continue
