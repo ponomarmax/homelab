@@ -755,6 +755,12 @@ final class PolarDeviceAdapter: NSObject, CollectorDeviceAdapter {
             }
             do {
                 let polarSettings = Self.makePolarSensorSetting(from: request.selectedSettings)
+                log("offline-start request stream=\(stream.rawValue) selection=[\(request.selectedSettings?.summary() ?? "default")]")
+                if let polarSettings {
+                    log("offline-start sdk payload stream=\(stream.rawValue) raw=\(Self.mapStreamSettings(from: polarSettings))")
+                } else {
+                    log("offline-start sdk payload stream=\(stream.rawValue) raw=default")
+                }
                 try await retryOfflineGattOperation {
                     try await withCheckedThrowingContinuation { continuation in
                         timeSetupDisposable?.dispose()

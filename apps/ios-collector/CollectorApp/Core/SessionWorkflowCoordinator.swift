@@ -32,8 +32,8 @@ final class SessionWorkflowCoordinator: NightSessionCoordinating {
             throw WorkflowError.failed(core.lastErrorMessage ?? "Device is not connected")
         }
 
-        core.selectOfflineStreams([.ppi, .acc])
         await core.refreshOfflineData()
+        await core.applyRegistryOfflineConfiguration()
         if core.canStartOfflineSelected() {
             await core.startOfflineSelected()
         }
@@ -51,7 +51,7 @@ final class SessionWorkflowCoordinator: NightSessionCoordinating {
     }
 
     func stopSyncAndUpload() async throws -> String {
-        core.selectOfflineStreams([.ppi, .acc])
+        await core.applyRegistryOfflineConfiguration()
         await core.stopOfflineSelected()
         if core.offlineLifecycleState == .failed {
             throw WorkflowError.failed(core.offlineStatusMessage)

@@ -2,6 +2,209 @@ import Foundation
 import UIKit
 
 extension CollectorCore {
+    private func checkpointKey(sessionID: UUID, batch: OfflineUploadBatch, component: String = "full") -> String {
+        "\(sessionID.uuidString.lowercased())|\(batch.stream.transportType)|\(batch.sourcePath.lowercased())|\(batch.samples.count)|\(component)"
+    }
+
+    private func loadedCheckpointKeys(sessionID: UUID) -> Set<String> {
+        Set(
+            uploadedBatchCheckpointStore.load()
+                .filter { $0.sessionID == sessionID }
+                .map { "\(sessionID.uuidString.lowercased())|\($0.streamType)|\($0.sourcePath.lowercased())|\($0.samplesCount)|\($0.component)" }
+        )
+    }
+
+    private func markCheckpointUploaded(sessionID: UUID, batch: OfflineUploadBatch, component: String = "full") {
+        var all = uploadedBatchCheckpointStore.load()
+        let key = checkpointKey(sessionID: sessionID, batch: batch, component: component)
+        let existingV2 = Set(all.map { "\($0.sessionID.uuidString.lowercased())|\($0.streamType)|\($0.sourcePath.lowercased())|\($0.samplesCount)|\($0.component)" })
+        guard !existingV2.contains(key) else { return }
+        all.append(
+            UploadedBatchCheckpoint(
+                sessionID: sessionID,
+                sourcePath: batch.sourcePath,
+                streamType: batch.stream.transportType,
+                samplesCount: batch.samples.count,
+                component: component,
+                recordedAtUTC: nowProvider()
+            )
+        )
+        uploadedBatchCheckpointStore.save(all)
+    }
+
+    private func markOfflineFileFetched(path: String, sessionID: UUID?) {
+        var states = offlineFileTransferStateStore.load()
+        let normalized = path.lowercased()
+        let now = nowProvider()
+        if let idx = states.firstIndex(where: { $0.sourcePath.lowercased() == normalized }) {
+            states[idx].lastFetchedAtUTC = now
+            states[idx].lastSessionID = sessionID
+        } else {
+            states.append(
+                OfflineFileTransferState(
+                    sourcePath: path,
+                    firstFetchedAtUTC: now,
+                    lastFetchedAtUTC: now,
+                    lastUploadedAtUTC: nil,
+                    isUploadedComplete: false,
+                    lastSessionID: sessionID
+                )
+            )
+        }
+        offlineFileTransferStateStore.save(states)
+    }
+
+    private func markOfflineFileUploadedComplete(path: String, sessionID: UUID?) {
+        var states = offlineFileTransferStateStore.load()
+        let normalized = path.lowercased()
+        let now = nowProvider()
+        if let idx = states.firstIndex(where: { $0.sourcePath.lowercased() == normalized }) {
+            states[idx].isUploadedComplete = true
+            states[idx].lastUploadedAtUTC = now
+            states[idx].lastSessionID = sessionID
+        } else {
+            states.append(
+                OfflineFileTransferState(
+                    sourcePath: path,
+                    firstFetchedAtUTC: now,
+                    lastFetchedAtUTC: now,
+                    lastUploadedAtUTC: now,
+                    isUploadedComplete: true,
+                    lastSessionID: sessionID
+                )
+            )
+        }
+        offlineFileTransferStateStore.save(states)
+    }
+
+    private func transferState(for path: String) -> OfflineFileTransferState? {
+        let normalized = path.lowercased()
+        return offlineFileTransferStateStore.load().first { $0.sourcePath.lowercased() == normalized }
+    }
+
+    private func isOfflineFileUploadedComplete(path: String) -> Bool {
+        transferState(for: path)?.isUploadedComplete == true
+    }
+
+    private func clearTransferState(for path: String) {
+        let normalized = path.lowercased()
+        var all = offlineFileTransferStateStore.load()
+        all.removeAll { $0.sourcePath.lowercased() == normalized }
+        offlineFileTransferStateStore.save(all)
+    }
+
+    private func sanitizedOfflineSelection(for stream: PolarOfflineStream) -> OfflineStreamSettingsSelection? {
+        guard let settings = offlineSettingsByStream[stream] else { return nil }
+        var changed = false
+        func pickAllowed(_ current: UInt32?, allowed: [UInt32]) -> UInt32? {
+            guard !allowed.isEmpty else { return current }
+            if let current, allowed.contains(current) { return current }
+            changed = true
+            return allowed.first
+        }
+        let sanitized = OfflineStreamSettingsSelection(
+            sampleRate: pickAllowed(settings.selected.sampleRate, allowed: settings.options.sampleRates),
+            resolution: pickAllowed(settings.selected.resolution, allowed: settings.options.resolutions),
+            range: pickAllowed(settings.selected.range, allowed: settings.options.ranges),
+            channels: pickAllowed(settings.selected.channels, allowed: settings.options.channels)
+        )
+        if changed {
+            offlineSettingsByStream[stream] = OfflineStreamSettings(
+                stream: settings.stream,
+                options: settings.options,
+                selected: sanitized
+            )
+            adapter.updateOfflineRecordingSettingsSelection(sanitized, for: stream)
+            offlineStreamRunMessages[stream] = "Adjusted invalid settings to nearest supported values"
+            log("offline_settings_sanitized stream=\(stream.rawValue) selection=[\(sanitized.summary())]", level: .warning, category: "offline-settings")
+        }
+        return sanitized
+    }
+
+    private func applyRegistrySelectionToOfflineStream(_ stream: PolarOfflineStream) {
+        guard stream == .acc else { return }
+        guard offlineSettingsByStream[stream] != nil else { return }
+        let effective = configurationRegistry.effectiveSettings(
+            deviceID: "polar_verity_sense",
+            modeID: "offline",
+            streamID: "acc"
+        )
+        updateOfflineSettingsSelection(
+            for: .acc,
+            sampleRate: effective["sample_rate_hz"]?.numberUInt32,
+            resolution: effective["resolution_bit"]?.numberUInt32,
+            range: effective["range_g"]?.numberUInt32,
+            channels: effective["channels"]?.numberUInt32
+        )
+    }
+
+    private func splitForUpload(_ batch: OfflineUploadBatch, sampleLimit: Int) -> [OfflineUploadBatch] {
+        guard sampleLimit > 0, batch.samples.count > sampleLimit else { return [batch] }
+        var parts: [OfflineUploadBatch] = []
+        var cursor = 0
+        while cursor < batch.samples.count {
+            let end = min(cursor + sampleLimit, batch.samples.count)
+            let slice = Array(batch.samples[cursor..<end])
+            parts.append(
+                OfflineUploadBatch(
+                    stream: batch.stream,
+                    sourcePath: batch.sourcePath,
+                    samples: slice,
+                    timeContext: batch.timeContext
+                )
+            )
+            cursor = end
+        }
+        return parts
+    }
+
+    private func selectOfflineUploadCandidates(
+        from entries: [OfflineRecordingEntry],
+        allowedPaths: Set<String>?
+    ) -> [OfflineRecordingEntry] {
+        if let allowedPaths {
+            let normalized = Set(allowedPaths.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+            let basenames = Set(allowedPaths.map { URL(fileURLWithPath: $0).lastPathComponent.lowercased() })
+            return entries.filter { entry in
+                let entryPath = entry.path.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if normalized.contains(entryPath) { return true }
+                if normalized.contains(where: { entryPath.hasSuffix($0) || $0.hasSuffix(entryPath) }) { return true }
+                return basenames.contains(URL(fileURLWithPath: entry.path).lastPathComponent.lowercased())
+            }
+        }
+
+        let known = entries.filter { $0.stream != nil }
+        guard !known.isEmpty else { return entries }
+        guard let anchor = known.compactMap(\.startedAt).max() else { return known }
+
+        func distance(_ date: Date?) -> TimeInterval {
+            guard let date else { return .greatestFiniteMagnitude }
+            return abs(date.timeIntervalSince(anchor))
+        }
+
+        var byStream: [PolarOfflineStream: OfflineRecordingEntry] = [:]
+        for entry in known {
+            guard let stream = entry.stream else { continue }
+            guard byStream[stream] == nil || distance(entry.startedAt) < distance(byStream[stream]?.startedAt) else { continue }
+            byStream[stream] = entry
+        }
+
+        let selected = Array(byStream.values)
+        let close = selected.filter { distance($0.startedAt) <= 15 * 60 }
+        return close.count >= 3 ? close : selected
+    }
+
+    private func collectorStream(for offlineStream: PolarOfflineStream) -> CollectorStream {
+        switch offlineStream {
+        case .hr: return .heartRate
+        case .ppi: return .ppi
+        case .acc: return .accelerometer
+        case .ppg: return .battery
+        case .mag: return .accelerometer
+        case .gyro: return .accelerometer
+        }
+    }
+
     func autoConnectToRememberedDevice() async {
         if isScanningDevices || isConnectingDevice {
             return
@@ -195,11 +398,19 @@ extension CollectorCore {
                     self?.refreshCachedStatuses(for: progressive)
                 }
             }
-            discoveredDevices = devices
-            refreshCachedStatuses(for: devices)
-            log("Scan finished: found \(devices.count) device(s)")
+            if devices.isEmpty && !discoveredDevices.isEmpty {
+                log(
+                    "Scan completed with empty final list; preserving \(discoveredDevices.count) progressively discovered device(s)",
+                    level: .warning,
+                    category: "device"
+                )
+            } else {
+                discoveredDevices = devices
+                refreshCachedStatuses(for: devices)
+            }
+            log("Scan finished: found \(discoveredDevices.count) device(s)")
 
-            if devices.isEmpty {
+            if discoveredDevices.isEmpty {
                 lastErrorMessage = "No Polar devices found"
                 activityMessage = "No devices found"
             } else {
@@ -586,6 +797,7 @@ extension CollectorCore {
         switch result {
         case .success(let settings):
             offlineSettingsByStream[stream] = settings
+            applyRegistrySelectionToOfflineStream(stream)
             offlineSettingsLoadStateByStream[stream] = .ready
             offlineStreamRunStates[stream] = .ready
             offlineStreamRunMessages[stream] = settings.options.isConfigurable ? "Settings ready" : "No configurable settings"
@@ -594,6 +806,38 @@ extension CollectorCore {
             offlineSettingsLoadStateByStream[stream] = .failed(message: message)
             offlineStreamRunStates[stream] = .failed
             offlineStreamRunMessages[stream] = "Settings failed: \(message)"
+        }
+    }
+
+    func applyRegistryOfflineConfiguration() async {
+        let streams = configurationRegistry.quickSessionOfflineStreams
+        selectOfflineStreams(streams)
+        for stream in streams {
+            await loadOfflineSettings(for: stream)
+            guard let settings = offlineSettingsByStream[stream] else { continue }
+            if stream == .acc {
+                configurationRegistry.updateAccFallbackFromSDKOptions(
+                    deviceID: "polar_verity_sense",
+                    modeID: "offline",
+                    sampleRates: settings.options.sampleRates
+                )
+                let effective = configurationRegistry.effectiveSettings(
+                    deviceID: "polar_verity_sense",
+                    modeID: "offline",
+                    streamID: "acc"
+                )
+                let sampleRate = effective["sample_rate_hz"]?.numberUInt32
+                let resolution = effective["resolution_bit"]?.numberUInt32
+                let rangeG = effective["range_g"]?.numberUInt32
+                let channels = effective["channels"]?.numberUInt32
+                updateOfflineSettingsSelection(
+                    for: .acc,
+                    sampleRate: sampleRate,
+                    resolution: resolution,
+                    range: rangeG,
+                    channels: channels
+                )
+            }
         }
     }
 
@@ -769,6 +1013,28 @@ extension CollectorCore {
         refreshUnassignedRecordingGroups()
     }
 
+    func deleteAllManagedSessions() {
+        let ids = Set(managedSessions.map(\.id))
+        managedSessions.removeAll()
+        pendingSessionManifests.removeAll { ids.contains($0.sessionID) }
+        for id in ids {
+            offlineSessionArchiveStore.deleteSessionArchive(sessionID: id)
+        }
+        expandedCleanupAfterSessionDelete(ids: ids)
+        persistLedger()
+        refreshUnassignedRecordingGroups()
+    }
+
+    private func expandedCleanupAfterSessionDelete(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        var transferStates = offlineFileTransferStateStore.load()
+        transferStates.removeAll { state in
+            guard let sid = state.lastSessionID else { return false }
+            return ids.contains(sid)
+        }
+        offlineFileTransferStateStore.save(transferStates)
+    }
+
     func uploadManagedSessionsChronologically() async {
         let ordered = managedSessions.sorted { $0.startedAtUTC < $1.startedAtUTC }
         managedSessionUploadStatusMessage = "Uploading \(ordered.count) session(s) in chronology..."
@@ -798,22 +1064,16 @@ extension CollectorCore {
             session.linkedFiles.contains(where: { $0.path == entry.path })
         })
 
-        let hasLocalArchiveCopy: Bool
-        if let linkedSession {
-            hasLocalArchiveCopy = offlineSessionArchiveStore.containsSourcePath(
-                sessionID: linkedSession.id,
-                sourcePath: entry.path
-            )
-        } else {
-            hasLocalArchiveCopy = false
-        }
+        let state = transferState(for: entry.path)
+        let hasLocalArchiveCopy = state != nil
+        let hasUploadedComplete = state?.isUploadedComplete == true
 
         return OfflineRecordingSafetySummary(
             isRecordingNow: isRecordingNow,
             isAssignedToSession: linkedSession != nil,
             assignedSessionID: linkedSession?.clientSessionID,
             hasLocalArchiveCopy: hasLocalArchiveCopy,
-            safeToDeleteFromSensor: !isRecordingNow && hasLocalArchiveCopy
+            safeToDeleteFromSensor: !isRecordingNow && hasUploadedComplete
         )
     }
 
@@ -867,77 +1127,115 @@ extension CollectorCore {
         for stream in selectedOfflineStreams {
             offlineStreamRunStates[stream] = .fetching
         }
-        let preparation = await adapter.prepareOfflineUploadBatches(allowedPaths: nil) { [weak self] progress in
-            Task { @MainActor in
-                guard let self else { return }
-                self.offlineFetchProgress = progress
-                if let stream = progress.currentStream {
-                    self.offlineStreamRunMessages[stream] = "Reading file from device (\(progress.processedEntries)/\(max(progress.totalEntries, 1)))"
-                }
-                let processed = progress.processedEntries
-                let total = max(progress.totalEntries, 1)
-                let percent = Int((Double(processed) / Double(total)) * 100.0)
-                let bytesSuffix: String
-                if let totalBytes = progress.totalBytes, totalBytes > 0 {
-                    bytesSuffix = " • \(progress.processedBytes)/\(totalBytes) bytes"
-                } else {
-                    bytesSuffix = ""
-                }
-                self.offlineStatusMessage = "Fetching offline recordings... \(processed)/\(progress.totalEntries) (\(percent)%)\(bytesSuffix)"
-                self.log(
-                    "offline_fetch_progress stage=\(progress.stage) processed=\(progress.processedEntries)/\(progress.totalEntries) bytes=\(progress.processedBytes)/\(progress.totalBytes ?? 0) stream=\(progress.currentStream?.rawValue ?? "n/a") path=\(progress.currentPath ?? "n/a")",
-                    category: "offline-upload"
-                )
-            }
-        }
-        offlineStreamRunMessages.merge(
-            preparation.messagesByStream,
-            uniquingKeysWith: { _, new in new }
-        )
-
-        guard !preparation.batches.isEmpty else {
+        let entries: [OfflineRecordingEntry]
+        do {
+            entries = try await adapter.listOfflineRecordings()
+        } catch {
             offlineLifecycleState = .failed
-            offlineStatusMessage = "No offline recordings were prepared for upload"
+            offlineStatusMessage = "Failed to list offline recordings: \(error.localizedDescription)"
             offlineLastErrorMessage = offlineStatusMessage
             return
         }
+        let candidates = selectOfflineUploadCandidates(from: entries, allowedPaths: nil)
+            .filter { !isOfflineFileUploadedComplete(path: $0.path) }
+        guard !candidates.isEmpty else {
+            uploadStatus = .success
+            offlineLifecycleState = .completed
+            offlineStatusMessage = "No pending offline recordings (already uploaded)"
+            offlineLastSuccessAction = "Skipped already uploaded files"
+            return
+        }
 
-        ensureUploadSessionIfNeeded(for: preparation.batches.map(\.stream))
-        if let session = activeSession {
-            offlineSessionArchiveStore.saveBatches(
-                sessionID: session.sessionID,
-                clientSessionID: session.clientSessionID,
-                startedAtUTC: session.startedAtUTC,
-                batches: preparation.batches
+        let candidateStreams = candidates.compactMap { entry -> CollectorStream? in
+            guard let stream = entry.stream else { return nil }
+            return collectorStream(for: stream)
+        }
+        ensureUploadSessionIfNeeded(for: candidateStreams)
+        guard let session = activeSession else {
+            offlineLifecycleState = .failed
+            offlineStatusMessage = "No active session for upload"
+            offlineLastErrorMessage = offlineStatusMessage
+            return
+        }
+        let sampleChunkLimit = max(500, Int(ProcessInfo.processInfo.environment["COLLECTOR_OFFLINE_UPLOAD_CHUNK_SAMPLES"] ?? "") ?? 5000)
+        let existingCheckpoints = loadedCheckpointKeys(sessionID: session.sessionID)
+        let files = candidates.compactMap { entry -> ManagedSessionFile? in
+            guard let offlineStream = entry.stream else { return nil }
+            let stream = collectorStream(for: offlineStream)
+            return ManagedSessionFile(
+                path: entry.path,
+                stream: stream.transportType,
+                startedAtUTC: entry.startedAt,
+                sizeBytes: entry.sizeBytes
             )
-            managedSessionUploadStatusByID[session.sessionID] = "Saved locally"
-            let files = preparation.batches.map {
-                ManagedSessionFile(
-                    path: $0.sourcePath,
-                    stream: $0.stream.transportType,
-                    startedAtUTC: $0.timeContext?.recordingStartUTC,
-                    sizeBytes: nil
-                )
-            }
-            linkFilesToManagedSession(id: session.sessionID, files: files)
         }
-
-        for batch in preparation.batches {
-            var samples = bufferedSamplesByStream[batch.stream] ?? []
-            samples.append(contentsOf: batch.samples)
-            bufferedSamplesByStream[batch.stream] = samples
-            if let context = batch.timeContext {
-                pendingTimeContextByStream[batch.stream] = context
-            }
-        }
-        bufferedSamplesCount = bufferedSampleTotalCount()
+        linkFilesToManagedSession(id: session.sessionID, files: files)
 
         offlineStatusMessage = "Uploading chunks..."
-        log("offline_upload_stage=server_upload_start batches=\(preparation.batches.count)", category: "offline-upload")
+        log("offline_upload_stage=server_upload_start files=\(candidates.count)", category: "offline-upload")
         for stream in selectedOfflineStreams {
             offlineStreamRunStates[stream] = .uploading
         }
-        await flushAndUploadAllBufferedSamples(trigger: .manual)
+
+        var attemptedParts = 0
+        var skippedParts = 0
+        for (fileIndex, entry) in candidates.enumerated() {
+            offlineStatusMessage = "Reading file \(fileIndex + 1)/\(candidates.count)..."
+            let preparation = await adapter.prepareOfflineUploadBatches(allowedPaths: [entry.path]) { [weak self] progress in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.offlineFetchProgress = progress
+                }
+            }
+            if !preparation.batches.isEmpty {
+                markOfflineFileFetched(path: entry.path, sessionID: session.sessionID)
+            }
+            offlineStreamRunMessages.merge(preparation.messagesByStream, uniquingKeysWith: { _, new in new })
+            var fileUploadedOrDeduped = true
+            for batch in preparation.batches {
+                let parts = splitForUpload(batch, sampleLimit: sampleChunkLimit)
+                for (partIndex, part) in parts.enumerated() {
+                    attemptedParts += 1
+                    let component = "\(part.sourcePath.lowercased())#part-\(partIndex)"
+                    let dedupeKey = checkpointKey(sessionID: session.sessionID, batch: part, component: component)
+                    if existingCheckpoints.contains(dedupeKey) {
+                        skippedParts += 1
+                        continue
+                    }
+                    bufferedSamplesByStream[part.stream] = part.samples
+                    if let context = part.timeContext {
+                        pendingTimeContextByStream[part.stream] = context
+                    }
+                    bufferedSamplesCount = bufferedSampleTotalCount()
+                    offlineStatusMessage = "Uploading file \(fileIndex + 1)/\(candidates.count), part \(partIndex + 1)/\(parts.count) (\(part.stream.transportType))..."
+                    await flushAndUploadAllBufferedSamples(trigger: .manual)
+                    if uploadStatus == .failure {
+                        fileUploadedOrDeduped = false
+                        break
+                    }
+                    markCheckpointUploaded(sessionID: session.sessionID, batch: part, component: component)
+                }
+                if uploadStatus == .failure {
+                    fileUploadedOrDeduped = false
+                    break
+                }
+            }
+            if fileUploadedOrDeduped {
+                markOfflineFileUploadedComplete(path: entry.path, sessionID: session.sessionID)
+            }
+            if uploadStatus == .failure { break }
+        }
+        if skippedParts > 0 {
+            log("offline_upload_stage=dedupe_skip skipped=\(skippedParts) total=\(attemptedParts)", category: "offline-upload")
+        }
+        if attemptedParts > 0 && skippedParts == attemptedParts && uploadStatus != .failure {
+            uploadStatus = .success
+            offlineLifecycleState = .completed
+            offlineStatusMessage = "All prepared files already uploaded (deduplicated)"
+            offlineLastSuccessAction = "Deduplicated retry upload"
+        } else if uploadStatus == .idle {
+            uploadStatus = .success
+        }
         if uploadStatus == .success {
             offlineLifecycleState = .completed
             offlineStatusMessage = "Offline recordings uploaded"
@@ -993,59 +1291,13 @@ extension CollectorCore {
         guard beginOfflineOperation(.uploading, lifecycle: .uploading, statusMessage: "Uploading session...") else { return }
         defer { completeOfflineOperation() }
 
-        var batches = offlineSessionArchiveStore.loadBatches(sessionID: id)
-        var sourceLabel = "local archive"
-        if batches.isEmpty {
-            sourceLabel = "device files"
-            managedSessionUploadStatusByID[id] = "Reading files from device..."
-            log("session_upload_stage=device_read_start session=\(session.clientSessionID) files=\(allowedPaths.count)", category: "session")
-            let fetched = await adapter.prepareOfflineUploadBatches(allowedPaths: allowedPaths) { [weak self] progress in
-                Task { @MainActor in
-                    guard let self else { return }
-                    self.offlineFetchProgress = progress
-                    let total = max(progress.totalEntries, 1)
-                    let percent = Int((Double(progress.processedEntries) / Double(total)) * 100.0)
-                    self.managedSessionUploadStatusByID[id] = "Reading files from device... \(progress.processedEntries)/\(progress.totalEntries) (\(percent)%)"
-                    if let stream = progress.currentStream {
-                        self.offlineStreamRunMessages[stream] = "Session read: \(progress.processedEntries)/\(progress.totalEntries)"
-                    }
-                    self.log(
-                        "session_upload_fetch_progress session=\(session.clientSessionID) stage=\(progress.stage) processed=\(progress.processedEntries)/\(progress.totalEntries) bytes=\(progress.processedBytes)/\(progress.totalBytes ?? 0) stream=\(progress.currentStream?.rawValue ?? "n/a") path=\(progress.currentPath ?? "n/a")",
-                        category: "session"
-                    )
-                }
-            }
-            batches = fetched.batches
-            if !batches.isEmpty {
-                offlineSessionArchiveStore.saveBatches(
-                    sessionID: session.id,
-                    clientSessionID: session.clientSessionID,
-                    startedAtUTC: session.startedAtUTC,
-                    batches: batches
-                )
-                managedSessionUploadStatusByID[id] = "Saved locally (\(batches.count) files)"
-                log("session_upload_stage=local_archive_saved session=\(session.clientSessionID) batches=\(batches.count)", category: "session")
-            }
-        } else {
-            managedSessionUploadStatusByID[id] = "Loaded from local archive (\(batches.count) files)"
-            log("session_upload_stage=local_archive_read session=\(session.clientSessionID) batches=\(batches.count)", category: "session")
-        }
-        let preparation = OfflineUploadPreparationResult(batches: batches, messagesByStream: [:])
-        let streamsPrepared = preparation.batches.map(\.stream.transportType).joined(separator: ",")
-        log(
-            "Session upload preparation result: batches=\(preparation.batches.count) streams=[\(streamsPrepared)] messages=\(preparation.messagesByStream)",
-            category: "session"
-        )
-        guard !preparation.batches.isEmpty else {
-            offlineLifecycleState = .failed
-            offlineStatusMessage = "No batches prepared for selected session"
-            offlineLastErrorMessage = offlineStatusMessage
-            managedSessionUploadStatusByID[id] = "No data available for upload"
-            managedSessionUploadStatusMessage = "Upload failed for \(session.clientSessionID)"
-            return
-        }
+        let sourceLabel = "device files (streamed)"
+        managedSessionUploadStatusByID[id] = "Reading files from device..."
+        log("session_upload_stage=device_read_start session=\(session.clientSessionID) files=\(allowedPaths.count)", category: "session")
+        let sampleChunkLimit = max(500, Int(ProcessInfo.processInfo.environment["COLLECTOR_OFFLINE_UPLOAD_CHUNK_SAMPLES"] ?? "") ?? 5000)
+        let checkpointKeys = loadedCheckpointKeys(sessionID: session.id)
         managedSessionUploadStatusByID[id] = "Uploading (\(sourceLabel))..."
-        log("session_upload_stage=server_upload_start session=\(session.clientSessionID) source=\(sourceLabel) batches=\(preparation.batches.count)", category: "session")
+        log("session_upload_stage=server_upload_start session=\(session.clientSessionID) source=\(sourceLabel) files=\(allowedPaths.count)", category: "session")
 
         activeSession = CollectionSession(
             sessionID: session.id,
@@ -1056,37 +1308,81 @@ extension CollectorCore {
             supportedStreams: adapter.availableStreams
         )
 
-        for (index, batch) in preparation.batches.enumerated() {
-            if streamDescriptorsByType[batch.stream] == nil {
-                streamDescriptorsByType[batch.stream] = transport.makeStreamDescriptor(
-                    for: batch.stream,
-                    source: adapter.sourceIdentifier
-                )
+        var attemptedParts = 0
+        var skippedParts = 0
+        var uploadedParts = 0
+        let orderedPaths = Array(allowedPaths).sorted()
+        for (fileIndex, path) in orderedPaths.enumerated() {
+            managedSessionUploadStatusByID[id] = "Reading file \(fileIndex + 1)/\(orderedPaths.count)..."
+            let fetched = await adapter.prepareOfflineUploadBatches(allowedPaths: [path]) { [weak self] progress in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.offlineFetchProgress = progress
+                    let total = max(progress.totalEntries, 1)
+                    let percent = Int((Double(progress.processedEntries) / Double(total)) * 100.0)
+                    self.managedSessionUploadStatusByID[id] = "Reading file \(fileIndex + 1)/\(orderedPaths.count)... \(progress.processedEntries)/\(progress.totalEntries) (\(percent)%)"
+                }
             }
-            if nextChunkSequenceNumberByStream[batch.stream] == nil {
-                nextChunkSequenceNumberByStream[batch.stream] = 1
+            if !fetched.batches.isEmpty {
+                markOfflineFileFetched(path: path, sessionID: session.id)
             }
-            if lastFlushAtUTCByStream[batch.stream] == nil {
-                lastFlushAtUTCByStream[batch.stream] = nowProvider()
+            offlineStreamRunMessages.merge(fetched.messagesByStream, uniquingKeysWith: { _, new in new })
+            var fileUploadedOrDeduped = true
+            for batch in fetched.batches {
+                if streamDescriptorsByType[batch.stream] == nil {
+                    streamDescriptorsByType[batch.stream] = transport.makeStreamDescriptor(
+                        for: batch.stream,
+                        source: adapter.sourceIdentifier
+                    )
+                }
+                if nextChunkSequenceNumberByStream[batch.stream] == nil {
+                    nextChunkSequenceNumberByStream[batch.stream] = 1
+                }
+                if lastFlushAtUTCByStream[batch.stream] == nil {
+                    lastFlushAtUTCByStream[batch.stream] = nowProvider()
+                }
+                let parts = splitForUpload(batch, sampleLimit: sampleChunkLimit)
+                for (partIndex, part) in parts.enumerated() {
+                    attemptedParts += 1
+                    let component = "\(part.sourcePath.lowercased())#part-\(partIndex)"
+                    let dedupeKey = checkpointKey(sessionID: session.id, batch: part, component: component)
+                    if checkpointKeys.contains(dedupeKey) {
+                        skippedParts += 1
+                        continue
+                    }
+                    managedSessionUploadStatusByID[id] = "Uploading file \(fileIndex + 1)/\(orderedPaths.count), part \(partIndex + 1)/\(parts.count) (\(part.stream.transportType))..."
+                    bufferedSamplesByStream[part.stream] = part.samples
+                    if let context = part.timeContext {
+                        pendingTimeContextByStream[part.stream] = context
+                    }
+                    bufferedSamplesCount = bufferedSampleTotalCount()
+                    await flushAndUploadAllBufferedSamples(trigger: .manual)
+                    if uploadStatus == .failure {
+                        fileUploadedOrDeduped = false
+                        break
+                    }
+                    markCheckpointUploaded(sessionID: session.id, batch: part, component: component)
+                    uploadedParts += 1
+                }
+                if uploadStatus == .failure {
+                    fileUploadedOrDeduped = false
+                    break
+                }
             }
-
-            managedSessionUploadStatusByID[id] = "Uploading batch \(index + 1)/\(preparation.batches.count) (\(batch.stream.transportType))..."
-            log(
-                "session_upload_stage=batch_enqueue session=\(session.clientSessionID) batch=\(index + 1)/\(preparation.batches.count) stream=\(batch.stream.transportType) samples=\(batch.samples.count)",
-                category: "session"
-            )
-
-            // Keep memory bounded: enqueue and flush one batch at a time instead of aggregating all batches in RAM.
-            bufferedSamplesByStream[batch.stream] = batch.samples
-            if let context = batch.timeContext {
-                pendingTimeContextByStream[batch.stream] = context
+            if fileUploadedOrDeduped {
+                markOfflineFileUploadedComplete(path: path, sessionID: session.id)
             }
-            bufferedSamplesCount = bufferedSampleTotalCount()
-            await flushAndUploadAllBufferedSamples(trigger: .manual)
-
-            if uploadStatus == .failure {
-                break
-            }
+            if uploadStatus == .failure { break }
+        }
+        if skippedParts > 0 {
+            log("session_upload_stage=dedupe_skip session=\(session.clientSessionID) skipped=\(skippedParts) total=\(attemptedParts)", category: "session")
+        }
+        if attemptedParts > 0 && skippedParts == attemptedParts && uploadStatus != .failure {
+            uploadStatus = .success
+            managedSessionUploadStatusByID[id] = "All files already uploaded"
+            managedSessionUploadStatusMessage = "Deduplicated \(session.clientSessionID)"
+        } else if uploadStatus == .idle && uploadedParts > 0 {
+            uploadStatus = .success
         }
         if uploadStatus == .success {
             updateManagedSessionLifecycle(
@@ -1137,6 +1433,7 @@ extension CollectorCore {
         }
         do {
             try await adapter.removeOfflineRecording(path: entry.path)
+            clearTransferState(for: entry.path)
             offlineRecordings.removeAll { $0.id == entry.id }
             refreshUnassignedRecordingGroups()
             offlineRecordErrorsByID[entry.id] = nil
@@ -1207,6 +1504,7 @@ extension CollectorCore {
             offlineStatusMessage = "Deleting recording \(index + 1)/\(entries.count)..."
             do {
                 try await adapter.removeOfflineRecording(path: entry.path)
+                clearTransferState(for: entry.path)
                 deletedIDs.insert(entry.id)
                 offlineRecordErrorsByID[entry.id] = nil
             } catch {
@@ -1808,7 +2106,7 @@ extension CollectorCore {
             offlineStreamRunMessages[stream] = "Starting..."
         }
         let requests = startableStreams.map { stream in
-            OfflineRecordingStartRequest(stream: stream, selectedSettings: offlineSettingsByStream[stream]?.selected)
+            OfflineRecordingStartRequest(stream: stream, selectedSettings: sanitizedOfflineSelection(for: stream))
         }
         let adapterResults = await adapter.startOfflineRecordings(requests: requests)
         let alreadyRecordingResults = alreadyRecordingStreams.map {
@@ -2106,5 +2404,12 @@ private extension CollectorCore {
         UIApplication.shared.endBackgroundTask(backgroundTaskID)
         backgroundTaskID = .invalid
         log("Background task ended", category: "lifecycle")
+    }
+}
+
+private extension StreamSettingValue {
+    var numberUInt32: UInt32? {
+        guard case .number(let value) = self, value >= 0 else { return nil }
+        return UInt32(value.rounded())
     }
 }

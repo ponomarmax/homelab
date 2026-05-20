@@ -554,6 +554,12 @@ struct CollectorView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(collectorCore.managedSessions.isEmpty || collectorCore.offlineIsOperationRunning || collectorCore.isUploadingChunk)
+                        Button("Delete all sessions", role: .destructive) {
+                            collectorCore.deleteAllManagedSessions()
+                            expandedSessionIDs.removeAll()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(collectorCore.managedSessions.isEmpty || collectorCore.offlineIsOperationRunning || collectorCore.isUploadingChunk)
                     }
                 }
                 .padding(10)

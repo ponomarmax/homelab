@@ -493,3 +493,26 @@ What was done:
 
 Key insight:
 Operational dashboards should tolerate imperfect append-only raw files; list views should use metadata sampling and robust parsing to stay responsive and reliable.
+
+
+## 2026-05-19 — iOS Collector registry/UI refactor checkpoint
+- Refactored `MainCollectorView` into a two-tab architecture preserving `Classic` and `Quick Session (Test)`.
+- Reworked Classic tab toward a reusable configuration surface with:
+  - activity/status card
+  - supported devices section
+  - expandable `device -> mode -> stream -> setting` hierarchy
+  - reset actions for device and stream defaults
+- Added centralized configuration layer in app core:
+  - `DeviceConfigurationRegistry`
+  - `DeviceConfigurationStore`
+  - `DeviceCapabilityDescriptor`
+  - `StreamConfiguration`
+  - `StreamSettingDefinition`
+  - `UserStreamConfigurationOverride`
+- Added local persistent override storage with atomic Application Support JSON writes (`device-configuration-v1.json`) and schema-versioned snapshot.
+- Wired Quick Session workflow to shared registry-based offline stream configuration path (`PPI + ACC`) via `applyRegistryOfflineConfiguration()`.
+- Added ACC fallback handling that inspects SDK-exposed offline ACC sample-rate options and applies closest supported lower-than-25Hz option when needed; UI exposes fallback note.
+- Added tests for registry defaults, persistence/reload, reset-to-default, fallback behavior, and shared effective config reads.
+- Validation limits in this environment:
+  - `xcodebuild -list -project ios-collector.xcodeproj` succeeds.
+  - Simulator-backed build/test execution failed due unavailable `CoreSimulatorService` in sandboxed runtime.

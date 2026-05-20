@@ -24,6 +24,8 @@ struct WearableCollectorApp: App {
             streamProfiles: configuration.upload.streamProfiles,
             requestTimeoutSeconds: configuration.upload.requestTimeoutSeconds
         )
+        let configurationStore = DeviceConfigurationStore()
+        let configurationRegistry = DeviceConfigurationRegistry(store: configurationStore)
         let adapter: CollectorDeviceAdapter = PolarDeviceAdapter()
 
         let transport = CollectorHTTPTransport(
@@ -34,7 +36,8 @@ struct WearableCollectorApp: App {
         collectorCore = CollectorCore(
             adapter: adapter,
             transport: transport,
-            uploadConfiguration: uploadConfiguration
+            uploadConfiguration: uploadConfiguration,
+            configurationRegistry: configurationRegistry
         )
         runtimeConfiguration = configuration
     }

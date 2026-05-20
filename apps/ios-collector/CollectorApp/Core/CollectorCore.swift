@@ -95,7 +95,10 @@ final class CollectorCore: ObservableObject {
     let debugExporter = HrSampleDebugExporter()
     let sessionLedgerStore = SessionLedgerStore()
     let offlineSessionArchiveStore = OfflineSessionArchiveStore()
+    let uploadedBatchCheckpointStore = UploadedBatchCheckpointStore()
+    let offlineFileTransferStateStore = OfflineFileTransferStateStore()
     let isVerboseLoggingEnabled: Bool
+    let configurationRegistry: DeviceConfigurationRegistry
     let unassignedClusterGapSeconds: TimeInterval
     let isManifestAutoRetryEnabled: Bool
     let manifestRetryBatchSize: Int
@@ -124,13 +127,15 @@ final class CollectorCore: ObservableObject {
         nowProvider: @escaping @Sendable () -> Date = { Date() },
         sleepProvider: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
             try? await Task.sleep(nanoseconds: nanoseconds)
-        }
+        },
+        configurationRegistry: DeviceConfigurationRegistry? = nil
     ) {
         self.adapter = adapter
         self.transport = transport
         self.uploadConfiguration = uploadConfiguration
         self.nowProvider = nowProvider
         self.sleepProvider = sleepProvider
+        self.configurationRegistry = configurationRegistry ?? DeviceConfigurationRegistry(store: DeviceConfigurationStore())
         let environment = ProcessInfo.processInfo.environment
         self.isVerboseLoggingEnabled = environment["COLLECTOR_VERBOSE_LOGS"] == "1"
             || environment["COLLECTOR_LOG_LEVEL"]?.lowercased() == "debug"

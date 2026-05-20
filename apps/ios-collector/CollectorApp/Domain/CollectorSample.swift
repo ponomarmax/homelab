@@ -1,6 +1,6 @@
 import Foundation
 
-enum StreamSettingValue: Equatable, Codable, Sendable {
+enum StreamSettingValue: Equatable, Hashable, Codable, Sendable {
     case string(String)
     case number(Double)
     case bool(Bool)

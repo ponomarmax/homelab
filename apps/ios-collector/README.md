@@ -205,3 +205,37 @@ Use a real iPhone and Polar device:
    - sample-level `payload.samples[].received_at_collector`
    - chunk-level `time.first_sample_received_at_collector`
    - no chunk-level `time.received_at_collector`
+
+
+## Device Configuration Registry (Classic + Quick Session)
+
+Collector now uses a centralized configuration layer for supported devices, modes, streams, defaults, and user overrides:
+
+- `DeviceConfigurationRegistry`
+- `DeviceConfigurationStore`
+- `DeviceCapabilityDescriptor`
+- `StreamConfiguration`
+- `StreamSettingDefinition`
+- `UserStreamConfigurationOverride`
+
+Persistence model:
+- local JSON in Application Support (`CollectorApp/device-configuration-v1.json`)
+- atomic writes
+- schema versioned snapshot
+- overrides survive app restart/update
+- per-device and per-stream reset to defaults
+
+Default ACC configuration (sleep-oriented baseline):
+- sample rate: `25 Hz`
+- resolution: `16 bit`
+- range: `±4g`
+- channels: `3`
+
+Fallback behavior:
+- when SDK options do not include `25 Hz`, registry applies closest supported lower option and records a fallback note used by UI.
+
+Quick Session integration:
+- keeps separate tab
+- uses same registry effective configuration
+- uses remembered device auto-connect path
+- uses centralized stream selection (`PPI + ACC`) without duplicating stream configuration logic

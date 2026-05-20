@@ -116,6 +116,141 @@ struct OfflineRecordingSafetySummary: Equatable, Sendable {
     let safeToDeleteFromSensor: Bool
 }
 
+struct UploadedBatchCheckpoint: Codable, Equatable, Hashable, Sendable {
+    let sessionID: UUID
+    let sourcePath: String
+    let streamType: String
+    let samplesCount: Int
+    let component: String
+    let recordedAtUTC: Date
+
+    enum CodingKeys: String, CodingKey {
+        case sessionID
+        case sourcePath
+        case streamType
+        case samplesCount
+        case component
+        case recordedAtUTC
+    }
+
+    init(
+        sessionID: UUID,
+        sourcePath: String,
+        streamType: String,
+        samplesCount: Int,
+        component: String,
+        recordedAtUTC: Date
+    ) {
+        self.sessionID = sessionID
+        self.sourcePath = sourcePath
+        self.streamType = streamType
+        self.samplesCount = samplesCount
+        self.component = component
+        self.recordedAtUTC = recordedAtUTC
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sessionID = try container.decode(UUID.self, forKey: .sessionID)
+        sourcePath = try container.decode(String.self, forKey: .sourcePath)
+        streamType = try container.decode(String.self, forKey: .streamType)
+        samplesCount = try container.decode(Int.self, forKey: .samplesCount)
+        component = try container.decodeIfPresent(String.self, forKey: .component) ?? "full"
+        recordedAtUTC = try container.decode(Date.self, forKey: .recordedAtUTC)
+    }
+}
+
+struct OfflineFileTransferState: Codable, Equatable, Sendable {
+    let sourcePath: String
+    var firstFetchedAtUTC: Date
+    var lastFetchedAtUTC: Date
+    var lastUploadedAtUTC: Date?
+    var isUploadedComplete: Bool
+    var lastSessionID: UUID?
+}
+
+private struct UploadedBatchCheckpointSnapshot: Codable, Sendable {
+    let schemaVersion: Int
+    let items: [UploadedBatchCheckpoint]
+}
+
+@MainActor
+final class UploadedBatchCheckpointStore {
+    private let storageURL: URL
+    private let encoder: JSONEncoder
+    private let decoder: JSONDecoder
+
+    init(fileManager: FileManager = .default) {
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        let dir = appSupport.appendingPathComponent("CollectorApp", isDirectory: true)
+        if !fileManager.fileExists(atPath: dir.path) {
+            try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        self.storageURL = dir.appendingPathComponent("uploaded-batch-checkpoints-v1.json")
+        self.encoder = JSONEncoder()
+        self.encoder.dateEncodingStrategy = .iso8601
+        self.encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        self.decoder = JSONDecoder()
+        self.decoder.dateDecodingStrategy = .iso8601
+    }
+
+    func load() -> [UploadedBatchCheckpoint] {
+        guard let data = try? Data(contentsOf: storageURL),
+              let snapshot = try? decoder.decode(UploadedBatchCheckpointSnapshot.self, from: data) else {
+            return []
+        }
+        return snapshot.items
+    }
+
+    func save(_ items: [UploadedBatchCheckpoint]) {
+        let snapshot = UploadedBatchCheckpointSnapshot(schemaVersion: 1, items: items)
+        guard let data = try? encoder.encode(snapshot) else { return }
+        try? data.write(to: storageURL, options: .atomic)
+    }
+}
+
+private struct OfflineFileTransferStateSnapshot: Codable, Sendable {
+    let schemaVersion: Int
+    let items: [OfflineFileTransferState]
+}
+
+@MainActor
+final class OfflineFileTransferStateStore {
+    private let storageURL: URL
+    private let encoder: JSONEncoder
+    private let decoder: JSONDecoder
+
+    init(fileManager: FileManager = .default) {
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        let dir = appSupport.appendingPathComponent("CollectorApp", isDirectory: true)
+        if !fileManager.fileExists(atPath: dir.path) {
+            try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        self.storageURL = dir.appendingPathComponent("offline-file-transfer-state-v1.json")
+        self.encoder = JSONEncoder()
+        self.encoder.dateEncodingStrategy = .iso8601
+        self.encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        self.decoder = JSONDecoder()
+        self.decoder.dateDecodingStrategy = .iso8601
+    }
+
+    func load() -> [OfflineFileTransferState] {
+        guard let data = try? Data(contentsOf: storageURL),
+              let snapshot = try? decoder.decode(OfflineFileTransferStateSnapshot.self, from: data) else {
+            return []
+        }
+        return snapshot.items
+    }
+
+    func save(_ items: [OfflineFileTransferState]) {
+        let snapshot = OfflineFileTransferStateSnapshot(schemaVersion: 1, items: items)
+        guard let data = try? encoder.encode(snapshot) else { return }
+        try? data.write(to: storageURL, options: .atomic)
+    }
+}
+
 private struct ArchivedOfflineUploadBatch: Codable {
     let streamRawValue: String
     let sourcePath: String
