@@ -34,6 +34,7 @@ infra/observability/config/grafana/provisioning/
 Current provisioning:
 
 - `datasources/prometheus.yml` - provisions Prometheus as the default datasource.
+- `datasources/wearable-infinity.yml` - provisions an Infinity datasource for wearable CSV/JSON export views.
 - `dashboards/baseline.yml` - provisions dashboard JSON files from `/etc/grafana/dashboards`.
 - `alerting/empty.yml` and `plugins/empty.yml` keep provisioning paths valid while those checkpoints remain out of scope.
 
@@ -53,6 +54,13 @@ Current baseline dashboards:
 
 - `host/linux-server.json` - host CPU, memory, disk, load, and network metrics from Node Exporter.
 - `containers/docker-containers.json` - container CPU, memory, network, and filesystem I/O metrics from cAdvisor.
+- `wearable/wearable-session-explorer.json` - debug/validation explorer for exported wearable session artifacts.
+
+Wearable explorer data source notes:
+
+- Explorer reads deterministic CSV/JSON artifacts exported by `wearable-pipeline-api` under `/data/wearable/grafana/`.
+- Grafana reads these via internal service `wearable-grafana-views` through Infinity datasource.
+- This path avoids DuckDB plugin-runtime instability in current deployment.
 
 Grafana uses `foldersFromFilesStructure`, so subdirectories become Grafana folders.
 

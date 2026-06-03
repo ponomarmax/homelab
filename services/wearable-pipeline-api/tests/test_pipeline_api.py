@@ -110,6 +110,7 @@ class PipelineApiTests(unittest.TestCase):
         self.raw_root = self.root / "raw"
         self.processed_root = self.root / "processed"
         self.state_root = self.root / "pipeline_runs"
+        self.grafana_root = self.root / "grafana"
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -119,6 +120,7 @@ class PipelineApiTests(unittest.TestCase):
             raw_root=self.raw_root,
             processed_root=self.processed_root,
             state_root=self.state_root,
+            grafana_views_root=self.grafana_root,
         )
 
     def test_normalizer_and_dispatch(self) -> None:
@@ -590,6 +592,7 @@ class PipelineApiTests(unittest.TestCase):
             raw_root=self.raw_root,
             processed_root=self.processed_root,
             state_root=self.state_root,
+            grafana_views_root=self.grafana_root,
             l0_cross_stream_max_start_delta_seconds=5.0,
             l0_cross_stream_max_end_delta_seconds=5.0,
             l0_cross_stream_min_overlap_ratio=0.5,
@@ -651,6 +654,7 @@ class PipelineApiTests(unittest.TestCase):
             raw_root=self.raw_root,
             processed_root=self.processed_root,
             state_root=self.state_root,
+            grafana_views_root=self.grafana_root,
             l0_cross_stream_max_start_delta_seconds=5.0,
             l0_cross_stream_max_end_delta_seconds=5.0,
             l0_cross_stream_min_overlap_ratio=0.5,
@@ -1255,6 +1259,7 @@ class PipelineApiTests(unittest.TestCase):
             raw_root=self.raw_root,
             processed_root=self.processed_root,
             pipeline_state_root=self.state_root,
+            grafana_views_root=self.grafana_root,
             log_level="INFO",
         )
         client = TestClient(create_app(settings))
@@ -1305,6 +1310,7 @@ class PipelineApiTests(unittest.TestCase):
             raw_root=self.raw_root,
             processed_root=self.processed_root,
             pipeline_state_root=self.state_root,
+            grafana_views_root=self.grafana_root,
             log_level="INFO",
         )
         client = TestClient(create_app(settings))
@@ -1339,6 +1345,7 @@ class PipelineApiTests(unittest.TestCase):
             raw_root=self.raw_root,
             processed_root=self.processed_root,
             pipeline_state_root=self.state_root,
+            grafana_views_root=self.grafana_root,
             log_level="INFO",
         )
         client = TestClient(create_app(settings))
@@ -1359,6 +1366,7 @@ class PipelineApiTests(unittest.TestCase):
             raw_root=self.raw_root,
             processed_root=self.processed_root,
             pipeline_state_root=self.state_root,
+            grafana_views_root=self.grafana_root,
             log_level="INFO",
         )
         client = TestClient(create_app(settings))
@@ -1371,6 +1379,48 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(payload["accepted"], False)
         self.assertEqual(payload["accepted_steps"], [])
         self.assertIn("unknown_step", payload["rejected_steps"])
+
+    def test_export_grafana_session_endpoint(self) -> None:
+        session_id = "session-grafana-export-001"
+        write_raw_stream(
+            self.raw_root,
+            session_id=session_id,
+            stream_type="ppi",
+            chunks=[
+                build_chunk(
+                    chunk_id="chunk-ppi-1",
+                    sequence=1,
+                    stream_type="ppi",
+                    payload_schema="polar.offline.ppi",
+                    stream_id="stream-ppi-export-001",
+                    device_model="verity_sense",
+                    payload={
+                        "type": "PPI",
+                        "source": "polar_verity_sense_offline",
+                        "samples": [{"timeStamp": 545998017227188608, "hr": 70, "ppInMs": 900, "ppErrorEstimate": 8}],
+                    },
+                )
+            ],
+        )
+
+        runner = self._runner()
+        runner.run(session_id=session_id, run_window_features=False, run_session_summary=False)
+        settings = Settings(
+            host="127.0.0.1",
+            port=8091,
+            raw_root=self.raw_root,
+            processed_root=self.processed_root,
+            pipeline_state_root=self.state_root,
+            grafana_views_root=self.grafana_root,
+            log_level="INFO",
+        )
+        client = TestClient(create_app(settings))
+        response = client.post("/api/v1/pipeline/export/grafana-session", json={"session_id": session_id})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["accepted"], True)
+        self.assertEqual(payload["session_id"], session_id)
+        self.assertGreaterEqual(int(payload["normalized_ppi_rows_exported"]), 1)
 
     def test_operator_session_listing_returns_sessions(self) -> None:
         write_raw_stream(
@@ -1395,6 +1445,7 @@ class PipelineApiTests(unittest.TestCase):
             raw_root=self.raw_root,
             processed_root=self.processed_root,
             pipeline_state_root=self.state_root,
+            grafana_views_root=self.grafana_root,
             log_level="INFO",
         )
         client = TestClient(create_app(settings))
@@ -1429,6 +1480,7 @@ class PipelineApiTests(unittest.TestCase):
             raw_root=self.raw_root,
             processed_root=self.processed_root,
             pipeline_state_root=self.state_root,
+            grafana_views_root=self.grafana_root,
             log_level="INFO",
         )
         client = TestClient(create_app(settings))

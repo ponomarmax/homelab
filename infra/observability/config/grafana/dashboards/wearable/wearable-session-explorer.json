@@ -1,0 +1,344 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "wearable_infinity"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "source": "url",
+          "type": "json",
+          "url": "http://wearable-grafana-views:8000/sessions.json",
+          "format": "table",
+          "parser": "backend",
+          "columns": [
+            {
+              "selector": "session_id",
+              "text": "session_id",
+              "type": "string"
+            },
+            {
+              "selector": "started_at",
+              "text": "started_at",
+              "type": "string"
+            },
+            {
+              "selector": "ended_at",
+              "text": "ended_at",
+              "type": "string"
+            },
+            {
+              "selector": "duration_seconds",
+              "text": "duration_seconds",
+              "type": "number"
+            },
+            {
+              "selector": "available_streams",
+              "text": "available_streams",
+              "type": "string"
+            }
+          ],
+          "url_options": {
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Session Overview",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "wearable_infinity"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "source": "url",
+          "type": "csv",
+          "url": "http://wearable-grafana-views:8000/normalized_ppi_points.csv",
+          "format": "timeseries",
+          "parser": "backend",
+          "columns": [
+            {
+              "selector": "ts_utc",
+              "text": "time",
+              "type": "timestamp"
+            },
+            {
+              "selector": "ppi_ms",
+              "text": "ppi_ms",
+              "type": "number"
+            }
+          ],
+          "url_options": {
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "PPI Normalized Points",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "wearable_infinity"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "source": "url",
+          "type": "csv",
+          "url": "http://wearable-grafana-views:8000/normalized_ppi_points.csv",
+          "format": "timeseries",
+          "parser": "backend",
+          "columns": [
+            {
+              "selector": "ts_utc",
+              "text": "time",
+              "type": "timestamp"
+            },
+            {
+              "selector": "pp_error_estimate_ms",
+              "text": "pp_error_estimate_ms",
+              "type": "number"
+            }
+          ],
+          "url_options": {
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "PPI Error Estimate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "wearable_infinity"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 4,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "source": "url",
+          "type": "csv",
+          "url": "http://wearable-grafana-views:8000/quality_events.csv",
+          "format": "table",
+          "parser": "backend",
+          "columns": [
+            {
+              "selector": "session_id",
+              "text": "session_id",
+              "type": "string"
+            },
+            {
+              "selector": "ts_utc",
+              "text": "ts_utc",
+              "type": "string"
+            },
+            {
+              "selector": "event_type",
+              "text": "event_type",
+              "type": "string"
+            },
+            {
+              "selector": "severity",
+              "text": "severity",
+              "type": "string"
+            },
+            {
+              "selector": "source",
+              "text": "source",
+              "type": "string"
+            }
+          ],
+          "url_options": {
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Quality Events",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "wearable_infinity"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 5,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "source": "url",
+          "type": "csv",
+          "url": "http://wearable-grafana-views:8000/feature_windows.csv",
+          "format": "table",
+          "parser": "backend",
+          "columns": [
+            {
+              "selector": "session_id",
+              "text": "session_id",
+              "type": "string"
+            },
+            {
+              "selector": "window_size",
+              "text": "window_size",
+              "type": "string"
+            },
+            {
+              "selector": "window_start",
+              "text": "window_start",
+              "type": "string"
+            },
+            {
+              "selector": "feature_name",
+              "text": "feature_name",
+              "type": "string"
+            },
+            {
+              "selector": "feature_value",
+              "text": "feature_value",
+              "type": "number"
+            }
+          ],
+          "url_options": {
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Feature Windows (Optional)",
+      "type": "table"
+    }
+  ],
+  "preload": false,
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": [
+    "wearable",
+    "pipeline",
+    "debug"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "session_id",
+        "type": "textbox",
+        "query": "b7204022-e3a5-46fe-8ddf-2f7287e7f66c",
+        "current": {
+          "selected": true,
+          "text": "b7204022-e3a5-46fe-8ddf-2f7287e7f66c",
+          "value": "b7204022-e3a5-46fe-8ddf-2f7287e7f66c"
+        }
+      },
+      {
+        "name": "stream",
+        "type": "custom",
+        "query": "ppi",
+        "current": {
+          "selected": true,
+          "text": "ppi",
+          "value": "ppi"
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1y",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "Wearable Session Explorer",
+  "uid": "wearable-session-explorer",
+  "version": 5
+}

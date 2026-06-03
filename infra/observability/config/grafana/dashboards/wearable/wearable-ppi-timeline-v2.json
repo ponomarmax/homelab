@@ -1,0 +1,212 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "wearable_infinity"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "points",
+            "lineWidth": 0,
+            "pointSize": 5,
+            "showPoints": "always"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*high.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*medium.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*low.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ppi_trend"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "gray"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "refId": "QUAL",
+          "source": "url",
+          "type": "csv",
+          "url": "http://wearable-grafana-views:8000/session_id=${session_id}/normalized_ppi_points.csv",
+          "format": "timeseries",
+          "parser": "backend",
+          "columns": [
+            {
+              "selector": "ts_utc",
+              "text": "time",
+              "type": "timestamp"
+            },
+            {
+              "selector": "sample_quality_tier",
+              "text": "quality_tier",
+              "type": "string"
+            },
+            {
+              "selector": "ppi_ms",
+              "text": "value",
+              "type": "number"
+            }
+          ],
+          "url_options": {
+            "method": "GET"
+          }
+        },
+        {
+          "refId": "TREND",
+          "source": "url",
+          "type": "csv",
+          "url": "http://wearable-grafana-views:8000/session_id=${session_id}/normalized_ppi_points.csv",
+          "format": "timeseries",
+          "parser": "backend",
+          "columns": [
+            {
+              "selector": "ts_utc",
+              "text": "time",
+              "type": "timestamp"
+            },
+            {
+              "selector": "ppi_ms",
+              "text": "ppi_trend",
+              "type": "number"
+            }
+          ],
+          "url_options": {
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "PPI timeline",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": [
+    "wearable",
+    "pipeline",
+    "debug",
+    "ppi"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "session_id",
+        "type": "textbox",
+        "query": "b7204022-e3a5-46fe-8ddf-2f7287e7f66c",
+        "current": {
+          "selected": true,
+          "text": "b7204022-e3a5-46fe-8ddf-2f7287e7f66c",
+          "value": "b7204022-e3a5-46fe-8ddf-2f7287e7f66c"
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1y",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "Wearable PPI Timeline V2",
+  "uid": "wearable-ppi-timeline-v2",
+  "version": 1,
+  "weekStart": ""
+}

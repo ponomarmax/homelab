@@ -13,6 +13,7 @@ from wearable_pipeline_api.config.settings import (
 from wearable_pipeline_api.pipeline.common import discover_session_streams
 from wearable_pipeline_api.pipeline.features import WindowFeaturesStepRunner
 from wearable_pipeline_api.pipeline.normalize import NormalizeStepRunner
+from wearable_pipeline_api.pipeline.export_grafana import GrafanaViewsExportStepRunner
 from wearable_pipeline_api.pipeline.state import RunStateStore
 from wearable_pipeline_api.pipeline.summary import SessionSummaryStepRunner
 
@@ -23,6 +24,7 @@ class SessionPipelineRunner:
         raw_root: Path,
         processed_root: Path,
         state_root: Path,
+        grafana_views_root: Path,
         *,
         l0_cross_stream_max_start_delta_seconds: float = DEFAULT_L0_CROSS_STREAM_MAX_START_DELTA_SECONDS,
         l0_cross_stream_max_end_delta_seconds: float = DEFAULT_L0_CROSS_STREAM_MAX_END_DELTA_SECONDS,
@@ -51,6 +53,11 @@ class SessionPipelineRunner:
         self.session_summary_step = SessionSummaryStepRunner(
             processed_root=processed_root,
             state_store=self.state_store,
+        )
+        self.grafana_export_step = GrafanaViewsExportStepRunner(
+            processed_root=processed_root,
+            state_store=self.state_store,
+            grafana_root=grafana_views_root,
         )
 
     def run(
@@ -91,6 +98,9 @@ class SessionPipelineRunner:
             "window_feature_runs": window_feature_runs,
             "session_summary_runs": session_summary_runs,
         }
+
+    def export_grafana_session(self, session_id: str) -> dict[str, Any]:
+        return self.grafana_export_step.run_for_session(session_id=session_id)
 
 
 # Backward-compatible alias for previous imports.

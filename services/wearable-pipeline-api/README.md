@@ -6,6 +6,7 @@ Pipeline flow:
 - `normalize`
 - `window_features`
 - `build_session_summary` (deterministic `session_summary.json` artifact)
+- `export_grafana_views` (deterministic Grafana query artifacts from processed outputs)
 
 ## Endpoints
 
@@ -13,8 +14,11 @@ Pipeline flow:
 - `POST /api/v1/pipeline/run`
   - Optional JSON body: `{"session_id": "<session-id>"}` to run a single session only
 - `POST /api/v1/pipeline/trigger`
-  - Body: `{"session_id":"<session-id>","requested_steps":["normalize","window_features","session_summary"]}`
+  - Body: `{"session_id":"<session-id>","requested_steps":["normalize","window_features","session_summary","export_grafana_views"]}`
   - Response includes accepted/rejected steps and optional `dashboard_url`
+- `POST /api/v1/pipeline/export/grafana-session`
+  - Body: `{"session_id":"<session-id>"}`
+  - Exports session-scoped Grafana views from processed artifacts only (DuckDB + CSV/JSON fallback)
 - `GET /api/v1/operator/sessions`
   - Lightweight operator listing with raw/pipeline status
 - `GET /api/v1/operator/sessions/{session_id}`
@@ -26,6 +30,7 @@ Pipeline flow:
 - `PROCESSED_ROOT` (default: `/data/wearable/processed`)
 - `PIPELINE_STATE_ROOT` (default: `/data/wearable/pipeline_runs`)
 - `LOG_LEVEL` (default: `INFO`)
+- `GRAFANA_VIEWS_ROOT` (default: `/data/wearable/grafana`)
 - `WEARABLE_PIPELINE_API_HOST` (default: `127.0.0.1`)
 - `WEARABLE_PIPELINE_API_PORT` (default: `8091`)
 - `L0_CROSS_STREAM_MAX_START_DELTA_SECONDS` (default: `10`)
@@ -59,3 +64,16 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 - Best practices: `docs/wearable/pipeline_service_best_practices.md`
 - Refactor playbook (normalize -> features/window): `docs/wearable/refactor_playbook_normalize_features_window.md`
+
+## Grafana Export Notes
+
+- Export reads processed deterministic artifacts only:
+  - normalized: `clean_timeseries/**/session_id=<id>/streams/ppi/data.parquet`
+  - features: `window_features/**/session_id=<id>/streams/*/data.parquet`
+  - summary: `window_features/**/session_id=<id>/session_summary.json`
+- Export writes:
+  - `<GRAFANA_VIEWS_ROOT>/sessions.json`
+  - `<GRAFANA_VIEWS_ROOT>/normalized_ppi_points.csv`
+  - `<GRAFANA_VIEWS_ROOT>/feature_windows.csv`
+  - `<GRAFANA_VIEWS_ROOT>/quality_events.csv`
+- This dashboard/export layer is for debugging and validation. It does not replace normalized/features/summary artifacts and does not include interpretation/reporting/LLM delivery.

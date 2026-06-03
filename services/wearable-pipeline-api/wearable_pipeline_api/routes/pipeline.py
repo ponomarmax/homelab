@@ -23,6 +23,10 @@ class PipelineTriggerRequest(BaseModel):
     requested_steps: list[str] = ["normalize"]
 
 
+class PipelineGrafanaExportRequest(BaseModel):
+    session_id: str
+
+
 def _parse_iso(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -114,7 +118,7 @@ def build_router(runner: SessionPipelineRunner) -> APIRouter:
     @router.post("/api/v1/pipeline/trigger")
     async def trigger_pipeline(request: PipelineTriggerRequest) -> dict[str, object]:
         steps = [item.strip().lower() for item in request.requested_steps if item.strip()]
-        supported = {"normalize", "window_features", "session_summary"}
+        supported = {"normalize", "window_features", "session_summary", "export_grafana_views"}
         accepted_steps = [item for item in steps if item in supported]
         rejected_steps = [item for item in steps if item not in supported]
         if not accepted_steps:
@@ -129,11 +133,15 @@ def build_router(runner: SessionPipelineRunner) -> APIRouter:
 
         run_window_features = "window_features" in accepted_steps or "session_summary" in accepted_steps
         run_session_summary = "session_summary" in accepted_steps
-        runner.run(
-            session_id=request.session_id,
-            run_window_features=run_window_features,
-            run_session_summary=run_session_summary,
-        )
+        if any(item in accepted_steps for item in ("normalize", "window_features", "session_summary")):
+            runner.run(
+                session_id=request.session_id,
+                run_window_features=run_window_features,
+                run_session_summary=run_session_summary,
+            )
+        grafana_export_result = None
+        if "export_grafana_views" in accepted_steps:
+            grafana_export_result = runner.export_grafana_session(session_id=request.session_id)
         return {
             "accepted": True,
             "session_id": request.session_id,
@@ -142,6 +150,23 @@ def build_router(runner: SessionPipelineRunner) -> APIRouter:
             "rejected_steps": rejected_steps,
             "message": "Pipeline trigger accepted",
             "dashboard_url": f"/api/v1/operator/sessions/{request.session_id}",
+            "grafana_export": grafana_export_result,
+        }
+
+    @router.post("/api/v1/pipeline/export/grafana-session")
+    async def export_grafana_session(request: PipelineGrafanaExportRequest) -> dict[str, object]:
+        result = runner.export_grafana_session(session_id=request.session_id)
+        return {
+            "accepted": True,
+            "status": result.get("status"),
+            "session_id": request.session_id,
+            "step_name": result.get("step_name"),
+            "generated_paths": result.get("generated_paths"),
+            "normalized_ppi_rows_exported": result.get("normalized_ppi_rows_exported"),
+            "quality_events_rows_exported": result.get("quality_events_rows_exported"),
+            "feature_windows_rows_exported": result.get("feature_windows_rows_exported"),
+            "warnings": result.get("warnings", []),
+            "state_path": result.get("state_path"),
         }
 
     @router.get("/api/v1/operator/sessions")

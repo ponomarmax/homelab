@@ -61,6 +61,7 @@ services:
       RAW_ROOT: ${WEARABLE_PIPELINE_RAW_ROOT:-/data/wearable/raw}
       PROCESSED_ROOT: ${WEARABLE_PIPELINE_PROCESSED_ROOT:-/data/wearable/processed}
       PIPELINE_STATE_ROOT: ${WEARABLE_PIPELINE_STATE_ROOT:-/data/wearable/pipeline_runs}
+      GRAFANA_VIEWS_ROOT: ${WEARABLE_GRAFANA_VIEWS_ROOT:-/data/wearable/grafana}
       LOG_LEVEL: ${WEARABLE_PIPELINE_LOG_LEVEL:-INFO}
     ports:
       - "${WEARABLE_PIPELINE_API_PORT:-18091}:${WEARABLE_PIPELINE_API_INTERNAL_PORT:-8091}"
@@ -68,6 +69,7 @@ services:
       - wearable_raw_data:${WEARABLE_PIPELINE_RAW_ROOT:-/data/wearable/raw}
       - wearable_processed_data:${WEARABLE_PIPELINE_PROCESSED_ROOT:-/data/wearable/processed}
       - wearable_pipeline_state:${WEARABLE_PIPELINE_STATE_ROOT:-/data/wearable/pipeline_runs}
+      - wearable_grafana_data:${WEARABLE_GRAFANA_VIEWS_ROOT:-/data/wearable/grafana}
     healthcheck:
       test:
         - CMD
@@ -133,3 +135,5 @@ volumes:
     name: ${WEARABLE_PROCESSED_VOLUME_NAME:-homelab_wearable_processed_data}
   wearable_pipeline_state:
     name: ${WEARABLE_PIPELINE_STATE_VOLUME_NAME:-homelab_wearable_pipeline_state}
+  wearable_grafana_data:
+    name: ${WEARABLE_GRAFANA_VOLUME_NAME:-homelab_wearable_grafana_data}

@@ -17,11 +17,13 @@ def create_app(settings: Settings) -> FastAPI:
     settings.raw_root.mkdir(parents=True, exist_ok=True)
     settings.processed_root.mkdir(parents=True, exist_ok=True)
     settings.pipeline_state_root.mkdir(parents=True, exist_ok=True)
+    settings.grafana_views_root.mkdir(parents=True, exist_ok=True)
 
     runner = SessionPipelineRunner(
         raw_root=settings.raw_root,
         processed_root=settings.processed_root,
         state_root=settings.pipeline_state_root,
+        grafana_views_root=settings.grafana_views_root,
         l0_cross_stream_max_start_delta_seconds=settings.l0_cross_stream_max_start_delta_seconds,
         l0_cross_stream_max_end_delta_seconds=settings.l0_cross_stream_max_end_delta_seconds,
         l0_cross_stream_min_overlap_ratio=settings.l0_cross_stream_min_overlap_ratio,
@@ -49,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--raw-root", default=str(base.raw_root))
     parser.add_argument("--processed-root", default=str(base.processed_root))
     parser.add_argument("--pipeline-state-root", default=str(base.pipeline_state_root))
+    parser.add_argument("--grafana-views-root", default=str(base.grafana_views_root))
     parser.add_argument("--log-level", default=base.log_level)
     args = parser.parse_args(argv)
 
@@ -58,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         raw_root=Path(args.raw_root),
         processed_root=Path(args.processed_root),
         pipeline_state_root=Path(args.pipeline_state_root),
+        grafana_views_root=Path(args.grafana_views_root),
         log_level=str(args.log_level).upper(),
         l0_cross_stream_max_start_delta_seconds=base.l0_cross_stream_max_start_delta_seconds,
         l0_cross_stream_max_end_delta_seconds=base.l0_cross_stream_max_end_delta_seconds,

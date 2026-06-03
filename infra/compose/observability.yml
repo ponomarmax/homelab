@@ -12,16 +12,26 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
-      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_PLUGINS_PREINSTALL_DISABLED: "false"
+      GF_PLUGINS_PREINSTALL: "yesoreyeram-infinity-datasource"
       GF_SECURITY_COOKIE_SECURE: "false"
     volumes:
       - "grafana_data:/var/lib/grafana"
       - "${PROJECT_ROOT}/observability/config/grafana/provisioning:/etc/grafana/provisioning:ro"
       - "${PROJECT_ROOT}/observability/config/grafana/dashboards:/etc/grafana/dashboards:ro"
+      - "wearable_grafana_data:/data/wearable/grafana:ro"
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     depends_on:
       - prometheus
+      - wearable-grafana-views
+
+  wearable-grafana-views:
+    image: python:3.12-alpine
+    command: ["python", "-m", "http.server", "8000", "--bind", "0.0.0.0", "--directory", "/data/wearable/grafana"]
+    restart: unless-stopped
+    volumes:
+      - "wearable_grafana_data:/data/wearable/grafana:ro"
 
   cadvisor:
     image: ghcr.io/google/cadvisor:0.56.2
@@ -76,3 +86,6 @@ volumes:
     name: homelab_prometheus_data
   grafana_data:
     name: homelab_grafana_data
+  wearable_grafana_data:
+    external: true
+    name: ${WEARABLE_GRAFANA_VOLUME_NAME:-homelab_wearable_grafana_data}
